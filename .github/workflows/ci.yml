@@ -1,0 +1,29 @@
+# ============================================================
+# Claim2Code — CI baseline (Phase 0)
+# Real lint/test/build targets wired in Phase 1.
+# ============================================================
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  scaffold-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show project structure
+        run: |
+          ls -la
+          echo "----"
+          find . -maxdepth 2 -type d -not -path '*/.git*' -not -path '*/node_modules*' | sort
+      - name: Validate docker-compose
+        run: docker compose config -q
+      - name: Validate .env.example
+        run: |
+          grep -q "^POSTGRES_PASSWORD=" .env.example
+          grep -q "^OPENAI_API_KEY="    .env.example
+          grep -q "^DATABASE_URL="      .env.example

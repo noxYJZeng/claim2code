@@ -1,0 +1,48 @@
+# ============================================================
+# Claim2Code API — Python package metadata
+# Phase 0: minimal metadata; Phase 1 wires real dependencies.
+# ============================================================
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claim2code-api"
+version = "0.1.0"
+description = "Claim2Code backend — paper-to-code verification agent"
+requires-python = ">=3.11"
+authors = [{ name = "Claim2Code" }]
+
+# Phase 0: empty. Real deps come in Phase 1+.
+dependencies = []
+
+[project.optional-dependencies]
+dev = []
+
+[tool.setuptools]
+packages = ["claim2code_api"]
+
+[tool.setuptools.package-dir]
+claim2code_api = "claim2code_api"
+
+# ---- Lint / format (Phase 1 wires ruff + mypy) ----
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+
+# ---- Pytest (Phase 1 wires real tests) ----
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: integration tests (require docker / testcontainers)",
+    "safety: responsible-AI adversarial tests",
+]

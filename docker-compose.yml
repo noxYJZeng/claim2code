@@ -1,0 +1,53 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: claim2code-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-claim2code}
+      POSTGRES_USER: ${POSTGRES_USER:-claim2code}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_local_dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-claim2code} -d ${POSTGRES_DB:-claim2code}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: deployments/Dockerfile.api
+    container_name: claim2code-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-claim2code}:${POSTGRES_PASSWORD:-change_me_local_dev}@postgres:5432/${POSTGRES_DB:-claim2code}
+    ports:
+      - "${API_PORT:-8000}:8000"
+
+  web:
+    build:
+      context: .
+      dockerfile: deployments/Dockerfile.web
+    container_name: claim2code-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+
+volumes:
+  postgres_data:
+    driver: local

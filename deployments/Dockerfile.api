@@ -1,0 +1,35 @@
+# ============================================================
+# Claim2Code — API Dockerfile
+# Build context must be the project root.
+# ============================================================
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# System deps (git for cloning target repos; build-essential kept minimal)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        ca-certificates \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python deps first (cache-friendly)
+COPY apps/api/pyproject.toml apps/api/README.md* /app/api-deps/
+COPY apps/api/claim2code_api /app/apps/api/claim2code_api
+RUN pip install --upgrade pip \
+    && pip install -e /app/api-deps
+
+# Copy the rest of the source
+COPY apps/api /app/apps/api
+COPY evaluation /app/evaluation
+
+ENV PYTHONPATH=/app/apps/api:/app
+
+EXPOSE 8000
+CMD ["uvicorn", "claim2code_api.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

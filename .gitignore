@@ -1,0 +1,97 @@
+# ============================================================
+# Claim2Code — git ignore
+# ============================================================
+
+# ---- Interview prep lives OUTSIDE the repo ----
+# See ~/Desktop/interview-prep/claim2code/ — never commit here.
+interview-prep/
+
+# ---- Secrets / credentials ----
+.env
+.env.local
+.env.*.local
+*.env
+!**/.env.example
+
+# ---- Backups & archives ----
+backups/
+backups-*/
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.zip
+*.bak
+
+# ---- Docker / runtime state ----
+.volumes/
+volumes/
+docker-data/
+.pgdata/
+
+# ---- Cloned target repositories (untrusted code we ingest) ----
+# Cloned into a sandbox; never commit. Override with `git add -f` only
+# when you have a specific reason (rare — usually a test fixture).
+data/repos/
+!data/repos/.gitkeep
+
+# ---- Uploaded paper PDFs (may contain unpublished material) ----
+data/uploads/
+!data/uploads/.gitkeep
+
+# ---- Embedding caches (rebuild from source) ----
+data/embeddings/
+!data/embeddings/.gitkeep
+
+# ---- Build artifacts ----
+node_modules/
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Frontend ----
+.next/
+.nuxt/
+.parcel-cache/
+.vite/
+.cache/
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- IDE / editor ----
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ---- OS / temp ----
+.tmp/
+tmp/
+*.tmp
+*.pid
+*.pid.lock
+
+# ---- Test / coverage output ----
+playwright-report/
+test-results/
+htmlcov/
+*.lcov
+
+# ---- Generated / openapi generated ----
+openapi/generated/
+api/generated/
+
+# ---- Local-only scripts that may run with secrets ----
+scripts/_local/

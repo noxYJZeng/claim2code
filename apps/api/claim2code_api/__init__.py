@@ -1,1 +1,3 @@
-# Phase 0 stub. Real exports arrive in Phase 1+.
+"""Claim2Code — paper-to-code verification agent (Python backend)."""
+
+__version__ = "0.1.0"

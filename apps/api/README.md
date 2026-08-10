@@ -1,24 +1,64 @@
 # Claim2Code API
 
-Python 3.11 + FastAPI + Pydantic. Wires up the 9 subpackages from
-`docs/specs/spec-summary.md §10` of the Claim2Code spec:
+FastAPI backend for the paper-to-code verification agent.
+
+## Local dev (no Docker)
+
+```bash
+cd apps/api
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+# From the project root, with .env present:
+PYTHONPATH=/path/to/claim2code/apps/api uvicorn claim2code_api.app.main:app --reload
+```
+
+The `DATABASE_URL` in `.env` must point at a running Postgres+pgvector
+(see `docker-compose.yml` at the project root for the canonical local DB).
+
+## Layout
 
 ```
 claim2code_api/
-├── app/                  # FastAPI app, routers, main entrypoint
-├── paper/                # PDF parser, sectionizer, claim extractor  (Phase 2)
-├── repository/           # GitHub client, AST parser, symbol graph    (Phase 3)
-├── retrieval/            # semantic + lexical + structural ranker     (Phase 4–5)
-├── verification/         # verifier + discrepancy classifier           (Phase 6)
-├── literature/           # scholarly API + structured comparison       (Phase 7)
-├── workflow/             # explicit stateful executor                  (Phase 1+)
-├── llm/                  # LLMClient interface + Pydantic schemas     (Phase 2+)
-├── observability/        # OTel spans + metrics + logging              (Phase 9)
-├── safety/               # secret redaction + prompt-injection defense (Phase 8)
-└── db/                   # SQLAlchemy / pgvector config                (Phase 1+)
+├── app/                 # FastAPI app, config, dependency wiring
+│   ├── main.py          # create_app(), /health, /health/ready, CORS
+│   ├── config.py        # pydantic-settings Settings (loads .env)
+│   └── deps.py          # get_db()
+├── db/                  # SQLAlchemy session + ORM models
+│   ├── base.py
+│   ├── session.py       # engine (lazy), SessionLocal, check_db_ready()
+│   └── models.py        # AnalysisState
+├── paper/               # Phase 2: PyMuPDF parsing + claim extraction
+├── repository/          # Phase 3: GitHub clone + AST
+├── retrieval/           # Phase 4-5: embeddings + hybrid ranker
+├── verification/        # Phase 6: verifier + discrepancy classifier
+├── literature/          # Phase 7: scholarly search + comparison
+├── workflow/            # Phase 9: orchestrated background workflow
+├── llm/                 # Phase 2: LLM client (provider abstraction)
+├── observability/       # Phase 9: OpenTelemetry setup
+└── safety/              # Phase 8: secret redaction + injection defense
 ```
 
-## Phase 0 status
+## Tests
 
-Package skeleton only. Each subdirectory will get a `__init__.py` and real
-modules starting in Phase 1.
+```bash
+cd apps/api
+pytest                 # unit tests (no DB required)
+pytest -m integration  # integration tests (require docker / testcontainers)
+```
+
+## Migrations
+
+```bash
+cd apps/api
+alembic upgrade head       # apply
+alembic revision -m "..."  # create new (autogenerate is wired)
+```
+
+## Endpoints (Phase 1)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/health` | Liveness probe — always 200 |
+| GET | `/health/ready` | Readiness probe — 200 if DB `SELECT 1` succeeds, else 503 |
+| GET | `/docs` | OpenAPI / Swagger UI |
+| GET | `/redoc` | ReDoc |

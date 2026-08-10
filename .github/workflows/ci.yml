@@ -1,6 +1,10 @@
 # ============================================================
-# Claim2Code — CI baseline (Phase 0)
-# Real lint/test/build targets wired in Phase 1.
+# Claim2Code — CI
+# Four jobs run in parallel where possible:
+#   1. scaffold-smoke  — repo shape + compose + .env.example
+#   2. backend-lint    — ruff + mypy
+#   3. backend-test    — pytest (unit + integration with real Postgres)
+#   4. frontend-build  — eslint + tsc + vitest + vite build
 # ============================================================
 name: CI
 
@@ -11,7 +15,9 @@ on:
     branches: [main]
 
 jobs:
+  # ---- 1. scaffold smoke (no deps, just structure) ----
   scaffold-smoke:
+    name: Scaffold smoke
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,9 +27,104 @@ jobs:
           echo "----"
           find . -maxdepth 2 -type d -not -path '*/.git*' -not -path '*/node_modules*' | sort
       - name: Validate docker-compose
-        run: docker compose config -q
+        run: docker compose -f docker-compose.yml config -q
       - name: Validate .env.example
         run: |
           grep -q "^POSTGRES_PASSWORD=" .env.example
           grep -q "^OPENAI_API_KEY="    .env.example
           grep -q "^DATABASE_URL="      .env.example
+          grep -q "^VITE_API_BASE_URL=" .env.example
+
+  # ---- 2. backend lint (ruff + mypy) ----
+  backend-lint:
+    name: Backend lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+      - name: Install package with dev extras
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: ruff
+        working-directory: apps/api
+        run: ruff check .
+      - name: mypy
+        working-directory: apps/api
+        run: mypy .
+
+  # ---- 3. backend test (pytest unit + integration with real DB) ----
+  backend-test:
+    name: Backend test
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: claim2code_test
+          POSTGRES_USER: claim2code
+          POSTGRES_PASSWORD: testpw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U claim2code -d claim2code_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://claim2code:testpw@localhost:5432/claim2code_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+      - name: Install package with dev extras
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -U claim2code -d claim2code_test && exit 0
+            sleep 1
+          done
+          echo "postgres not ready" >&2
+          exit 1
+      - name: Apply migrations
+        working-directory: apps/api
+        run: alembic upgrade head
+      - name: pytest (unit + integration)
+        working-directory: apps/api
+        run: pytest -v
+
+  # ---- 4. frontend build + test ----
+  frontend-build:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: npm ci
+        working-directory: apps/web
+        run: npm ci
+      - name: eslint
+        working-directory: apps/web
+        run: npm run lint
+      - name: tsc + vite build
+        working-directory: apps/web
+        run: npm run build
+      - name: vitest
+        working-directory: apps/web
+        run: npm test

@@ -1,14 +1,22 @@
 import { useEffect, useState } from "react";
-import { API_BASE_URL, getHealth, type Health } from "./api";
+import { getHealth, type Health } from "./api";
+import UploadSection from "./UploadSection";
+import ClaimsList from "./ClaimsList";
 
-// Claim2Code — Phase 1 welcome page.
+// Claim2Code — Phase 2 single-page UI.
 //
-// Calls GET /health on mount and renders an online/offline badge so we
-// can confirm the frontend can reach the API at the URL advertised by
-// VITE_API_BASE_URL. Phase 2 replaces this with the upload + claims UI.
+// Stacks <UploadSection /> + <ClaimsList /> vertically. After a
+// successful upload, the analysis_id flows into ClaimsList which
+// fetches the extracted claims via GET /analyses/{id}/claims.
+//
+// Phase 3 will introduce react-router-dom when the repository page
+// becomes its own route. For Phase 2, the whole interaction is one
+// screen, so no router is needed.
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
+  const [nClaims, setNClaims] = useState<number>(0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -34,17 +42,6 @@ export default function App() {
           <p className="mt-2 text-slate-600">
             AI Research Agent for Paper–Code Verification and Reproducibility.
           </p>
-        </header>
-
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-medium">Foundation status</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            API endpoint:{" "}
-            <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">
-              {API_BASE_URL}
-            </code>
-          </p>
-
           <div className="mt-4 flex items-center gap-3">
             <span
               data-testid="status-badge"
@@ -69,27 +66,41 @@ export default function App() {
               </span>
             )}
           </div>
-
           {error && (
-            <p className="mt-3 text-sm text-rose-700" data-testid="status-error">
+            <p
+              className="mt-3 text-sm text-rose-700"
+              data-testid="status-error"
+            >
               {error}
             </p>
           )}
-        </section>
+        </header>
 
-        <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-medium">What ships in Phase 1</h2>
-          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-700">
-            <li>FastAPI backend with <code>/health</code> and <code>/health/ready</code> probes</li>
-            <li>PostgreSQL + pgvector schema migration <code>0001_init</code></li>
-            <li>pytest unit suite + integration scaffold</li>
-            <li>This page (Vite + React + Tailwind + Vitest)</li>
-            <li>CI: scaffold smoke + backend lint/test + frontend build</li>
-          </ul>
-          <p className="mt-4 text-sm text-slate-500">
-            See <code>docs/architecture/phase-roadmap.md</code> for the full plan.
-          </p>
-        </section>
+        {!analysisId ? (
+          <UploadSection
+            onUploaded={(result) => {
+              setAnalysisId(result.analysisId);
+              setNClaims(result.nClaims);
+            }}
+          />
+        ) : (
+          <>
+            <div className="mb-6 flex items-baseline justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+              <span data-testid="upload-summary">
+                Parsed and extracted {nClaims} claim
+                {nClaims === 1 ? "" : "s"} from your paper.
+              </span>
+              <button
+                type="button"
+                onClick={() => setAnalysisId(null)}
+                className="text-xs font-medium uppercase tracking-wide text-emerald-700 hover:underline"
+              >
+                Upload another
+              </button>
+            </div>
+            <ClaimsList analysisId={analysisId} />
+          </>
+        )}
       </div>
     </main>
   );

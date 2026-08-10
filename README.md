@@ -54,8 +54,8 @@ cd claim2code
 
 # 2. configure
 cp .env.example .env
-# Edit .env — at minimum set POSTGRES_PASSWORD. OPENAI_API_KEY is
-# unused in Phase 1 but required by .env.example.
+# Edit .env — set POSTGRES_PASSWORD and OPENAI_API_KEY (the LLM is
+# required by Phase 2's claim extractor).
 
 # 3. start stack
 make dev          # brings up postgres+pgvector, api, web
@@ -67,11 +67,20 @@ make dev          # brings up postgres+pgvector, api, web
 #   API docs:      http://localhost:8000/docs
 ```
 
-**Verify the foundation:**
+**Verify the foundation + paper pipeline:**
 
 ```bash
 curl -sS http://localhost:8000/health        # {"status":"ok","version":"0.1.0"}
 curl -sS http://localhost:8000/health/ready # {"status":"ok","db":true}
+
+# Upload a paper — runs parse + LLM extract synchronously.
+curl -X POST -F "file=@samples/attention.pdf" \
+    http://localhost:8000/papers
+# {"analysis_id":"...","paper_id":"...","parse_status":"done","n_claims":7}
+
+# Fetch the extracted claims.
+curl -sS http://localhost:8000/analyses/<analysis_id>/claims | jq '.claims | length'
+# 7
 ```
 
 ## Project layout

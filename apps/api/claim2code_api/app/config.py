@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     max_repo_files: int = 20000
     max_file_kb: int = 512
 
+    # ---- Paper ingestion (Phase 2) ----
+    max_pdf_size_mb: int = 50
+
     # ---- Observability (Phase 9) ----
     otel_service_name: str = "claim2code"
     otel_exporter_otlp_endpoint: str = ""

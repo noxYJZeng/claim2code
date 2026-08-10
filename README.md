@@ -7,7 +7,7 @@
 > an explicit `VERIFIED / PARTIALLY_VERIFIED / CONTRADICTED / UNVERIFIED`
 > verdict and detected discrepancies.
 
-[![status](https://img.shields.io/badge/status-Phase%201%20(scaffold)-blue)]()
+[![status](https://img.shields.io/badge/status-Phase%202%20(paper%20intelligence)-blue)]()
 [![stack](https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20Postgres-blue)]()
 
 ## What's in v1
@@ -49,12 +49,13 @@ gives every conclusion a citation, and admits `UNVERIFIED` when evidence is miss
 
 ```bash
 # 1. clone
-git clone git@github.com:YOUR_ORG/claim2code.git
+git clone git@github.com:noxYJZeng/claim2code.git
 cd claim2code
 
 # 2. configure
 cp .env.example .env
-# Edit .env — at minimum set POSTGRES_PASSWORD and OPENAI_API_KEY.
+# Edit .env — at minimum set POSTGRES_PASSWORD. OPENAI_API_KEY is
+# unused in Phase 1 but required by .env.example.
 
 # 3. start stack
 make dev          # brings up postgres+pgvector, api, web
@@ -62,7 +63,15 @@ make dev          # brings up postgres+pgvector, api, web
 # 4. open
 #   Web:           http://localhost:5173
 #   API health:    http://localhost:8000/health
+#   API ready:     http://localhost:8000/health/ready
 #   API docs:      http://localhost:8000/docs
+```
+
+**Verify the foundation:**
+
+```bash
+curl -sS http://localhost:8000/health        # {"status":"ok","version":"0.1.0"}
+curl -sS http://localhost:8000/health/ready # {"status":"ok","db":true}
 ```
 
 ## Project layout
@@ -91,7 +100,7 @@ claim2code/
 | Phase | Spec name | Deliverable | Acceptance |
 |---|---|---|---|
 | 0 | — | scaffold (this commit) | monorepo + Makefile + docker-compose + docs |
-| 1 | Project Foundation | FastAPI + React + PG stack running | `docker compose up` brings up health endpoint |
+| 1 | Project Foundation | FastAPI + React + PG stack running | `docker compose up` brings up `/health` (200) + `/health/ready` (200 w/ DB) + Vite on :5173 |
 | 2 | Paper Intelligence | PDF upload + 5–15 structured claims per paper | Upload a paper → see claims with paper evidence |
 | 3 | Repository Intelligence | GitHub clone + AST symbols + configs | Repo page shows functions/classes/configs with line numbers |
 | 4 | Semantic Indexing | Embeddings + pgvector retrieval | Top-5 candidate symbols for any claim |

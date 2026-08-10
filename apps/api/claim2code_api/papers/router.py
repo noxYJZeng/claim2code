@@ -1,12 +1,14 @@
 """HTTP layer for the paper workflow.
 
-Two endpoints ship in Phase 2:
+Three endpoints ship in Phase 2:
 
   * ``POST /papers`` (multipart) — upload a PDF, run parse + extract,
     return the ``WorkflowResult`` summary.
+  * ``GET /papers/{paper_id}`` — fetch one paper's metadata row
+    (filename, sha256, parse status, timing).
   * ``GET /analyses/{analysis_id}/claims`` — fetch the extracted
     claims as JSONB dicts (matches the shape persisted into
-    ``analysis_states.claims``). Added in commit 5.
+    ``analysis_states.claims``).
 
 Exception → HTTP mapping (handled here, not in middleware, so the
 response body matches the per-endpoint contract):
@@ -15,14 +17,18 @@ response body matches the per-endpoint contract):
   * ``PdfInvalidError`` → 422
   * ``PdfNoTextLayerError`` → 422
   * ``ClaimExtractionError`` → 500 (body points to GET /analyses/{id})
+  * missing row on GET → 404
 """
 from __future__ import annotations
+
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile  # noqa: B008
 from sqlalchemy.orm import Session
 
 from claim2code_api.app.config import Settings, get_settings
 from claim2code_api.app.deps import get_db
+from claim2code_api.db.models import AnalysisState, Paper
 from claim2code_api.llm.client import LLMClient, get_llm_client
 from claim2code_api.papers.exceptions import (
     ClaimExtractionError,
@@ -31,7 +37,9 @@ from claim2code_api.papers.exceptions import (
     PdfTooLargeError,
 )
 from claim2code_api.papers.schemas import (
+    ClaimsResponse,
     ErrorResponse,
+    PaperMetadataResponse,
     PaperUploadResponse,
 )
 from claim2code_api.papers.workflow import WorkflowResult, run_paper_workflow
@@ -101,4 +109,74 @@ def upload_paper(
     )
 
 
-__all__ = ["router", "upload_paper"]
+# ----------------------------------------------------------------------
+# GET /papers/{paper_id}
+# ----------------------------------------------------------------------
+
+
+@router.get(
+    "/papers/{paper_id}",
+    response_model=PaperMetadataResponse,
+    responses={404: {"model": ErrorResponse, "description": "Paper not found"}},
+)
+def get_paper(
+    paper_id: UUID,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> PaperMetadataResponse:
+    """Return metadata for one uploaded paper."""
+    row = db.query(Paper).filter(Paper.paper_id == paper_id).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"paper {paper_id} not found")
+    return PaperMetadataResponse(
+        paper_id=row.paper_id,
+        analysis_id=row.analysis_id,
+        filename=row.filename,
+        sha256=row.sha256,
+        size_bytes=row.size_bytes,
+        n_pages=row.n_pages,
+        n_chars=row.n_chars,
+        parse_status=row.parse_status,
+        uploaded_at=row.uploaded_at,
+        parsed_at=row.parsed_at,
+        error=row.error,
+    )
+
+
+# ----------------------------------------------------------------------
+# GET /analyses/{analysis_id}/claims
+# ----------------------------------------------------------------------
+
+
+@router.get(
+    "/analyses/{analysis_id}/claims",
+    response_model=ClaimsResponse,
+    responses={404: {"model": ErrorResponse, "description": "Analysis not found"}},
+)
+def get_claims(
+    analysis_id: UUID,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> ClaimsResponse:
+    """Return the extracted claims for one analysis run.
+
+    The list of claims is persisted as JSONB on
+    ``analysis_states.claims``; we hand it back verbatim so the
+    frontend renders the same shape the LLM produced (plus the
+    ``paper_evidence`` citation, which is computed server-side).
+    """
+    state = (
+        db.query(AnalysisState)
+        .filter(AnalysisState.analysis_id == analysis_id)
+        .one_or_none()
+    )
+    if state is None:
+        raise HTTPException(
+            status_code=404, detail=f"analysis {analysis_id} not found"
+        )
+    return ClaimsResponse(
+        analysis_id=state.analysis_id,
+        paper_status=state.paper_status,
+        claims=state.claims,
+    )
+
+
+__all__ = ["router", "upload_paper", "get_paper", "get_claims"]

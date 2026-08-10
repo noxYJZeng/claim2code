@@ -1,1 +1,1 @@
-# FastAPI app module — populated in Phase 1.
+"""FastAPI application layer."""

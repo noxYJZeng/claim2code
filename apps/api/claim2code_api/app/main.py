@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from claim2code_api import __version__
 from claim2code_api.app.config import get_settings
 from claim2code_api.db.session import check_db_ready
+from claim2code_api.papers.router import router as papers_router
 
 
 @asynccontextmanager
@@ -59,6 +60,7 @@ def create_app() -> FastAPI:
             status_code=503,
         )
 
+    app.include_router(papers_router)
     return app
 
 

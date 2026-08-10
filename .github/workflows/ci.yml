@@ -77,7 +77,10 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      DATABASE_URL: postgresql://claim2code:testpw@localhost:5432/claim2code_test
+      # The `+psycopg` driver suffix is required — SQLAlchemy 2.0 defaults to
+      # psycopg2 (not installed) when the URL has no driver suffix, and the
+      # resulting `ModuleNotFoundError` surfaces inside alembic's env.py.
+      DATABASE_URL: postgresql+psycopg://claim2code:testpw@localhost:5432/claim2code_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

@@ -97,10 +97,11 @@ def run_paper_workflow(
     :raises ClaimExtractionError: if the LLM call fails or returns
         an unusable response.
     """
+    # Validate BEFORE any DB writes so a bad upload costs nothing.
+    _validate_upload(upload_bytes, max_size_bytes)
     analysis_id = _create_analysis(db)
     paper_id: UUID | None = None
     try:
-        _validate_upload(upload_bytes, max_size_bytes)
         sha = storage.sha256_bytes(upload_bytes)
         # ``write_pdf`` is atomic (exclusive create). A duplicate
         # upload is detected here and surfaces as FileExistsError,

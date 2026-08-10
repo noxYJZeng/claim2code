@@ -10,8 +10,8 @@ from claim2code_api.db.session import get_session_local
 
 def get_db() -> Generator[Session, None, None]:
     """Yield a SQLAlchemy session and close it after the request."""
-    SessionLocal = get_session_local()
-    db = SessionLocal()
+    session_factory = get_session_local()
+    db = session_factory()
     try:
         yield db
     finally:

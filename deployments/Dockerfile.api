@@ -11,7 +11,7 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# System deps (git for cloning target repos; build-essential kept minimal)
+# System deps (git for cloning target repos in Phase 3; curl for healthchecks)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         git \
@@ -19,17 +19,16 @@ RUN apt-get update \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python deps first (cache-friendly)
-COPY apps/api/pyproject.toml apps/api/README.md* /app/api-deps/
-COPY apps/api/claim2code_api /app/apps/api/claim2code_api
+# Install the package. We do a single COPY of apps/api so that
+# pyproject.toml + the source tree stay in sync; editable install is not
+# needed at runtime.
+COPY apps/api /app/api
 RUN pip install --upgrade pip \
-    && pip install -e /app/api-deps
+    && pip install /app/api
 
-# Copy the rest of the source
-COPY apps/api /app/apps/api
-COPY evaluation /app/evaluation
-
-ENV PYTHONPATH=/app/apps/api:/app
+ENV PYTHONPATH=/app
 
 EXPOSE 8000
+# The app factory lives in claim2code_api.app.main — referenced by the
+# CMD below. Pinned to the module string for visibility in `docker ps`.
 CMD ["uvicorn", "claim2code_api.app.main:app", "--host", "0.0.0.0", "--port", "8000"]

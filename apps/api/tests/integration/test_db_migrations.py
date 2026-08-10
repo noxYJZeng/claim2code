@@ -7,7 +7,7 @@ Applies the migrations against the test database (provided via the
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, text
 
 from claim2code_api.app.config import get_settings
 

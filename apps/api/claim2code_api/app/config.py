@@ -35,8 +35,11 @@ class Settings(BaseSettings):
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     # ---- Database ----
+    # The ``+psycopg`` driver suffix tells SQLAlchemy to use the psycopg
+    # v3 driver (which we declare in pyproject.toml). Omitting the suffix
+    # would make SQLAlchemy default to psycopg2, which is not installed.
     database_url: str = (
-        "postgresql://claim2code:change_me_local_dev@localhost:5432/claim2code"
+        "postgresql+psycopg://claim2code:change_me_local_dev@localhost:5432/claim2code"
     )
     db_health_timeout_seconds: float = 5.0
 

@@ -5,14 +5,13 @@ Reads ``DATABASE_URL`` from :mod:`claim2code_api.app.config` and uses
 """
 from __future__ import annotations
 
+# Make ``claim2code_api`` importable when alembic is invoked from any cwd.
+import os
+import sys
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
-
-# Make ``claim2code_api`` importable when alembic is invoked from any cwd.
-import os
-import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _APPS_API = os.path.abspath(os.path.join(_HERE, ".."))
@@ -22,8 +21,8 @@ for p in (_APPS_API, _PROJECT_ROOT):
         sys.path.insert(0, p)
 
 from claim2code_api.app.config import get_settings  # noqa: E402
-from claim2code_api.db.base import Base  # noqa: E402
 from claim2code_api.db import models  # noqa: F401, E402  (register models)
+from claim2code_api.db.base import Base  # noqa: E402
 
 config = context.config
 

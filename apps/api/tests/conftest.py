@@ -11,9 +11,8 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from claim2code_api import __version__
-from claim2code_api.app.main import create_app
 from claim2code_api.app.config import get_settings
+from claim2code_api.app.main import create_app
 
 
 @pytest.fixture

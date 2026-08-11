@@ -12,6 +12,7 @@ Integration tests that hit a real Postgres live under
 
 from __future__ import annotations
 
+from collections.abc import Generator
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -76,7 +77,7 @@ def client(session: MagicMock) -> TestClient:
     """
     app = create_app()
 
-    def fake_dep() -> MagicMock:
+    def fake_dep() -> Generator[MagicMock, None, None]:
         yield session
 
     app.dependency_overrides[get_db] = fake_dep

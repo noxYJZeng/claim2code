@@ -120,7 +120,7 @@ def test_post_papers_falls_back_filename_when_missing(
     # fallback in the router by patching UploadFile.filename to None.
     from claim2code_api.papers import router as router_mod
 
-    real_upload = router_mod.UploadFile
+    real_upload: type = router_mod.UploadFile
 
     class _NoNameUpload(real_upload):
         @property

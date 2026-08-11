@@ -90,7 +90,12 @@ def _client_with_response(content: str | None) -> MagicMock:
     ``content`` (or raises if ``content`` is the sentinel ``"<RAISE_TIMEOUT>"``)."""
     fake = MagicMock()
     if content == "<RAISE_TIMEOUT>":
-        fake.chat.completions.create.side_effect = APITimeoutError("simulated timeout")
+        # APITimeoutError requires a Request object as its first arg;
+        # the original OpenAI SDK accepted a positional str message,
+        # but the newer SDK is keyword-only.
+        fake.chat.completions.create.side_effect = APITimeoutError(
+            request=MagicMock()
+        )
     elif content == "<RAISE_CONNECT>":
         fake.chat.completions.create.side_effect = APIConnectionError(
             request=MagicMock(), message="simulated connect error"
@@ -229,7 +234,7 @@ def test_extract_claims_raises_on_schema_violation(sample_paper: Paper) -> None:
 
 def test_extract_claims_raises_on_empty_claim_list(sample_paper: Paper) -> None:
     # Schema allows min_length=1; sending 0 must fail.
-    bad = {"claims": []}
+    bad: dict[str, list[dict[str, object]]] = {"claims": []}
     client = _build_client(_client_with_response(json.dumps(bad)), pytest.MonkeyPatch())
     with pytest.raises(ClaimExtractionError):
         client.extract_claims(sample_paper)
@@ -251,7 +256,9 @@ def test_check_ready_returns_ok_on_success() -> None:
 
 def test_check_ready_returns_error_on_failure() -> None:
     fake = MagicMock()
-    fake.chat.completions.create.side_effect = APITimeoutError("simulated")
+    fake.chat.completions.create.side_effect = APITimeoutError(
+        request=MagicMock()
+    )
     client = _build_client(fake, pytest.MonkeyPatch())
     ok, err = client.check_ready()
     assert ok is False

@@ -10,6 +10,7 @@ while still exercising the orchestration logic.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TypedDict
 from unittest.mock import MagicMock, patch
 
 import pymupdf  # type: ignore[import-untyped]
@@ -211,8 +212,15 @@ def test_workflow_records_error_on_extraction_failure(
     pdf_path = _make_pdf(upload_dir.parent)
     db = MagicMock()
 
-    # Track analysis_id and paper_id across flushes.
-    state = {"flushes": 0, "analysis_id": "a", "paper_id": "b"}
+    # Track analysis_id and paper_id across flushes. TypedDict so mypy
+    # narrows each key's value type (a plain dict[str, int | str] would
+    # still leave ``state["flushes"]`` widened to ``int | str``).
+    class _FlushState(TypedDict):
+        flushes: int
+        analysis_id: str
+        paper_id: str
+
+    state: _FlushState = {"flushes": 0, "analysis_id": "a", "paper_id": "b"}
 
     def fake_flush() -> None:
         state["flushes"] += 1

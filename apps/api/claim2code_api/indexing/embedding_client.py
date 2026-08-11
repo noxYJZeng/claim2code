@@ -30,6 +30,7 @@ Like :mod:`claim2code_api.llm.client`, we pass
 ``http_client=httpx.Client(proxy=None)`` so the ``all_proxy``
 environment variable doesn't break httpx 0.28+.
 """
+
 from __future__ import annotations
 
 import logging
@@ -157,9 +158,7 @@ class OpenAIEmbeddingClient:
                 continue
             except AuthenticationError as exc:
                 # Auth errors are not transient — bail immediately.
-                raise EmbeddingError(
-                    f"Embedding auth error (check OPENAI_API_KEY): {exc}"
-                ) from exc
+                raise EmbeddingError(f"Embedding auth error (check OPENAI_API_KEY): {exc}") from exc
             except APIStatusError as exc:
                 last_exc = exc
                 # 5xx counts as transient; 4xx does not.
@@ -182,7 +181,7 @@ class OpenAIEmbeddingClient:
     @staticmethod
     def _sleep_backoff(attempt: int) -> None:
         """Sleep ``min(2**attempt, 8)`` seconds between retries."""
-        delay = min(2 ** attempt, 8)
+        delay = min(2**attempt, 8)
         time.sleep(delay)
 
     def _extract_vectors(self, response: object, expected_count: int) -> list[list[float]]:
@@ -208,9 +207,7 @@ class OpenAIEmbeddingClient:
         try:
             ordered = sorted(data, key=lambda d: d.index)
         except AttributeError as exc:
-            raise EmbeddingError(
-                f"Embedding response missing 'index' field: {exc}"
-            ) from exc
+            raise EmbeddingError(f"Embedding response missing 'index' field: {exc}") from exc
 
         expected_dim = self._settings.openai_embed_dim
         vectors: list[list[float]] = []

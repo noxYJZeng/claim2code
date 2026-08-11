@@ -48,6 +48,7 @@ separate means:
   - The workflow only gains one extra function call, not a
     wholesale rewrite.
 """
+
 from __future__ import annotations
 
 import logging

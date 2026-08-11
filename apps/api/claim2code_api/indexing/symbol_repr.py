@@ -33,6 +33,7 @@ What this function does NOT do
     that logic in here would require a DB session, which would
     break the function's purity.
 """
+
 from __future__ import annotations
 
 import re

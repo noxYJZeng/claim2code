@@ -237,3 +237,70 @@ class RepoErrorResponse(BaseModel):
 
     error: str
     detail: str | None = None
+
+
+# ============================================================
+# 4. Phase 4 — semantic retrieval
+# ============================================================
+
+
+class RetrieveRequest(BaseModel):
+    """Request body for ``POST /repositories/{repository_id}/retrieve``.
+
+    The ``claim`` is a natural-language sentence (e.g. extracted
+    from a paper). The endpoint returns the top-``top_k`` symbols
+    from this repository whose structured representation is most
+    semantically similar to the claim.
+
+    ``top_k`` defaults to 5 — the design doc's acceptance criterion.
+    A claim like "uses softmax(QK^T / sqrt(d))" might return 5
+    candidate symbols; the user picks one (or none) and the
+    Phase 6 verifier does the deterministic check.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    claim: str = Field(min_length=1)
+    top_k: int = Field(default=5, ge=1, le=50)
+
+
+class RetrieveMatch(BaseModel):
+    """One hit in the returned retrieval list.
+
+    Mirrors the parsed :class:`CodeSymbol` shape so the frontend
+    can render the same widget it uses for ``GET /symbols``; the
+    additional ``similarity`` field is the cosine score (0..1,
+    higher is better).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol_id: UUID
+    kind: CodeSymbolKind
+    language: CodeLanguage
+    file_path: str
+    start_line: int
+    start_col: int
+    end_line: int
+    end_col: int
+    name: str
+    signature: str
+    docstring: str | None
+    similarity: float = Field(ge=0.0, le=1.0)
+
+
+class RetrieveResponse(BaseModel):
+    """Response body for ``POST /repositories/{repository_id}/retrieve``.
+
+    ``symbols`` is the list of :class:`RetrieveMatch` (top-k by
+    similarity descending); ``scores`` is the parallel list of
+    similarity values, kept separate so the frontend can chart
+    historical scores without re-parsing the symbol rows.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    repository_id: UUID
+    claim: str
+    symbols: list[RetrieveMatch]
+    scores: list[float]

@@ -17,4 +17,5 @@ Submodules:
   - :mod:`claim2code_api.indexing.retriever` — cosine search
     (added in commit 5).
 """
+
 from __future__ import annotations

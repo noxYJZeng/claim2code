@@ -16,12 +16,22 @@ Endpoints shipped in Phase 3:
   * ``DELETE /repositories/{repository_id}`` — remove the clone + the
     DB row. Idempotent — 204 even if the row is missing.
 
+Phase 4 (Semantic Indexing) adds:
+
+  * ``POST /repositories/{repository_id}/retrieve`` — embed a claim
+    string and return the top-``top_k`` matching symbols by cosine
+    similarity. The index is built inline by ``POST /repositories``
+    so the first retrieval call against a freshly-cloned repo is
+    already served from the pgvector index.
+
 Exception → HTTP mapping:
 
   * ``RepoInvalidUrlError`` → 422
   * ``RepoTooLargeError`` → 413
   * ``RepoCloneError`` → 500
+  * ``EmbeddingError`` → 500
   * missing row on GET / DELETE → 404
+  * missing repository on retrieve → 404
 """
 
 from __future__ import annotations
@@ -40,6 +50,9 @@ from claim2code_api.db.models import (
     RepositoryConfig,
     RepositoryDependency,
 )
+from claim2code_api.indexing.embedding_client import get_embedding_client
+from claim2code_api.indexing.exceptions import EmbeddingError
+from claim2code_api.indexing.retriever import retrieve_semantic
 from claim2code_api.repos import cloner
 from claim2code_api.repos.exceptions import (
     RepoCloneError,
@@ -57,6 +70,9 @@ from claim2code_api.repos.schemas import (
     RepoCreateResponse,
     RepoErrorResponse,
     RepoMetadataResponse,
+    RetrieveMatch,
+    RetrieveRequest,
+    RetrieveResponse,
     SymbolsResponse,
 )
 from claim2code_api.repos.schemas import (
@@ -385,6 +401,84 @@ def delete_repository(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+# ----------------------------------------------------------------------
+# POST /repositories/{repository_id}/retrieve  (Phase 4)
+# ----------------------------------------------------------------------
+
+
+@router.post(
+    "/repositories/{repository_id}/retrieve",
+    response_model=RetrieveResponse,
+    responses={
+        404: {"model": RepoErrorResponse, "description": "Repository not found"},
+        500: {"model": RepoErrorResponse, "description": "Embedding call failed"},
+    },
+)
+def retrieve_repository(
+    repository_id: UUID,
+    body: RetrieveRequest,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> RetrieveResponse:
+    """Return the top-``top_k`` symbols most similar to ``claim``.
+
+    The endpoint embeds the claim (1 OpenAI call per request) and
+    runs the pgvector cosine query against the repository's
+    ``code_embeddings`` rows. Returns ``((symbol, similarity) * top_k)``
+    in similarity-descending order. An empty list is returned when
+    the repository has no embeddings yet (e.g. embedding failed
+    during the original clone) — the user can retry by re-cloning
+    or by hitting the (Phase 4.5+) re-index endpoint.
+
+    :raises HTTPException: 404 if the repository row is missing;
+        500 if the OpenAI embedding call fails irrecoverably.
+    """
+    repo = db.query(Repository).filter(Repository.repository_id == repository_id).one_or_none()
+    if repo is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"repository {repository_id} not found",
+        )
+
+    try:
+        results = retrieve_semantic(
+            db=db,
+            repository_id=repository_id,
+            claim=body.claim,
+            top_k=body.top_k,
+            embedding_client=get_embedding_client(),
+        )
+    except EmbeddingError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    matches: list[RetrieveMatch] = []
+    scores: list[float] = []
+    for sym, similarity in results:
+        matches.append(
+            RetrieveMatch(
+                symbol_id=sym.symbol_id,
+                kind=CodeSymbolKind(sym.kind),
+                language=CodeLanguage(sym.language),
+                file_path=sym.file_path,
+                start_line=sym.start_line,
+                start_col=sym.start_col,
+                end_line=sym.end_line,
+                end_col=sym.end_col,
+                name=sym.name,
+                signature=sym.signature or "",
+                docstring=sym.docstring,
+                similarity=similarity,
+            )
+        )
+        scores.append(similarity)
+
+    return RetrieveResponse(
+        repository_id=repository_id,
+        claim=body.claim,
+        symbols=matches,
+        scores=scores,
+    )
+
+
 __all__ = [
     "router",
     "create_repository",
@@ -393,4 +487,5 @@ __all__ = [
     "get_repository_configs",
     "get_repository_dependencies",
     "delete_repository",
+    "retrieve_repository",
 ]

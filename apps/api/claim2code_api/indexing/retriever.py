@@ -33,6 +33,7 @@ What this does NOT do
   - No early-exit on low similarity. The API consumer decides
     whether the top-k is "good enough".
 """
+
 from __future__ import annotations
 
 import logging

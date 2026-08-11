@@ -11,6 +11,7 @@ HTTP status without leaking SDK details.
     returned a vector of unexpected dimensionality — usually
     a settings typo).
 """
+
 from __future__ import annotations
 
 
@@ -35,8 +36,6 @@ class EmbeddingDimMismatchError(IndexingError):
     """
 
     def __init__(self, expected: int, actual: int) -> None:
-        super().__init__(
-            f"embedding dimension mismatch: expected {expected}, got {actual}"
-        )
+        super().__init__(f"embedding dimension mismatch: expected {expected}, got {actual}")
         self.expected = expected
         self.actual = actual

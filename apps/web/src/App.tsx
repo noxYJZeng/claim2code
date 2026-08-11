@@ -1,22 +1,27 @@
 import { useEffect, useState } from "react";
-import { getHealth, type Health } from "./api";
+import { getHealth, type Health, type RepoCreate } from "./api";
 import UploadSection from "./UploadSection";
 import ClaimsList from "./ClaimsList";
+import RepositorySection from "./RepositorySection";
+import SymbolsList from "./SymbolsList";
 
-// Claim2Code — Phase 2 single-page UI.
+// Claim2Code — Phase 3 single-page UI.
 //
-// Stacks <UploadSection /> + <ClaimsList /> vertically. After a
-// successful upload, the analysis_id flows into ClaimsList which
-// fetches the extracted claims via GET /analyses/{id}/claims.
+// Three sections stacked: <UploadSection/> → <ClaimsList/> →
+// <RepositorySection/> (+ <SymbolsList/> once a repo is bound).
+// After a successful paper upload the analysis_id flows into both
+// the claims list and the repository section; both sections are
+// read-only views onto the same analysis.
 //
-// Phase 3 will introduce react-router-dom when the repository page
-// becomes its own route. For Phase 2, the whole interaction is one
-// screen, so no router is needed.
+// Phase 4 will introduce react-router-dom when the repository page
+// becomes its own route; for now, the whole interaction is still
+// one screen.
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [analysisId, setAnalysisId] = useState<string | null>(null);
   const [nClaims, setNClaims] = useState<number>(0);
+  const [repo, setRepo] = useState<RepoCreate | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -84,22 +89,40 @@ export default function App() {
             }}
           />
         ) : (
-          <>
-            <div className="mb-6 flex items-baseline justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+          <div className="space-y-6">
+            <div className="flex items-baseline justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
               <span data-testid="upload-summary">
                 Parsed and extracted {nClaims} claim
                 {nClaims === 1 ? "" : "s"} from your paper.
               </span>
               <button
                 type="button"
-                onClick={() => setAnalysisId(null)}
+                onClick={() => {
+                  setAnalysisId(null);
+                  setRepo(null);
+                }}
                 className="text-xs font-medium uppercase tracking-wide text-emerald-700 hover:underline"
               >
                 Upload another
               </button>
             </div>
             <ClaimsList analysisId={analysisId} />
-          </>
+            <RepositorySection
+              analysisId={analysisId}
+              onCloned={(created) => setRepo(created)}
+            />
+            {repo && (
+              <div
+                className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"
+                data-testid="repo-summary"
+              >
+                Cloned and indexed {repo.name} — {repo.n_files} file
+                {repo.n_files === 1 ? "" : "s"}, {repo.n_symbols} symbol
+                {repo.n_symbols === 1 ? "" : "s"}.
+              </div>
+            )}
+            {repo && <SymbolsList repositoryId={repo.repository_id} />}
+          </div>
         )}
       </div>
     </main>

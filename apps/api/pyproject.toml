@@ -24,6 +24,16 @@ dependencies = [
     "openai>=1.50",
     "pymupdf>=1.24",
     "python-multipart>=0.0.9",
+    # Phase 3 — tree-sitter grammars for multi-language symbol extraction.
+    "tree-sitter>=0.23",
+    "tree-sitter-python>=0.23",
+    "tree-sitter-javascript>=0.23",
+    "tree-sitter-typescript>=0.23",
+    "tree-sitter-java>=0.23",
+    "tree-sitter-go>=0.23",
+    "tree-sitter-rust>=0.23",
+    # Phase 3 — YAML config parsing (JSON/TOML/INI use stdlib).
+    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -57,6 +67,10 @@ ignore_missing_imports = true
 # ---- Pytest ----
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Integration tests are opt-in: ``make test-integration`` adds the
+# ``-m integration`` flag, so plain ``pytest`` runs only unit tests
+# (and skips anything that needs a real Postgres / docker).
+addopts = "-m 'not integration'"
 markers = [
     "integration: integration tests (require docker / testcontainers)",
     "safety: responsible-AI adversarial tests",

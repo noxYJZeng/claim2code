@@ -178,4 +178,352 @@ describe("App", () => {
     const error = await screen.findByTestId("upload-error");
     await waitFor(() => expect(error).toHaveTextContent(/HTTP 500/i));
   });
+
+  // ============================================================
+  // RepositorySection / SymbolsList (Phase 3)
+  // ============================================================
+
+  it("renders the repository section after a successful upload", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith("/health")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: "ok" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      }
+      if (url.endsWith("/papers")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              analysis_id: "11111111-1111-1111-1111-111111111111",
+              paper_id: "22222222-2222-2222-2222-222222222222",
+              parse_status: "done",
+              n_claims: 0,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      if (url.includes("/analyses/") && url.endsWith("/claims")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              analysis_id: "11111111-1111-1111-1111-111111111111",
+              paper_status: "done",
+              claims: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`unexpected URL ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    await screen.findByTestId("upload-section");
+    const file = new File(["%PDF-1.4 fake"], "tiny.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(screen.getByTestId("file-input"), {
+      target: { files: [file] },
+    });
+    fireEvent.submit(screen.getByTestId("upload-section"));
+
+    const section = await screen.findByTestId("repository-section");
+    expect(section).toBeInTheDocument();
+    expect(screen.getByTestId("repo-url-input")).toBeInTheDocument();
+    expect(screen.getByTestId("repo-clone-button")).toBeInTheDocument();
+  });
+
+  it("clones a repo and renders SymbolsList on success", async () => {
+    const analysisId = "11111111-1111-1111-1111-111111111111";
+    const repositoryId = "33333333-3333-3333-3333-333333333333";
+
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith("/health")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: "ok" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      }
+      if (url.endsWith("/papers")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              analysis_id: analysisId,
+              paper_id: "22222222-2222-2222-2222-222222222222",
+              parse_status: "done",
+              n_claims: 0,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      if (url.includes(`/analyses/${analysisId}/claims`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              analysis_id: analysisId,
+              paper_status: "done",
+              claims: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      if (url.endsWith("/repositories") && init?.method === "POST") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              repository_id: repositoryId,
+              analysis_id: analysisId,
+              url: "https://github.com/acme/demo",
+              owner: "acme",
+              name: "demo",
+              n_files: 2,
+              n_symbols: 2,
+              n_configs: 1,
+              n_dependencies: 2,
+              index_status: "done",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      if (url.includes(`/repositories/${repositoryId}/symbols`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              repository_id: repositoryId,
+              symbols: [
+                {
+                  kind: "function",
+                  language: "python",
+                  file_path: "pkg/core.py",
+                  start_line: 1,
+                  start_col: 0,
+                  end_line: 3,
+                  end_col: 0,
+                  name: "add",
+                  signature: "(a, b)",
+                  docstring: "Add two ints.",
+                },
+                {
+                  kind: "class",
+                  language: "python",
+                  file_path: "pkg/widget.py",
+                  start_line: 5,
+                  start_col: 0,
+                  end_line: 20,
+                  end_col: 0,
+                  name: "Widget",
+                  signature: "",
+                  docstring: null,
+                },
+              ],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`unexpected URL ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    await screen.findByTestId("upload-section");
+    const file = new File(["%PDF-1.4 fake"], "tiny.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(screen.getByTestId("file-input"), {
+      target: { files: [file] },
+    });
+    fireEvent.submit(screen.getByTestId("upload-section"));
+
+    await screen.findByTestId("repository-section");
+    fireEvent.change(screen.getByTestId("repo-url-input"), {
+      target: { value: "https://github.com/acme/demo" },
+    });
+    fireEvent.submit(screen.getByTestId("repository-section"));
+
+    // Repo summary banner appears.
+    const summary = await screen.findByTestId("repo-summary");
+    await waitFor(() =>
+      expect(summary).toHaveTextContent(/indexed demo/i),
+    );
+
+    // SymbolsList fetches and renders the symbols grouped by file.
+    const list = await screen.findByTestId("symbols-list");
+    expect(list).toBeInTheDocument();
+    const files = await screen.findAllByTestId("symbols-file");
+    expect(files).toHaveLength(2);
+    const filePaths = await screen.findAllByTestId("symbols-file-path");
+    expect(filePaths.map((n) => n.textContent)).toContain("pkg/core.py");
+    expect(filePaths.map((n) => n.textContent)).toContain("pkg/widget.py");
+    const rows = await screen.findAllByTestId("symbol-row");
+    expect(rows).toHaveLength(2);
+    const symbolNames = await screen.findAllByTestId("symbol-name");
+    expect(symbolNames.map((n) => n.textContent ?? "").some((t) => /add/.test(t))).toBe(true);
+  });
+
+  it("shows an error when POST /repositories fails", async () => {
+    const analysisId = "11111111-1111-1111-1111-111111111111";
+
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.endsWith("/health")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: "ok" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      }
+      if (url.endsWith("/papers")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              analysis_id: analysisId,
+              paper_id: "22222222-2222-2222-2222-222222222222",
+              parse_status: "done",
+              n_claims: 0,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      if (url.includes(`/analyses/${analysisId}/claims`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              analysis_id: analysisId,
+              paper_status: "done",
+              claims: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      if (url.endsWith("/repositories")) {
+        return Promise.resolve(
+          new Response("repository too large", { status: 413 }),
+        );
+      }
+      return Promise.reject(new Error(`unexpected URL ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    await screen.findByTestId("upload-section");
+    const file = new File(["%PDF-1.4 fake"], "tiny.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(screen.getByTestId("file-input"), {
+      target: { files: [file] },
+    });
+    fireEvent.submit(screen.getByTestId("upload-section"));
+
+    await screen.findByTestId("repository-section");
+    fireEvent.change(screen.getByTestId("repo-url-input"), {
+      target: { value: "https://github.com/huge/monorepo" },
+    });
+    fireEvent.submit(screen.getByTestId("repository-section"));
+
+    const error = await screen.findByTestId("repo-error");
+    await waitFor(() => expect(error).toHaveTextContent(/HTTP 413/i));
+    // SymbolsList should never appear.
+    expect(screen.queryByTestId("symbols-list")).not.toBeInTheDocument();
+  });
+
+  it("shows symbols-empty when the repo has no symbols", async () => {
+    const analysisId = "11111111-1111-1111-1111-111111111111";
+    const repositoryId = "33333333-3333-3333-3333-333333333333";
+
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith("/health")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ status: "ok" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      }
+      if (url.endsWith("/papers")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              analysis_id: analysisId,
+              paper_id: "22222222-2222-2222-2222-222222222222",
+              parse_status: "done",
+              n_claims: 0,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      if (url.includes(`/analyses/${analysisId}/claims`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              analysis_id: analysisId,
+              paper_status: "done",
+              claims: [],
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      if (url.endsWith("/repositories") && init?.method === "POST") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              repository_id: repositoryId,
+              analysis_id: analysisId,
+              url: "https://github.com/empty/nope",
+              owner: "empty",
+              name: "nope",
+              n_files: 0,
+              n_symbols: 0,
+              n_configs: 0,
+              n_dependencies: 0,
+              index_status: "done",
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      if (url.includes(`/repositories/${repositoryId}/symbols`)) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ repository_id: repositoryId, symbols: [] }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.reject(new Error(`unexpected URL ${url}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App />);
+    await screen.findByTestId("upload-section");
+    const file = new File(["%PDF-1.4 fake"], "tiny.pdf", {
+      type: "application/pdf",
+    });
+    fireEvent.change(screen.getByTestId("file-input"), {
+      target: { files: [file] },
+    });
+    fireEvent.submit(screen.getByTestId("upload-section"));
+
+    await screen.findByTestId("repository-section");
+    fireEvent.change(screen.getByTestId("repo-url-input"), {
+      target: { value: "https://github.com/empty/nope" },
+    });
+    fireEvent.submit(screen.getByTestId("repository-section"));
+
+    expect(await screen.findByTestId("symbols-empty")).toBeInTheDocument();
+  });
 });

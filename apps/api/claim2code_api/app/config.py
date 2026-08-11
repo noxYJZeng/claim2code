@@ -5,6 +5,7 @@ file. The ``.env`` location is resolved relative to this module so the
 backend works the same whether launched from ``apps/api`` (local dev) or
 from the project root (Docker, CI).
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
@@ -74,6 +75,43 @@ class Settings(BaseSettings):
     max_repo_mb_megs: int = 200
     max_repo_files: int = 20000
     max_file_kb: int = 512
+
+    # ---- Phase 3 repo ingestion knobs ----
+    # File extensions the parser walks (mirrors
+    # ``claim2code_api.reps.parser._EXTENSION_MAP``).
+    repo_parse_extensions: list[str] = Field(
+        default_factory=lambda: [
+            ".py",
+            ".js",
+            ".jsx",
+            ".mjs",
+            ".cjs",
+            ".ts",
+            ".tsx",
+            ".java",
+            ".go",
+            ".rs",
+        ]
+    )
+    # Directory basenames the walk skips — see
+    # :func:`claim2code_api.repos.storage.walk_repo_files`.
+    repo_parse_ignore_dirs: list[str] = Field(
+        default_factory=lambda: [
+            "node_modules",
+            ".venv",
+            "__pycache__",
+            "dist",
+            "build",
+            "target",
+            ".gradle",
+            ".idea",
+            ".vscode",
+            "venv",
+            "env",
+        ]
+    )
+    # HTTP timeout for the GitHub HEAD pre-flight size guard.
+    repo_size_estimate_timeout_seconds: float = 5.0
 
     # ---- Paper ingestion (Phase 2) ----
     max_pdf_size_mb: int = 50

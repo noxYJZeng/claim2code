@@ -9,7 +9,9 @@ Coverage:
     ``Repository.embedding_model``.
   - Empty repo (zero symbols) writes zero rows but still records
     the model.
-  - On ``EmbeddingError`` the repo is marked ``index_status='error'``
+  - On ``EmbeddingError`` the repo's ``error`` column is set; the
+    parse-step ``index_status='done'`` is left untouched (the
+    retriever gracefully returns ``[]`` until the user retries).
     and a structured entry is appended to ``analysis_states.errors``.
   - Source body is read from the clone path between
     ``start_line`` and ``end_line`` (1-indexed, inclusive).
@@ -17,10 +19,13 @@ Coverage:
   - Missing files / out-of-range lines fall back to empty source
     (the other fields still pin the symbol).
 """
+
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -28,7 +33,6 @@ import pytest
 
 from claim2code_api.app.config import Settings
 from claim2code_api.db.models import AnalysisState, CodeEmbedding, CodeSymbol, Repository
-from claim2code_api.indexing.embedding_client import EmbeddingClient
 from claim2code_api.indexing.exceptions import EmbeddingError
 from claim2code_api.indexing.indexer import embed_and_persist_symbols
 
@@ -52,8 +56,14 @@ def _fake_settings() -> Settings:
     )
 
 
-def _fake_embedding_client(payload) -> EmbeddingClient:
-    """A stub that returns canned vectors or raises."""
+def _fake_embedding_client(payload) -> Any:
+    """A stub that returns canned vectors or raises.
+
+    Returned as ``Any`` so the test sites can read ``stub.calls``
+    (a duck-typed attribute the EmbeddingClient Protocol doesn't
+    declare) without tripping mypy. The runtime protocol is
+    unchanged: ``Stub.embed`` matches :meth:`EmbeddingClient.embed`.
+    """
 
     class _Stub:
         def __init__(self, payload) -> None:
@@ -74,7 +84,7 @@ _MISSING = object()
 
 def _build_session(
     repo: Repository | MagicMock,
-    symbols: list[CodeSymbol | SimpleNamespace],
+    symbols: Sequence[CodeSymbol | SimpleNamespace],
     *,
     analysis_id=None,
     repo_lookup: object = _MISSING,
@@ -87,6 +97,10 @@ def _build_session(
     here to simulate a missing repository. ``db.query(AnalysisState)
     .filter(...).update(...)`` records the payload so tests can
     assert it.
+
+    ``symbols`` is a ``Sequence`` (covariant) so test sites can
+    pass ``list[SimpleNamespace]`` or ``list[CodeSymbol]``
+    interchangeably without mypy invariance complaints.
     """
     session = MagicMock(name="session")
     session.commit = MagicMock()
@@ -190,13 +204,10 @@ def tmp_clone(tmp_path: Path) -> Path:
         "import torch\n"
         "\n"
         "def add(a, b):\n"
-        "    \"\"\"Add two ints.\"\"\"\n"
+        '    """Add two ints."""\n'
         "    return a + b\n"
     )
-    (src / "math.py").write_text(
-        "def subtract(a, b):\n"
-        "    return a - b\n"
-    )
+    (src / "math.py").write_text("def subtract(a, b):\n    return a - b\n")
     return tmp_path
 
 
@@ -517,7 +528,12 @@ def test_embed_skips_non_import_symbols_in_imports_list(tmp_clone: Path) -> None
 
 
 def test_embed_error_marks_repo_as_errored(tmp_clone: Path) -> None:
-    """An ``EmbeddingError`` marks the repo as errored and records the message."""
+    """An ``EmbeddingError`` records the message on the row + analysis.
+
+    We deliberately do NOT touch ``index_status`` — the parse step
+    already marked the repo ``'done'``; only embedding failed. The
+    retriever gracefully returns ``[]`` until the user retries.
+    """
     repo_id = uuid4()
     aid = uuid4()
     repo = _make_repository(repository_id=repo_id, analysis_id=aid, clone_path=str(tmp_clone))
@@ -532,7 +548,8 @@ def test_embed_error_marks_repo_as_errored(tmp_clone: Path) -> None:
     )
 
     assert written == 0
-    assert repo.index_status == "error"
+    # index_status was NOT touched — the parse step's 'done' sticks.
+    assert repo.index_status == "pending"
     assert repo.error is not None
     assert "simulated outage" in repo.error
     # The error is also appended to analysis_states.errors.

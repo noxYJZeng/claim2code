@@ -11,11 +11,53 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, Text, func
+from sqlalchemy import CHAR, BigInteger, DateTime, Integer, String, Text, TypeDecorator, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
 from claim2code_api.db.base import Base
+
+# JSONB → JSON on SQLite so the ORM compiles to an in-memory
+# database for unit tests (integration tests run against the real
+# Postgres JSONB and gain the same code path).
+_JSONB = JSONB().with_variant(SQLITE_JSON(), "sqlite")
+
+
+class _UuidDecorator(TypeDecorator):
+    """A UUID type that uses Postgres' UUID on prod and CHAR(36) on SQLite.
+
+    The CHAR(36) variant needs an explicit ``process_bind_param`` /
+    ``process_result_value`` so SQLite can round-trip a Python
+    ``uuid.UUID`` (which sqlite3 doesn't natively understand).
+    """
+
+    impl = CHAR
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):  # type: ignore[override]
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(UUID(as_uuid=True))
+        return dialect.type_descriptor(CHAR(36))
+
+    def process_bind_param(self, value, dialect):  # type: ignore[override]
+        if value is None:
+            return None
+        if dialect.name == "postgresql":
+            return value
+        return str(value)
+
+    def process_result_value(self, value, dialect):  # type: ignore[override]
+        if value is None:
+            return None
+        import uuid as _uuid
+
+        if isinstance(value, _uuid.UUID):
+            return value
+        return _uuid.UUID(str(value))
+
+
+_UUID = _UuidDecorator()
 
 
 class AnalysisState(Base):
@@ -31,7 +73,7 @@ class AnalysisState(Base):
     __tablename__ = "analysis_states"
 
     analysis_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        _UUID,
         primary_key=True,
         default=uuid.uuid4,
     )
@@ -42,19 +84,19 @@ class AnalysisState(Base):
         String(32), nullable=False, default="pending", server_default="pending"
     )
     claims: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, default=list, server_default="[]"
+        _JSONB, nullable=False, default=list, server_default="[]"
     )
     symbols: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, default=list, server_default="[]"
+        _JSONB, nullable=False, default=list, server_default="[]"
     )
     mappings: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, default=list, server_default="[]"
+        _JSONB, nullable=False, default=list, server_default="[]"
     )
     verifications: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, default=list, server_default="[]"
+        _JSONB, nullable=False, default=list, server_default="[]"
     )
     errors: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, default=list, server_default="[]"
+        _JSONB, nullable=False, default=list, server_default="[]"
     )
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -87,12 +129,12 @@ class Paper(Base):
     __tablename__ = "papers"
 
     paper_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        _UUID,
         primary_key=True,
         default=uuid.uuid4,
     )
     analysis_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        _UUID,
         # The FK + CASCADE are created by the migration; SQLAlchemy
         # is told about the constraint here so ORM-level cascades
         # match DB-level cascades.
@@ -142,12 +184,12 @@ class Repository(Base):
     __tablename__ = "repositories"
 
     repository_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        _UUID,
         primary_key=True,
         default=uuid.uuid4,
     )
     analysis_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        _UUID,
         nullable=False,
     )
     url: Mapped[str] = mapped_column(Text, nullable=False)
@@ -192,12 +234,12 @@ class CodeSymbol(Base):
     __tablename__ = "code_symbols"
 
     symbol_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        _UUID,
         primary_key=True,
         default=uuid.uuid4,
     )
     repository_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        _UUID,
         nullable=False,
     )
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -210,7 +252,7 @@ class CodeSymbol(Base):
     name: Mapped[str] = mapped_column(Text, nullable=False)
     signature: Mapped[str] = mapped_column(Text, nullable=False, default="", server_default="")
     docstring: Mapped[str | None] = mapped_column(Text, nullable=True)
-    parent_symbol_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    parent_symbol_id: Mapped[uuid.UUID | None] = mapped_column(_UUID, nullable=True)
 
     def __repr__(self) -> str:  # pragma: no cover — debug helper
         return (
@@ -230,19 +272,19 @@ class RepositoryConfig(Base):
     __tablename__ = "repository_configs"
 
     config_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        _UUID,
         primary_key=True,
         default=uuid.uuid4,
     )
     repository_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        _UUID,
         nullable=False,
     )
     file_path: Mapped[str] = mapped_column(Text, nullable=False)
     format: Mapped[str] = mapped_column(String(16), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
     content_json: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict, server_default="{}"
+        _JSONB, nullable=False, default=dict, server_default="{}"
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_at: Mapped[datetime] = mapped_column(
@@ -266,12 +308,12 @@ class RepositoryDependency(Base):
     __tablename__ = "repository_dependencies"
 
     dep_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        _UUID,
         primary_key=True,
         default=uuid.uuid4,
     )
     repository_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+        _UUID,
         nullable=False,
     )
     ecosystem: Mapped[str] = mapped_column(String(16), nullable=False)

@@ -34,6 +34,10 @@ dependencies = [
     "tree-sitter-rust>=0.23",
     # Phase 3 — YAML config parsing (JSON/TOML/INI use stdlib).
     "PyYAML>=6.0",
+    # Phase 4 — pgvector adapter for SQLAlchemy (the Postgres extension
+    # itself is provided by the pgvector image; this Python package
+    # teaches the driver the ``VECTOR(...)`` type).
+    "pgvector>=0.3",
 ]
 
 [project.optional-dependencies]

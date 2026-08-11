@@ -27,6 +27,12 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     # pgvector — used by the embedding tables in Phase 4.
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    # uuid-ossp — supplies ``uuid_generate_v4()`` which 0002 + 0003
+    # use as the server-side default for primary keys. Postgres 13+
+    # has ``gen_random_uuid()`` built-in via pgcrypto, but ``uuid-ossp``
+    # is the more explicit option and matches the design doc. Enable
+    # it here so the very next migration can reference the function.
+    op.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"')
 
     op.create_table(
         "analysis_states",
@@ -100,5 +106,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_analysis_states_started_at", table_name="analysis_states")
     op.drop_table("analysis_states")
-    # We intentionally do NOT drop the vector extension — it is a
-    # cluster-wide resource that may be in use by other databases.
+    # We intentionally do NOT drop the vector / uuid-ossp extensions —
+    # they are cluster-wide resources that may be in use by other
+    # databases.

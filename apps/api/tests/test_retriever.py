@@ -14,16 +14,17 @@ Coverage:
     silently skipped.
   - The function works with a MagicMock session (no real Postgres).
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
 from claim2code_api.db.models import CodeSymbol
-from claim2code_api.indexing.embedding_client import EmbeddingClient
 from claim2code_api.indexing.exceptions import EmbeddingError
 from claim2code_api.indexing.retriever import retrieve_semantic
 
@@ -39,7 +40,15 @@ def _make_vec(seed: int = 0) -> list[float]:
 
 def _fake_embedding_client(
     payload: list[list[float]] | Exception,
-) -> EmbeddingClient:
+) -> Any:
+    """Build a stub EmbeddingClient that records its inputs.
+
+    Returned as ``Any`` so the test sites can read ``stub.calls``
+    (a duck-typed attribute the Protocol doesn't declare) without
+    tripping mypy. The runtime protocol is unchanged: ``Stub.embed``
+    matches :meth:`EmbeddingClient.embed`.
+    """
+
     class _Stub:
         def __init__(self, payload) -> None:
             self.payload = payload

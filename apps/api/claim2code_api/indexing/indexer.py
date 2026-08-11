@@ -29,10 +29,14 @@ What it does
 Failure mode
 ------------
 The function swallows ``EmbeddingError`` and records it on the
-repository row (``index_status='error'`` + ``error='<msg>'`` +
-``analysis_states.errors``). The repo is still browsable via
-``GET /repositories/{id}/symbols``; ``retrieve_semantic`` simply
-returns ``[]`` until the user retries.
+repository row (``repo.error`` + ``analysis_states.errors``).
+We deliberately do NOT touch `index_status` — the parse step
+already set it to ``'done'``; embedding is a best-effort
+secondary pass that the user can retry later. Overwriting the
+parse status would lie to the caller of :func:`run_repo_workflow`
+that the clone itself failed when only the embedding did. The
+repo stays browsable via ``GET /repositories/{id}/symbols``;
+``retrieve_semantic`` simply returns ``[]`` until the user retries.
 
 Why this is a separate module from the workflow
 -----------------------------------------------
@@ -255,14 +259,18 @@ def _record_indexer_failure(
     analysis_id: UUID,
     exc: Exception,
 ) -> None:
-    """Mark the repo as errored and append to analysis_states.errors.
+    """Record the embedding failure on the row + analysis errors.
 
-    Mirrors the workflow's failure path so the UI can show
-    "indexed N files / 0 symbols / embed error" without a
-    special-case UX.
+    Deliberately does NOT touch ``repo.index_status`` — the parse
+    step already marked the repo ``'done'``. Embedding is a
+    best-effort secondary pass; overwriting the parse status
+    would lie to the caller that the clone itself failed when
+    only the OpenAI side did. The retriever gracefully returns
+    ``[]`` for a repo with no embeddings, and the user can retry
+    by re-running the indexer (Phase 4.5+ endpoint) or by
+    re-cloning.
     """
     msg = str(exc)[:500]
-    repo.index_status = "error"
     repo.error = f"embedding: {msg}"
     blob = {
         "at": _utc_now_iso(),

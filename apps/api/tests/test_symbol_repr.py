@@ -20,6 +20,7 @@ Coverage:
   - Each symbol kind (function / class / import) gets a distinct
     output that still pins the symbol's identity.
 """
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -49,7 +50,7 @@ def _sym(
     ``SimpleNamespace`` rather than a real ORM row so the tests
     don't need a DB session.
     """
-    return SimpleNamespace(
+    return SimpleNamespace(  # type: ignore[return-value]
         kind=kind,
         language=language,
         file_path=file_path,

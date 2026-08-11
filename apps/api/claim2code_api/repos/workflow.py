@@ -45,6 +45,7 @@ from claim2code_api.db.models import (
     RepositoryConfig,
     RepositoryDependency,
 )
+from claim2code_api.indexing.indexer import embed_and_persist_symbols
 from claim2code_api.repos import cloner
 from claim2code_api.repos.configs import parse_config_file
 from claim2code_api.repos.exceptions import (  # noqa: F401  — referenced in docstrings
@@ -146,6 +147,15 @@ def run_repo_workflow(
         _set_repo_status(db, repository_id, "done")
         _set_analysis_repo_status(db, analysis_id, "done", completed=True)
         db.commit()
+
+        # Phase 4 — embed every CodeSymbol so the repo is immediately
+        # retrievable. ``embed_and_persist_symbols`` swallows
+        # EmbeddingError and records it on the row; the workflow
+        # stays linear and the index_status='done' we just set
+        # remains, so the repo is still browsable via
+        # GET /repositories/{id}/symbols. Retrieval will simply
+        # return [] until the user re-runs indexing.
+        embed_and_persist_symbols(db, repository_id)
 
         return RepoWorkflowResult(
             repository_id=repository_id,

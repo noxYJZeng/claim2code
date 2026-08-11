@@ -126,6 +126,14 @@ class Settings(BaseSettings):
     workflow_timeout_repo: int = 300
     workflow_timeout_total: int = 900
 
+    # ---- Phase 4 — semantic indexing (per-symbol embeddings) ----
+    # How many strings to embed per OpenAI batch call. The OpenAI API
+    # accepts up to 2 048 inputs per request; 128 is conservative.
+    embed_batch_size: int = 128
+    # Retries on transient errors (timeout, connection, 5xx). The
+    # OpenAI SDK retries 401/429 itself; this is the wrapping loop.
+    embed_max_retries: int = 3
+
 
 @lru_cache
 def get_settings() -> Settings:

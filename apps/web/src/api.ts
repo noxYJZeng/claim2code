@@ -17,8 +17,7 @@ export type Health = {
 };
 
 export type HealthResult =
-  | { ok: true; health: Health }
-  | { ok: false; error: string };
+  { ok: true; health: Health } | { ok: false; error: string };
 
 export type PaperUpload = {
   analysis_id: string;
@@ -28,8 +27,7 @@ export type PaperUpload = {
 };
 
 export type PaperUploadResult =
-  | { ok: true; upload: PaperUpload }
-  | { ok: false; error: string };
+  { ok: true; upload: PaperUpload } | { ok: false; error: string };
 
 export type ClaimType =
   | "METHOD"
@@ -65,24 +63,13 @@ export type ClaimsResponse = {
 };
 
 export type ClaimsResult =
-  | { ok: true; claims: ClaimsResponse }
-  | { ok: false; error: string };
+  { ok: true; claims: ClaimsResponse } | { ok: false; error: string };
 
 export type CodeSymbolKind =
-  | "function"
-  | "method"
-  | "class"
-  | "import"
-  | "constant"
-  | "config_schema";
+  "function" | "method" | "class" | "import" | "constant" | "config_schema";
 
 export type CodeLanguage =
-  | "python"
-  | "javascript"
-  | "typescript"
-  | "java"
-  | "go"
-  | "rust";
+  "python" | "javascript" | "typescript" | "java" | "go" | "rust";
 
 export type CodeSymbol = {
   kind: CodeSymbolKind;
@@ -111,8 +98,7 @@ export type RepoCreate = {
 };
 
 export type RepoCreateResult =
-  | { ok: true; repo: RepoCreate }
-  | { ok: false; error: string };
+  { ok: true; repo: RepoCreate } | { ok: false; error: string };
 
 export type RepoMetadata = {
   repository_id: string;
@@ -131,8 +117,7 @@ export type RepoMetadata = {
 };
 
 export type RepoMetadataResult =
-  | { ok: true; metadata: RepoMetadata }
-  | { ok: false; error: string };
+  { ok: true; metadata: RepoMetadata } | { ok: false; error: string };
 
 export type SymbolsResponse = {
   repository_id: string;
@@ -140,8 +125,32 @@ export type SymbolsResponse = {
 };
 
 export type SymbolsResult =
-  | { ok: true; response: SymbolsResponse }
-  | { ok: false; error: string };
+  { ok: true; response: SymbolsResponse } | { ok: false; error: string };
+
+export type RetrieveMatch = {
+  symbol_id: string;
+  kind: CodeSymbolKind;
+  language: CodeLanguage;
+  file_path: string;
+  start_line: number;
+  start_col: number;
+  end_line: number;
+  end_col: number;
+  name: string;
+  signature: string;
+  docstring: string | null;
+  similarity: number;
+};
+
+export type RetrieveResponse = {
+  repository_id: string;
+  claim: string;
+  symbols: RetrieveMatch[];
+  scores: number[];
+};
+
+export type RetrieveResult =
+  { ok: true; response: RetrieveResponse } | { ok: false; error: string };
 
 export async function getHealth(signal?: AbortSignal): Promise<HealthResult> {
   try {
@@ -174,7 +183,10 @@ export async function uploadPaper(
     });
     if (!response.ok) {
       const detail = await response.text();
-      return { ok: false, error: `HTTP ${response.status}: ${detail.slice(0, 200)}` };
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${detail.slice(0, 200)}`,
+      };
     }
     const upload = (await response.json()) as PaperUpload;
     return { ok: true, upload };
@@ -229,7 +241,10 @@ export async function cloneRepo(
     });
     if (!response.ok) {
       const detail = await response.text();
-      return { ok: false, error: `HTTP ${response.status}: ${detail.slice(0, 200)}` };
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${detail.slice(0, 200)}`,
+      };
     }
     const repo = (await response.json()) as RepoCreate;
     return { ok: true, repo };
@@ -280,6 +295,45 @@ export async function getSymbols(
       return { ok: false, error: `HTTP ${response.status}` };
     }
     const json = (await response.json()) as SymbolsResponse;
+    return { ok: true, response: json };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** Embed a claim string and return the top-k matching symbols by
+ *  cosine similarity against the repository's code_embeddings index.
+ *
+ *  POST /repositories/{repository_id}/retrieve
+ *  body: {claim, top_k}  (top_k defaults to 5 server-side; pass
+ *  explicitly if you want a different cap). */
+export async function retrieveSymbols(
+  repositoryId: string,
+  claim: string,
+  topK: number = 5,
+  signal?: AbortSignal,
+): Promise<RetrieveResult> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/repositories/${encodeURIComponent(repositoryId)}/retrieve`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ claim, top_k: topK }),
+        signal,
+      },
+    );
+    if (!response.ok) {
+      const detail = await response.text();
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${detail.slice(0, 200)}`,
+      };
+    }
+    const json = (await response.json()) as RetrieveResponse;
     return { ok: true, response: json };
   } catch (err) {
     if (err instanceof Error) {

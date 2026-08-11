@@ -4,6 +4,7 @@ import UploadSection from "./UploadSection";
 import ClaimsList from "./ClaimsList";
 import RepositorySection from "./RepositorySection";
 import SymbolsList from "./SymbolsList";
+import ClaimRetrievalPanel from "./ClaimRetrievalPanel";
 
 // Claim2Code — Phase 3 single-page UI.
 //
@@ -13,7 +14,12 @@ import SymbolsList from "./SymbolsList";
 // the claims list and the repository section; both sections are
 // read-only views onto the same analysis.
 //
-// Phase 4 will introduce react-router-dom when the repository page
+// Phase 4 appends <ClaimRetrievalPanel/> below SymbolsList: once
+// a repo is bound, the user can pick one of the extracted claims
+// and the panel POSTs it to /repositories/{id}/retrieve, rendering
+// the top-k matching symbols with similarity scores.
+//
+// Phase 5+ will introduce react-router-dom when the repository page
 // becomes its own route; for now, the whole interaction is still
 // one screen.
 export default function App() {
@@ -122,6 +128,12 @@ export default function App() {
               </div>
             )}
             {repo && <SymbolsList repositoryId={repo.repository_id} />}
+            {repo && (
+              <ClaimRetrievalPanel
+                repositoryId={repo.repository_id}
+                analysisId={analysisId}
+              />
+            )}
           </div>
         )}
       </div>

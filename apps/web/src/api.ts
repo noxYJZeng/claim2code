@@ -68,6 +68,81 @@ export type ClaimsResult =
   | { ok: true; claims: ClaimsResponse }
   | { ok: false; error: string };
 
+export type CodeSymbolKind =
+  | "function"
+  | "method"
+  | "class"
+  | "import"
+  | "constant"
+  | "config_schema";
+
+export type CodeLanguage =
+  | "python"
+  | "javascript"
+  | "typescript"
+  | "java"
+  | "go"
+  | "rust";
+
+export type CodeSymbol = {
+  kind: CodeSymbolKind;
+  language: CodeLanguage;
+  file_path: string;
+  start_line: number;
+  start_col: number;
+  end_line: number;
+  end_col: number;
+  name: string;
+  signature: string;
+  docstring: string | null;
+};
+
+export type RepoCreate = {
+  repository_id: string;
+  analysis_id: string;
+  url: string;
+  owner: string;
+  name: string;
+  n_files: number;
+  n_symbols: number;
+  n_configs: number;
+  n_dependencies: number;
+  index_status: string;
+};
+
+export type RepoCreateResult =
+  | { ok: true; repo: RepoCreate }
+  | { ok: false; error: string };
+
+export type RepoMetadata = {
+  repository_id: string;
+  analysis_id: string;
+  url: string;
+  owner: string;
+  name: string;
+  default_branch: string;
+  clone_path: string;
+  n_files: number | null;
+  n_symbols: number | null;
+  index_status: string;
+  cloned_at: string;
+  indexed_at: string | null;
+  error: string | null;
+};
+
+export type RepoMetadataResult =
+  | { ok: true; metadata: RepoMetadata }
+  | { ok: false; error: string };
+
+export type SymbolsResponse = {
+  repository_id: string;
+  symbols: CodeSymbol[];
+};
+
+export type SymbolsResult =
+  | { ok: true; response: SymbolsResponse }
+  | { ok: false; error: string };
+
 export async function getHealth(signal?: AbortSignal): Promise<HealthResult> {
   try {
     const response = await fetch(`${API_BASE_URL}/health`, { signal });
@@ -126,6 +201,86 @@ export async function getClaims(
     }
     const claims = (await response.json()) as ClaimsResponse;
     return { ok: true, claims };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** Clone + index a public GitHub repo, bound to an analysis.
+ *
+ *  POST /repositories with body {url, analysis_id}. The whole pipeline
+ *  runs synchronously; the response carries n_files / n_symbols /
+ *  n_configs / n_dependencies once the index is done.
+ */
+export async function cloneRepo(
+  analysisId: string,
+  url: string,
+  signal?: AbortSignal,
+): Promise<RepoCreateResult> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/repositories`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url, analysis_id: analysisId }),
+      signal,
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      return { ok: false, error: `HTTP ${response.status}: ${detail.slice(0, 200)}` };
+    }
+    const repo = (await response.json()) as RepoCreate;
+    return { ok: true, repo };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** Fetch metadata for one cloned repository.
+ *  GET /repositories/{repository_id} — 404 if the row is missing. */
+export async function getRepository(
+  repositoryId: string,
+  signal?: AbortSignal,
+): Promise<RepoMetadataResult> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/repositories/${encodeURIComponent(repositoryId)}`,
+      { signal },
+    );
+    if (!response.ok) {
+      return { ok: false, error: `HTTP ${response.status}` };
+    }
+    const metadata = (await response.json()) as RepoMetadata;
+    return { ok: true, metadata };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** Fetch the extracted code symbols for one repository.
+ *  GET /repositories/{repository_id}/symbols */
+export async function getSymbols(
+  repositoryId: string,
+  signal?: AbortSignal,
+): Promise<SymbolsResult> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/repositories/${encodeURIComponent(repositoryId)}/symbols`,
+      { signal },
+    );
+    if (!response.ok) {
+      return { ok: false, error: `HTTP ${response.status}` };
+    }
+    const json = (await response.json()) as SymbolsResponse;
+    return { ok: true, response: json };
   } catch (err) {
     if (err instanceof Error) {
       return { ok: false, error: err.message };

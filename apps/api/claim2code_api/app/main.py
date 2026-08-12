@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse
 from claim2code_api import __version__
 from claim2code_api.app.config import get_settings
 from claim2code_api.db.session import check_db_ready
+from claim2code_api.literature.router import router as related_work_router
 from claim2code_api.papers.router import router as papers_router
 from claim2code_api.repos.router import router as repos_router
 from claim2code_api.verification.router import router as verification_router
@@ -66,6 +67,7 @@ def create_app() -> FastAPI:
     app.include_router(papers_router)
     app.include_router(repos_router)
     app.include_router(verification_router)
+    app.include_router(related_work_router)
     return app
 
 

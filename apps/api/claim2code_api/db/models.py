@@ -103,6 +103,9 @@ class AnalysisState(Base):
     verifications: Mapped[list[dict[str, Any]]] = mapped_column(
         _JSONB, nullable=False, default=list, server_default="[]"
     )
+    related_work: Mapped[list[dict[str, Any]]] = mapped_column(
+        _JSONB, nullable=False, default=list, server_default="[]"
+    )
     errors: Mapped[list[dict[str, Any]]] = mapped_column(
         _JSONB, nullable=False, default=list, server_default="[]"
     )

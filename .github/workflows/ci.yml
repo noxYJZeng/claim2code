@@ -108,6 +108,52 @@ jobs:
         working-directory: apps/api
         run: pytest -v
 
+  # ---- 3b. backend safety (Phase 8: adversarial fixtures, opt-in marker) ----
+  backend-safety:
+    name: Backend safety (Phase 8 adversarial)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: claim2code_test
+          POSTGRES_USER: claim2code
+          POSTGRES_PASSWORD: testpw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U claim2code -d claim2code_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://claim2code:testpw@localhost:5432/claim2code_test
+      # OpenAI client is mocked; a non-empty key satisfies Settings.
+      OPENAI_API_KEY: sk-test-mock
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/api/pyproject.toml
+      - name: Install package with dev extras
+        working-directory: apps/api
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -U claim2code -d claim2code_test && exit 0
+            sleep 1
+          done
+          echo "postgres not ready" >&2
+          exit 1
+      - name: pytest (safety marker)
+        working-directory: apps/api
+        run: pytest -m safety -v
+
   # ---- 4. frontend build + test ----
   frontend-build:
     name: Frontend build

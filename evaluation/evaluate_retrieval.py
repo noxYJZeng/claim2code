@@ -101,6 +101,8 @@ class ClaimResult:
 
     @property
     def recall_at_1(self) -> float:
+        if not self.retrieved_symbol_ids:
+            return 0.0
         return 1.0 if self.relevant_symbol_ids & {self.retrieved_symbol_ids[0]} else 0.0
 
     @property

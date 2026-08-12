@@ -48,6 +48,7 @@ from claim2code_api.literature.schemas import Comparison, ScholarPaper
 from claim2code_api.papers.exceptions import ClaimExtractionError
 from claim2code_api.papers.schemas import Claim, ClaimList, Paper, PaperEvidence
 from claim2code_api.repos.schemas import RetrieveMatch
+from claim2code_api.safety import SafetyGate, SafetyViolation
 from claim2code_api.verification.exceptions import VerificationLLMError
 from claim2code_api.verification.schemas import (
     Discrepancy,
@@ -201,6 +202,16 @@ class LLMClient:
             http_client=httpx.Client(proxy=None),  # type: ignore[arg-type]
             timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
+        # Phase 8: SafetyGate wraps every LLM call at the SDK seam
+        # (see docs/architecture/phase-8-design.md §2). The gate
+        # redacts credential spans and detects prompt-injection
+        # attempts; it never raises on detection — the violations
+        # list is fired through ``_on_violations`` (set by the
+        # workflow layer to persist to ``state.errors``).
+        self._gate = SafetyGate()
+        self._on_violations: (
+            "Callable[[str, list[SafetyViolation]], None] | None"
+        ) = None
 
     # ------------------------------------------------------------------
     # Claim extraction
@@ -216,13 +227,18 @@ class LLMClient:
         user_payload = _build_user_payload(paper)
         schema = ClaimList.model_json_schema()
 
+        # Phase 8: redact secrets in untrusted paper text BEFORE
+        # the SDK call. Injections are detected but not mutated.
+        messages = [
+            {"role": "system", "content": _EXTRACT_SYSTEM_PROMPT},
+            {"role": "user", "content": user_payload},
+        ]
+        gate_result = self._gate.wrap_messages(messages, kind="extract_claims")
+
         try:
             response = self._client.chat.completions.create(
                 model=self._settings.openai_model_chat,
-                messages=[
-                    {"role": "system", "content": _EXTRACT_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_payload},
-                ],
+                messages=gate_result.messages,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {
@@ -264,6 +280,9 @@ class LLMClient:
 
         if not claim_list.claims:
             raise ClaimExtractionError("LLM returned an empty claim list")
+
+        if gate_result.violations and self._on_violations is not None:
+            self._on_violations("extract_claims", gate_result.violations)
 
         return claim_list.claims
 
@@ -308,13 +327,20 @@ class LLMClient:
         )
         schema = Verification.model_json_schema()
 
+        # Phase 8: redact secrets + detect injections in the
+        # claim text, paper evidence quote, candidate signatures,
+        # and candidate docstrings. The system prompt is ours and
+        # never matches.
+        messages = [
+            {"role": "system", "content": _VERIFY_SYSTEM_PROMPT},
+            {"role": "user", "content": user_payload},
+        ]
+        gate_result = self._gate.wrap_messages(messages, kind="verdict")
+
         try:
             response = self._client.chat.completions.create(
                 model=self._settings.openai_model_chat,
-                messages=[
-                    {"role": "system", "content": _VERIFY_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_payload},
-                ],
+                messages=gate_result.messages,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {
@@ -384,6 +410,9 @@ class LLMClient:
                 f"LLM returned invalid status: {verification.status!r}"
             )
 
+        if gate_result.violations and self._on_violations is not None:
+            self._on_violations("verdict", gate_result.violations)
+
         return verification
 
     # ------------------------------------------------------------------
@@ -418,13 +447,19 @@ class LLMClient:
         user_payload = _build_compare_payload(claim=claim, paper=paper)
         schema = Comparison.model_json_schema()
 
+        # Phase 8: redact secrets + detect injections in the
+        # claim text, the related paper's title / abstract /
+        # TLDR / venue / authors.
+        messages = [
+            {"role": "system", "content": _COMPARE_SYSTEM_PROMPT},
+            {"role": "user", "content": user_payload},
+        ]
+        gate_result = self._gate.wrap_messages(messages, kind="compare")
+
         try:
             response = self._client.chat.completions.create(
                 model=self._settings.openai_model_chat,
-                messages=[
-                    {"role": "system", "content": _COMPARE_SYSTEM_PROMPT},
-                    {"role": "user", "content": user_payload},
-                ],
+                messages=gate_result.messages,
                 response_format={
                     "type": "json_schema",
                     "json_schema": {
@@ -467,6 +502,9 @@ class LLMClient:
             raise LiteratureComparisonError(
                 f"LLM output failed schema validation: {exc}"
             ) from exc
+
+        if gate_result.violations and self._on_violations is not None:
+            self._on_violations("compare", gate_result.violations)
 
         return comparison
 

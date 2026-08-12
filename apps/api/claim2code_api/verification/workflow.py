@@ -128,6 +128,7 @@ def run_verification_workflow(
         try:
             verification, llm_error = _verify_one_claim(
                 db=db,
+                analysis_id=analysis_id,
                 claim=claim,
                 repository_id=repository_id,
                 top_k=top_k,
@@ -189,6 +190,7 @@ def run_verification_workflow(
 def _verify_one_claim(
     *,
     db: Session,
+    analysis_id: UUID,
     claim: Claim,
     repository_id: UUID | None,
     top_k: int,

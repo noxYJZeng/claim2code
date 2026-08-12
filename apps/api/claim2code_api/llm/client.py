@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from threading import Lock
 
 import httpx
@@ -210,7 +211,7 @@ class LLMClient:
         # workflow layer to persist to ``state.errors``).
         self._gate = SafetyGate()
         self._on_violations: (
-            "Callable[[str, list[SafetyViolation]], None] | None"
+            Callable[[str, list[SafetyViolation]], None] | None
         ) = None
 
     # ------------------------------------------------------------------
@@ -238,7 +239,7 @@ class LLMClient:
         try:
             response = self._client.chat.completions.create(
                 model=self._settings.openai_model_chat,
-                messages=gate_result.messages,
+                messages=gate_result.messages,  # type: ignore[call-overload]
                 response_format={
                     "type": "json_schema",
                     "json_schema": {
@@ -340,7 +341,7 @@ class LLMClient:
         try:
             response = self._client.chat.completions.create(
                 model=self._settings.openai_model_chat,
-                messages=gate_result.messages,
+                messages=gate_result.messages,  # type: ignore[call-overload]
                 response_format={
                     "type": "json_schema",
                     "json_schema": {
@@ -459,7 +460,7 @@ class LLMClient:
         try:
             response = self._client.chat.completions.create(
                 model=self._settings.openai_model_chat,
-                messages=gate_result.messages,
+                messages=gate_result.messages,  # type: ignore[call-overload]
                 response_format={
                     "type": "json_schema",
                     "json_schema": {

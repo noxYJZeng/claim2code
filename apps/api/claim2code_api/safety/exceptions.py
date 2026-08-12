@@ -20,7 +20,7 @@ boundary. See ``docs/architecture/phase-8-design.md`` for the full design.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 
 class SafetyError(Exception):
@@ -96,5 +96,5 @@ class GateResult:
     log; empty when the input was clean.
     """
 
-    messages: list[dict[str, object]] = field(default_factory=list)
+    messages: list[dict[str, Any]] = field(default_factory=list)
     violations: list[SafetyViolation] = field(default_factory=list)

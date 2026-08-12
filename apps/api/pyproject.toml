@@ -74,7 +74,7 @@ testpaths = ["tests"]
 # Integration tests are opt-in: ``make test-integration`` adds the
 # ``-m integration`` flag, so plain ``pytest`` runs only unit tests
 # (and skips anything that needs a real Postgres / docker).
-addopts = "-m 'not integration'"
+addopts = "-m 'not integration and not safety'"
 markers = [
     "integration: integration tests (require docker / testcontainers)",
     "safety: responsible-AI adversarial tests",

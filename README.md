@@ -113,7 +113,7 @@ claim2code/
 | 2 | Paper Intelligence | PDF upload + 5–15 structured claims per paper | Upload a paper → see claims with paper evidence |
 | 3 | Repository Intelligence | GitHub clone + AST symbols + configs | Repo page shows functions/classes/configs with line numbers |
 | 4 | Semantic Indexing | Embeddings + pgvector retrieval | Top-5 candidate symbols for any claim |
-| 5 | Hybrid Retrieval | lexical + structural + ensemble | Recall@1/5/MRR vs embedding-only baseline |
+| 5 | Hybrid Retrieval | lexical + structural + ensemble | Recall@1/5/MRR vs embedding-only baseline (3 hand-labelled pairs in `evaluation/annotations/`) |
 | 6 | Verification | verdicts + deterministic hyperparam checks | Every result has evidence or UNVERIFIED |
 | 7 | Related Work | scholarly API + 5 structured comparable papers | Selected claim → related-work table |
 | 8 | Responsible AI | trust boundary + secret redaction + no-exec | All adversarial fixtures blocked |

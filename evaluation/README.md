@@ -41,5 +41,16 @@ Phase 6: ✅ verifier implemented — 4-status output
   enforced as the structural guard in `compose_verification`.
   106 unit tests + 1 opt-in integration test cover the
   pipeline. Wiring `evaluate_verification.py` is Phase 10's job.
+Phase 7: ✅ related-work pipeline — SemanticScholarClient primary +
+  OpenAlexClient fallback, 4-leg linear-combination ranker
+  (semantic / recency / citation / method_overlap),
+  LLMClient.extract_comparison (one LLM call per paper, per-paper
+  isolation mirrors Phase 6's per-claim pattern). 6-field
+  Comparison schema (problem / method / dataset / metric /
+  difference / agreement) enforced via Structured Outputs +
+  `extra="forbid"`. `POST /analyses/{id}/related-work` +
+  `GET`. 80 unit tests + 3 opt-in integration tests. Wiring
+  `evaluate_related_work.py` (S2-vs-OpenAlex coverage + comparison
+  field accuracy) is Phase 10's job.
 Phase 8+: wire safety evaluator.
 Phase 10: full eval suite + measured numbers back into README.

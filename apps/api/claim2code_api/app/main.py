@@ -20,6 +20,7 @@ from claim2code_api.app.config import get_settings
 from claim2code_api.db.session import check_db_ready
 from claim2code_api.papers.router import router as papers_router
 from claim2code_api.repos.router import router as repos_router
+from claim2code_api.verification.router import router as verification_router
 
 
 @asynccontextmanager
@@ -64,6 +65,7 @@ def create_app() -> FastAPI:
 
     app.include_router(papers_router)
     app.include_router(repos_router)
+    app.include_router(verification_router)
     return app
 
 

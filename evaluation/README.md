@@ -52,5 +52,16 @@ Phase 7: ✅ related-work pipeline — SemanticScholarClient primary +
   `GET`. 80 unit tests + 3 opt-in integration tests. Wiring
   `evaluate_related_work.py` (S2-vs-OpenAlex coverage + comparison
   field accuracy) is Phase 10's job.
-Phase 8+: wire safety evaluator.
+Phase 8: ✅ responsible-AI safety gate — `SafetyGate` wraps every
+  LLM call at the SDK seam (`chat.completions.create`). Composes
+  `SecretRedactor` (8 credential patterns: OpenAI, Anthropic, AWS,
+  GCP, GitHub, PEM, Bearer, `.env`) + `PromptInjectionDetector`
+  (5 heuristic patterns). Redacts secrets in-place; detects
+  injections (read-only). Violations appended to
+  `AnalysisState.errors` with `{stage, kind, pattern, span_count,
+  ts}` — no content persisted. 57 adversarial tests
+  (`pytest -m safety`); new CI job `backend-safety` gates
+  Phase 8. Wiring `evaluate_safety.py` (secret-leak + injection-
+  block rate vs target 100%) is Phase 10's job.
+Phase 9+: wire observability evaluator.
 Phase 10: full eval suite + measured numbers back into README.

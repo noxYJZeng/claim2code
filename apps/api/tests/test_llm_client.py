@@ -123,6 +123,12 @@ def _build_client(fake_openai: MagicMock, monkeypatch: pytest.MonkeyPatch) -> LL
 
     client._settings = cfg.get_settings()
     client._client = fake_openai
+    # Phase 8: also stub the safety gate + callback so existing tests
+    # continue to work after the SDK-seam wiring. Production code
+    # sets these in LLMClient.__init__; test_llm_client bypasses init.
+    from claim2code_api.safety import SafetyGate
+    client._gate = SafetyGate()
+    client._on_violations = None
     return client
 
 
@@ -286,6 +292,10 @@ def test_get_llm_client_is_lazy(monkeypatch: pytest.MonkeyPatch) -> None:
         calls.append(settings)
         self._settings = settings
         self._client = MagicMock()
+        # Phase 8: safety gate + callback stubs.
+        from claim2code_api.safety import SafetyGate
+        self._gate = SafetyGate()
+        self._on_violations = None
 
     monkeypatch.setattr(LLMClient, "__init__", counting_init)
     assert llm_client_mod._client is None
@@ -303,6 +313,10 @@ def test_reset_llm_for_tests_rebuilds(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_init(self: Any, settings: Any) -> None:
         self._settings = settings
         self._client = MagicMock()
+        # Phase 8: safety gate + callback stubs.
+        from claim2code_api.safety import SafetyGate
+        self._gate = SafetyGate()
+        self._on_violations = None
 
     monkeypatch.setattr(LLMClient, "__init__", fake_init)
     llm_client_mod.reset_llm_for_tests()

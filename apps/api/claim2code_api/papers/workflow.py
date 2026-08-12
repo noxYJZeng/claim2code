@@ -40,6 +40,7 @@ from sqlalchemy.orm import Session
 
 from claim2code_api.db.models import AnalysisState, Paper
 from claim2code_api.llm.client import LLMClient
+from claim2code_api.llm.safety_bridge import make_violation_callback
 from claim2code_api.papers import storage
 from claim2code_api.papers.exceptions import (
     ClaimExtractionError,
@@ -135,7 +136,17 @@ def run_paper_workflow(
         _set_paper_status(db, analysis_id, "extracting")
 
         # 8. LLM extract.
-        claims: list[Claim] = extract_claims_from_paper(llm, paper)
+        # Phase 8: arm the safety violation callback so any secrets /
+        # injection patterns detected in the paper text are logged on
+        # ``state.errors``. The callback is cleared after the call so a
+        # subsequent workflow step doesn't accidentally inherit it.
+        llm._on_violations = make_violation_callback(
+            db, analysis_id=analysis_id,
+        )
+        try:
+            claims: list[Claim] = extract_claims_from_paper(llm, paper)
+        finally:
+            llm._on_violations = None
 
         # 9-10. Persist claims + mark done.
         _persist_claims(db, analysis_id, claims)

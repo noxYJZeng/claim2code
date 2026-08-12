@@ -71,6 +71,13 @@ class Settings(BaseSettings):
     # ---- GitHub (Phase 3; rate-limit token for popular repos) ----
     github_token: str = ""
 
+    # ---- Phase 7: Related Work / literature ----
+    # Optional API key for Semantic Scholar's Graph API. Without a
+    # key the rate limit is ~1 req/s; with a key it jumps to
+    # 100 req/5min via the ``x-api-key`` header.
+    # Get a key at https://www.semanticscholar.org/product/api.
+    semantic_scholar_api_key: str | None = None
+
     # ---- Safety limits (Phase 3; gating repo ingestion) ----
     max_repo_mb_megs: int = 200
     max_repo_files: int = 20000

@@ -43,6 +43,8 @@ from openai import (
 from pydantic import ValidationError
 
 from claim2code_api.app.config import Settings, get_settings
+from claim2code_api.literature.exceptions import LiteratureComparisonError
+from claim2code_api.literature.schemas import Comparison, ScholarPaper
 from claim2code_api.papers.exceptions import ClaimExtractionError
 from claim2code_api.papers.schemas import Claim, ClaimList, Paper, PaperEvidence
 from claim2code_api.repos.schemas import RetrieveMatch
@@ -138,6 +140,46 @@ Output schema is enforced via Structured Outputs
 (\`response_format\`.json_schema with strict=True). Any deviation
 fails the call. If insufficient evidence is available, return
 UNVERIFIED with an empty code_evidence list — do NOT guess.
+"""
+
+# System prompt for the comparator (Phase 7). Same no-model-knowledge
+# rule as the verifier: every comparison field must cite the verbatim
+# abstract or TLDR from the inputs. The 6-field output schema is
+# enforced via Structured Outputs (response_format strict=True).
+_COMPARE_SYSTEM_PROMPT = """\
+You are a meticulous research-paper comparison analyst. Given
+(1) a technical claim extracted from one paper, and (2) a related
+paper's metadata (title, authors, year, venue, abstract, optional
+TLDR), produce a structured 6-field comparison.
+
+RULES (non-negotiable):
+
+  1. **No model knowledge.** Every comparison field must cite the
+     verbatim abstract or TLDR provided. You MAY NOT use knowledge
+     of the paper, the related work, or the field beyond what is
+     explicitly given in the inputs.
+
+  2. **Six fields, all required:**
+       problem:     what problem does the related paper address?
+       method:      what method does it use?
+       dataset:     what dataset does it evaluate on? (null if none stated)
+       metric:      what metric does it report? (null if none stated)
+       difference:  how does it DIFFER from the claim's paper?
+       agreement:   where does it AGREE with the claim's paper?
+
+  3. **Cite the abstract.** Each field's text should be a 1-3 sentence
+     summary that an evaluator can trace back to the verbatim input.
+     If the abstract does not address a field, set ``dataset`` or
+     ``metric`` to null, and use "(abstract does not address)" for
+     ``problem`` / ``method`` / ``difference`` / ``agreement``.
+
+  4. **Be specific.** "Uses a transformer" is unhelpful; "Uses
+     BART-base fine-tuned on CNN/DailyMail" is the goal.
+
+Output schema is enforced via Structured Outputs
+(response_format.json_schema strict=True). Any deviation fails the
+call. If the abstract / TLDR is too sparse to compare, return the
+sparse-field placeholders — do NOT guess.
 """
 
 
@@ -345,6 +387,90 @@ class LLMClient:
         return verification
 
     # ------------------------------------------------------------------
+    # Related-work comparison (Phase 7)
+    # ------------------------------------------------------------------
+
+    def extract_comparison(self, *, claim: Claim, paper: ScholarPaper) -> Comparison:
+        """Call OpenAI with the :class:`Comparison` JSON schema.
+
+        Mirrors :meth:`verdict_for_claim` exactly — same SDK call
+        shape, same error-mapping convention — but the input is the
+        claim + one candidate paper and the output is a 6-field
+        :class:`Comparison`:
+
+          - **system prompt**: :data:`_COMPARE_SYSTEM_PROMPT` (the
+            no-model-knowledge rule, same as the verifier);
+          - **user payload**: claim + paper metadata (title,
+            authors, year, venue, optional TLDR + abstract);
+          - **response schema**: :class:`Comparison`;
+          - **errors map to**: :class:`LiteratureComparisonError`
+            (NOT :class:`VerificationLLMError` — the two layers are
+            deliberately separate so the workflow can isolate per-
+            paper failures without aborting the rest of the run).
+
+        Per-paper isolation: callers should wrap this call in
+        ``try/except LiteratureComparisonError``; one paper's LLM
+        failure must NOT abort the rest of the related-work run.
+
+        :raises LiteratureComparisonError: on any LLM / parse /
+            validation failure.
+        """
+        user_payload = _build_compare_payload(claim=claim, paper=paper)
+        schema = Comparison.model_json_schema()
+
+        try:
+            response = self._client.chat.completions.create(
+                model=self._settings.openai_model_chat,
+                messages=[
+                    {"role": "system", "content": _COMPARE_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_payload},
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "comparison",
+                        "strict": True,
+                        "schema": schema,
+                    },
+                },
+            )
+        except (APIConnectionError, APITimeoutError) as exc:
+            raise LiteratureComparisonError(
+                f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
+            ) from exc
+        except AuthenticationError as exc:
+            raise LiteratureComparisonError(
+                f"LLM auth error (check OPENAI_API_KEY): {exc}"
+            ) from exc
+        except APIStatusError as exc:
+            raise LiteratureComparisonError(
+                f"LLM returned {exc.status_code}: {exc.message}"
+            ) from exc
+
+        if not response.choices:
+            raise LiteratureComparisonError("LLM returned no choices")
+
+        raw = response.choices[0].message.content
+        if not raw:
+            raise LiteratureComparisonError("LLM returned empty content")
+
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise LiteratureComparisonError(
+                f"LLM returned non-JSON content: {exc}"
+            ) from exc
+
+        try:
+            comparison = Comparison.model_validate(parsed)
+        except ValidationError as exc:
+            raise LiteratureComparisonError(
+                f"LLM output failed schema validation: {exc}"
+            ) from exc
+
+        return comparison
+
+    # ------------------------------------------------------------------
     # Readiness probe
     # ------------------------------------------------------------------
 
@@ -482,3 +608,42 @@ def _build_verify_payload(
         parts.append("# Candidates\n\n(none — top-K retrieval returned empty)\n")
 
     return "\n".join(parts)
+
+
+def _build_compare_payload(*, claim: Claim, paper: ScholarPaper) -> str:
+    """Build the comparator's user-message text.
+
+    Sections:
+
+      - **# Claim** — the claim's text + type. We deliberately do
+        NOT include the paper evidence here — the comparator is
+        cross-paper, so the claim + the candidate paper's
+        abstract are sufficient.
+      - **# Related paper** — title, authors, year, venue, optional
+        TLDR (S2's pre-trained model summary), and abstract. The
+        LLM must cite from these fields per the system-prompt rule
+        (no model knowledge).
+
+    Mirrors the verbosity of :func:`_build_verify_payload` so the
+    LLM gets consistent inputs (no JSON-wrapped payloads).
+    """
+    authors_str = ", ".join(paper.authors) if paper.authors else "(unknown)"
+    venue_str = paper.venue if paper.venue else "(unknown)"
+    tldr_block = f"\ntldr: {paper.tldr}\n" if paper.tldr else "\ntldr: (not provided)\n"
+
+    return (
+        f"# Claim\n\n"
+        f"claim_id: {claim.claim_id}\n"
+        f"type: {claim.claim_type}\n"
+        f"text: {claim.text}\n\n"
+        f"# Related paper\n\n"
+        f"paper_id: {paper.paper_id}\n"
+        f"title: {paper.title}\n"
+        f"authors: {authors_str}\n"
+        f"year: {paper.year}\n"
+        f"venue: {venue_str}\n"
+        f"citation_count: {paper.citation_count}\n"
+        f"{tldr_block}\n"
+        f"abstract (verbatim):\n\n"
+        f">>> {paper.abstract} <<<\n"
+    )

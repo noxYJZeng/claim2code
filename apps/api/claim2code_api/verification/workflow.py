@@ -126,7 +126,7 @@ def run_verification_workflow(
     for claim_dict in claims_dicts:
         claim = Claim.model_validate(claim_dict)
         try:
-            verification = _verify_one_claim(
+            verification, llm_error = _verify_one_claim(
                 db=db,
                 claim=claim,
                 repository_id=repository_id,
@@ -138,6 +138,13 @@ def run_verification_workflow(
             )
             errors.append(f"{claim.claim_id}: {exc.__class__.__name__}: {exc}")
             verification = _error_verification(claim, exc)
+        else:
+            # LLM failure is isolated (the claim still gets a
+            # UNVERIFIED verification), but we surface the error
+            # on the workflow result so callers can see what went
+            # wrong per claim.
+            if llm_error is not None:
+                errors.append(f"{claim.claim_id}: {llm_error}")
         verifications.append(verification)
 
     verifications.sort(key=lambda v: v.claim_id)
@@ -185,7 +192,7 @@ def _verify_one_claim(
     claim: Claim,
     repository_id: UUID | None,
     top_k: int,
-) -> Verification:
+) -> tuple[Verification, str | None]:
     """Run the per-claim pipeline.
 
     Pipeline (mirrors phase-6-design.md §2.6):
@@ -202,6 +209,12 @@ def _verify_one_claim(
       4. Otherwise call LLMClient.verdict_for_claim.
 
       5. Compose the final Verification.
+
+    :returns: ``(verification, llm_error_or_none)``. The
+        ``llm_error`` string is ``None`` unless the LLM call
+        raised — the verification is still produced (UNVERIFIED
+        by the structural guard), but the workflow records the
+        error on its result so callers see what failed.
     """
     # 1. Retrieve candidates + convert to RetrieveMatch.
     retrieve_matches: list[RetrieveMatch] = []
@@ -228,6 +241,7 @@ def _verify_one_claim(
 
     # 4. LLM verdict (or None if HIGH-severity already decided).
     llm_verdict: Verification | None = None
+    llm_error: str | None = None
     if not has_high:
         try:
             llm_verdict = get_llm_client().verdict_for_claim(
@@ -243,15 +257,16 @@ def _verify_one_claim(
             # Don't abort the workflow; the composition step will
             # treat llm_verdict=None and default to UNVERIFIED if
             # there are no code evidence or HIGH discrepancies.
-            llm_verdict = None
+            llm_error = f"{exc.__class__.__name__}: {exc}"
 
     # 5. Compose.
-    return compose_verification(
+    verification = compose_verification(
         claim=claim,
         candidates=retrieve_matches,
         deterministic_discrepancies=deterministic_discrepancies,
         llm_verdict=llm_verdict,
     )
+    return verification, llm_error
 
 
 def _hybrid_to_retrieve_matches(

@@ -44,7 +44,14 @@ from pydantic import ValidationError
 
 from claim2code_api.app.config import Settings, get_settings
 from claim2code_api.papers.exceptions import ClaimExtractionError
-from claim2code_api.papers.schemas import Claim, ClaimList, Paper
+from claim2code_api.papers.schemas import Claim, ClaimList, Paper, PaperEvidence
+from claim2code_api.repos.schemas import RetrieveMatch
+from claim2code_api.verification.exceptions import VerificationLLMError
+from claim2code_api.verification.schemas import (
+    Discrepancy,
+    Verification,
+    VerificationStatus,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +80,64 @@ testable technical claims. Each claim must be:
 
 Reject boilerplate. Reject "we propose a novel approach" with no
 specifics. If a section contains no testable claim, omit it.
+"""
+
+# System prompt for the verifier (Phase 6). The "no model knowledge"
+# rule from docs/specs/spec-summary.md §10 is the most important
+# single constraint — every piece of evidence must be a verbatim
+# quote from the inputs we provide. The model must NOT bring in
+# external knowledge of the paper, the library, or the algorithm.
+_VERIFY_SYSTEM_PROMPT = """\
+You are a meticulous paper-to-code verifier. Given (1) a technical
+claim extracted from a paper, (2) a verbatim snippet of the paper
+that grounds it, and (3) up to 5 candidate code symbols retrieved
+from the reference implementation, judge whether the code actually
+implements the claim.
+
+RULES (non-negotiable):
+
+  1. **No model knowledge.** Every piece of paper evidence you cite
+     must be a verbatim substring of the paper_evidence.quote
+     provided. Every piece of code evidence you cite must reference
+     a specific candidate from the list provided (its symbol_id,
+     file_path, line numbers, signature, or docstring). You MAY NOT
+     use knowledge of the paper, the library, or the algorithm
+     beyond what is explicitly given in the inputs.
+
+  2. **One of four verdicts:**
+       VERIFIED, PARTIALLY_VERIFIED, CONTRADICTED, UNVERIFIED.
+
+       - VERIFIED only when >=1 candidate's signature/docstring
+         directly implements the claim and no HIGH-severity
+         discrepancies exist.
+       - PARTIALLY_VERIFIED when >=1 candidate is relevant but
+         discrepancies (LOW or MEDIUM severity) exist.
+       - CONTRADICTED when a candidate clearly contradicts the
+         claim or a HIGH-severity discrepancy exists.
+       - UNVERIFIED when no candidate is relevant.
+
+  3. **Extract structured hyperparameters** as part of your
+     response: for any hyperparameter mentioned in the claim or
+     quote (learning_rate, batch_size, temperature, beta, gamma,
+     num_epochs, hidden_size), include {name, value, source} in
+     your output. The deterministic checker cross-validates these
+     against its own regex extraction.
+
+  4. **Cite deterministically.** Each ``code_evidence`` entry must
+     include ``symbol_id`` (UUID string), ``quote`` (verbatim from
+     candidate.signature or candidate.docstring), and
+     ``file_path`` + line numbers that match the candidate.
+
+  5. The deterministic checker has already produced the following
+     discrepancies (if any). You MAY add more of any severity, but
+     do not re-emit the same type twice — focus on residual
+     judgement, novel discrepancies, or AMBIGUOUS cases where the
+     deterministic check is uncertain.
+
+Output schema is enforced via Structured Outputs
+(\`response_format\`.json_schema with strict=True). Any deviation
+fails the call. If insufficient evidence is available, return
+UNVERIFIED with an empty code_evidence list — do NOT guess.
 """
 
 
@@ -157,6 +222,125 @@ class LLMClient:
         return claim_list.claims
 
     # ------------------------------------------------------------------
+    # Verification (Phase 6)
+    # ------------------------------------------------------------------
+
+    def verdict_for_claim(
+        self,
+        *,
+        claim: Claim,
+        paper_evidence: PaperEvidence,
+        candidates: list[RetrieveMatch],
+        deterministic_discrepancies: list[Discrepancy],
+    ) -> Verification:
+        """Call OpenAI with the ``Verification`` JSON schema and parse.
+
+        Mirrors :meth:`extract_claims` — same SDK call shape, same
+        error mapping, but:
+
+          - the system prompt is :data:`_VERIFY_SYSTEM_PROMPT`
+            (the no-model-knowledge rule, per
+            ``docs/specs/spec-summary.md:148-150``);
+          - the response schema is :class:`Verification`
+            (``model_json_schema()``);
+          - errors map to :class:`VerificationLLMError` (NOT
+            :class:`ClaimExtractionError` — the two are
+            deliberately separate so the router can map verifier
+            failures to a distinct ``error_code``);
+          - the user payload includes the deterministic
+            discrepancies so the LLM doesn't re-emit them.
+
+        :raises VerificationLLMError: if the API call fails, the
+            response fails schema validation, or the parsed
+            verification has no ``claim_id``.
+        """
+        user_payload = _build_verify_payload(
+            claim=claim,
+            paper_evidence=paper_evidence,
+            candidates=candidates,
+            deterministic_discrepancies=deterministic_discrepancies,
+        )
+        schema = Verification.model_json_schema()
+
+        try:
+            response = self._client.chat.completions.create(
+                model=self._settings.openai_model_chat,
+                messages=[
+                    {"role": "system", "content": _VERIFY_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_payload},
+                ],
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": "verification",
+                        "strict": True,
+                        "schema": schema,
+                    },
+                },
+            )
+        except (APIConnectionError, APITimeoutError) as exc:
+            raise VerificationLLMError(
+                f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
+            ) from exc
+        except AuthenticationError as exc:
+            raise VerificationLLMError(
+                f"LLM auth error (check OPENAI_API_KEY): {exc}"
+            ) from exc
+        except APIStatusError as exc:
+            raise VerificationLLMError(
+                f"LLM returned {exc.status_code}: {exc.message}"
+            ) from exc
+
+        if not response.choices:
+            raise VerificationLLMError("LLM returned no choices")
+
+        raw = response.choices[0].message.content
+        if not raw:
+            raise VerificationLLMError("LLM returned empty content")
+
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise VerificationLLMError(
+                f"LLM returned non-JSON content: {exc}"
+            ) from exc
+
+        try:
+            verification = Verification.model_validate(parsed)
+        except ValidationError as exc:
+            raise VerificationLLMError(
+                f"LLM output failed schema validation: {exc}"
+            ) from exc
+
+        if not verification.claim_id:
+            raise VerificationLLMError("LLM returned empty claim_id")
+
+        # Defensive: ensure the LLM's claim_id matches the input.
+        # If they differ, the LLM has lost context and we should
+        # not trust the verification. Surface as VerificationLLMError
+        # so the workflow can decide whether to retry or coerce.
+        if verification.claim_id != claim.claim_id:
+            raise VerificationLLMError(
+                f"LLM returned claim_id={verification.claim_id!r}, "
+                f"expected {claim.claim_id!r}"
+            )
+
+        # Defensive: status sanity check. The LLM should never emit
+        # a status that's not in the enum; if it does, surface as a
+        # verification failure rather than silently downgrading.
+        if verification.status not in (
+            VerificationStatus.VERIFIED,
+            VerificationStatus.PARTIALLY_VERIFIED,
+            VerificationStatus.CONTRADICTED,
+            VerificationStatus.UNVERIFIED,
+        ):
+            raise VerificationLLMError(
+                f"LLM returned invalid status: {verification.status!r}"
+            )
+
+        return verification
+
+    # ------------------------------------------------------------------
     # Readiness probe
     # ------------------------------------------------------------------
 
@@ -230,3 +414,67 @@ def _build_user_payload(paper: Paper) -> str:
         f"Pages: {paper.n_pages}  Chars: {paper.n_chars}\n\n"
         + "\n".join(sections_md)
     )
+
+
+def _build_verify_payload(
+    *,
+    claim: Claim,
+    paper_evidence: PaperEvidence,
+    candidates: list[RetrieveMatch],
+    deterministic_discrepancies: list[Discrepancy],
+) -> str:
+    """Build the verifier's user-message text.
+
+    Sections:
+
+      - **# Claim** — the claim's text + type + the paper
+        evidence (section + page + verbatim quote).
+      - **# Deterministic discrepancies** — what the regex-based
+        checkers already found. The LLM is told not to re-emit
+        these (per the system prompt rule 5).
+      - **# Candidates** — up to 5 RetrieveMatch entries,
+        rendered with symbol_id, file_path, line range, name,
+        signature, and docstring. The LLM must cite from this
+        list when emitting code_evidence (per the system prompt
+        rule 1).
+
+    The payload stays human-readable: the LLM does NOT need to
+    parse a JSON structure to find the inputs.
+    """
+    parts: list[str] = []
+
+    parts.append(
+        f"# Claim\n\n"
+        f"claim_id: {claim.claim_id}\n"
+        f"type: {claim.claim_type}\n"
+        f"text: {claim.text}\n\n"
+        f"# Paper evidence\n\n"
+        f"section: {paper_evidence.section_title}\n"
+        f"page: {paper_evidence.page}\n"
+        f"quote (verbatim):\n\n"
+        f">>> {paper_evidence.quote} <<<\n"
+    )
+
+    if deterministic_discrepancies:
+        parts.append("# Deterministic discrepancies (already found)\n")
+        for d in deterministic_discrepancies:
+            parts.append(f"- {d.type.value} [{d.severity.value}]: {d.detail}")
+        parts.append("")
+
+    if candidates:
+        parts.append(f"# Candidates ({len(candidates)})\n")
+        for i, c in enumerate(candidates, start=1):
+            parts.append(
+                f"## Candidate {i}\n"
+                f"symbol_id: {c.symbol_id}\n"
+                f"file: {c.file_path}:{c.start_line}-{c.end_line}\n"
+                f"name: {c.name}\n"
+                f"signature: {c.signature}\n"
+            )
+            if c.docstring:
+                parts.append(f"docstring: {c.docstring}\n")
+            parts.append("")
+    else:
+        parts.append("# Candidates\n\n(none — top-K retrieval returned empty)\n")
+
+    return "\n".join(parts)

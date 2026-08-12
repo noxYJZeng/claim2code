@@ -30,11 +30,9 @@ import pytest
 
 from claim2code_api.indexing.exceptions import EmbeddingError
 from claim2code_api.retrieval.hybrid_ranker import (
-    HybridMatch,
     HybridWeights,
     hybrid_ranker,
 )
-
 
 # ============================================================
 # Helpers
@@ -351,10 +349,12 @@ def test_hybrid_ranker_results_sorted_by_final_score_desc() -> None:
         SimpleNamespace(symbol_id=sid_high),
     ]
 
-    # semantic ranks high < mid < low; lexical ranks low < mid < high.
-    # Hybrid should rank mid highest (both legs agree on rank 2);
-    # high second (rank 1 in semantic, not in lexical);
-    # low third (rank 3 in semantic, rank 1 in lexical).
+    # semantic ranks high < mid < low; lexical ranks low < mid.
+    # With k=60 + default weights {0.55, 0.25, 0.20}:
+    #   high: rank1 sem + none lex → 0.55/61 = 0.009016 → 0.55 final
+    #   mid:  rank2 sem + rank2 lex → 0.55/62 + 0.25/62 = 0.012903 → 0.787
+    #   low:  rank3 sem + rank1 lex → 0.55/63 + 0.25/61 = 0.012828 → 0.783
+    # Therefore the expected order is mid > low > high.
     with (
         patch(
             "claim2code_api.retrieval.hybrid_ranker.retrieve_semantic",
@@ -378,10 +378,7 @@ def test_hybrid_ranker_results_sorted_by_final_score_desc() -> None:
     ):
         out = hybrid_ranker(_build_session(code_symbols=syms), uuid4(), "x")
 
-    # mid: rank2 in sem + rank2 in lex → highest
-    # high: rank1 in sem + none in lex → second
-    # low: rank3 in sem + rank1 in lex → third (low + rank 3 is bigger denominator)
-    assert [m.symbol_id for m in out] == [sid_mid, sid_high, sid_low]
+    assert [m.symbol_id for m in out] == [sid_mid, sid_low, sid_high]
 
 
 # ============================================================
@@ -568,11 +565,20 @@ def test_hybrid_ranker_passes_candidate_ids_to_structural_boost() -> None:
 
 
 def test_hybrid_ranker_passes_claim_to_structural_boost() -> None:
-    """structural_boost receives the original claim string."""
+    """structural_boost receives the original claim string.
+
+    Note: a candidate must exist (i.e. at least one of
+    ``retrieve_semantic`` / ``lexical_search`` must return a
+    non-empty list) for the ranker to call ``structural_boost``
+    at all — otherwise the ranker short-circuits with ``[]``.
+    """
+    sid = uuid4()
+    syms = [SimpleNamespace(symbol_id=sid)]
+
     with (
         patch(
             "claim2code_api.retrieval.hybrid_ranker.retrieve_semantic",
-            return_value=[],
+            return_value=[_sem_result(0.9, sid)],
         ),
         patch(
             "claim2code_api.retrieval.hybrid_ranker.lexical_search",
@@ -580,9 +586,9 @@ def test_hybrid_ranker_passes_claim_to_structural_boost() -> None:
         ),
         patch(
             "claim2code_api.retrieval.hybrid_ranker.structural_boost",
-            return_value={},
+            return_value={sid: 1.0},
         ) as struct_mock,
     ):
-        hybrid_ranker(_build_session(code_symbols=[]), uuid4(), "the claim text")
+        hybrid_ranker(_build_session(code_symbols=syms), uuid4(), "the claim text")
 
     assert struct_mock.call_args.args[2] == "the claim text"

@@ -68,15 +68,13 @@ is the Elasticsearch ``function_score`` / Vespa pattern.)
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from claim2code_api.db.models import CodeSymbol
 from claim2code_api.indexing.embedding_client import EmbeddingClient
-from claim2code_api.indexing.exceptions import EmbeddingError
 from claim2code_api.indexing.lexical import lexical_search
 from claim2code_api.indexing.retriever import retrieve_semantic
 from claim2code_api.indexing.structural import structural_boost

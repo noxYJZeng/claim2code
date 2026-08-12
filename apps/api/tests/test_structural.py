@@ -100,12 +100,17 @@ def test_structural_boost_all_short_tokens_claim_returns_identity() -> None:
 
 
 def test_structural_boost_symbol_missing_from_db_returns_one() -> None:
-    """A candidate id that has no row in the DB still maps to 1.0."""
+    """A candidate id that has no row in the DB still maps to 1.0.
+
+    File path tokens (``abc``, ``def``) and claim tokens
+    (``completely``, ``unrelated``) are chosen so neither
+    signal contributes — isolating the identity guarantee.
+    """
     sid_real = uuid4()
     sid_missing = uuid4()
-    symbols = [_sym(sid_real, "pkg/foo.py")]
+    symbols = [_sym(sid_real, "abc/def.py")]
     db = _build_session(symbols=symbols, imports=[])
-    out = structural_boost(db, [sid_real, sid_missing], "foo")
+    out = structural_boost(db, [sid_real, sid_missing], "completely unrelated")
     assert out[sid_real] == 1.0
     assert out[sid_missing] == 1.0
 
@@ -116,48 +121,58 @@ def test_structural_boost_symbol_missing_from_db_returns_one() -> None:
 
 
 def test_structural_boost_import_graph_proximity_matches_library() -> None:
-    """File imports 'torch' + claim mentions 'torch' → boost > 1.0."""
+    """File imports 'torch' + claim mentions 'torch' → boost > 1.0.
+
+    The file_path tokens (``abc``, ``def``) are chosen to NOT
+    overlap with claim tokens so this test isolates the
+    import-graph signal from the file-name signal.
+    """
     s1 = uuid4()
-    syms = [_sym(s1, "pkg/model.py")]
+    syms = [_sym(s1, "abc/def.py")]
     imports = [
         SimpleNamespace(
-            symbol_id=uuid4(), file_path="pkg/model.py", kind="import",
+            symbol_id=uuid4(), file_path="abc/def.py", kind="import",
             signature="torch", name="torch",
         )
     ]
     db = _build_session(symbols=syms, imports=imports)
 
-    out = structural_boost(db, [s1], "the model uses torch for inference")
+    out = structural_boost(db, [s1], "the inference routine uses torch")
 
-    # One matched lib → 0.3 boost.
+    # 1 matched lib → 0.3 import boost + 0 file-name boost = 1.3.
     assert out[s1] == pytest.approx(1.3)
 
 
 def test_structural_boost_import_graph_multiple_matches_stack() -> None:
-    """Multiple matched libs → additive 0.3 per match, capped at 0.9."""
+    """Multiple matched libs → additive 0.3 per match, capped at 0.9.
+
+    The file_path tokens (``abc``, ``def``) deliberately do not
+    intersect with claim tokens so this test isolates the
+    import-graph signal.
+    """
     s1 = uuid4()
-    syms = [_sym(s1, "pkg/model.py")]
+    syms = [_sym(s1, "abc/def.py")]
     imports = [
         SimpleNamespace(
-            symbol_id=uuid4(), file_path="pkg/model.py", kind="import",
+            symbol_id=uuid4(), file_path="abc/def.py", kind="import",
             signature="torch", name="torch",
         ),
         SimpleNamespace(
-            symbol_id=uuid4(), file_path="pkg/model.py", kind="import",
+            symbol_id=uuid4(), file_path="abc/def.py", kind="import",
             signature="numpy as np", name="numpy",
         ),
         SimpleNamespace(
-            symbol_id=uuid4(), file_path="pkg/model.py", kind="import",
+            symbol_id=uuid4(), file_path="abc/def.py", kind="import",
             signature="transformers", name="transformers",
         ),
     ]
     db = _build_session(symbols=syms, imports=imports)
 
     out = structural_boost(
-        db, [s1], "torch numpy transformers model attention"
+        db, [s1], "torch numpy transformers inference attention"
     )
 
-    # 3 matches → 0.9 boost (at the cap).
+    # 3 matches → 0.9 import boost + 0 file-name boost = 1.9.
     assert out[s1] == pytest.approx(1.9)
 
 
@@ -354,24 +369,30 @@ def test_structural_boost_import_token_no_length_filter() -> None:
 
 
 def test_structural_boost_import_token_short_works_with_other_tokens() -> None:
-    """Short imports DO contribute when claim has >= 3 char tokens too."""
+    """3+ char imports both contribute when claim also has 3+ char tokens.
+
+    ``jax`` is exactly 3 chars — it passes the claim-token
+    filter and matches. ``torch`` also matches. ``os`` (2
+    chars) is filtered out of claim tokens so it never matches
+    in practice; see :func:`structural_boost`'s docstring.
+    """
     s1 = uuid4()
-    syms = [_sym(s1, "pkg/main.py")]
+    syms = [_sym(s1, "abc/def.py")]
     imports = [
         SimpleNamespace(
-            symbol_id=uuid4(), file_path="pkg/main.py", kind="import",
-            signature="os", name="os",
+            symbol_id=uuid4(), file_path="abc/def.py", kind="import",
+            signature="jax", name="jax",
         ),
         SimpleNamespace(
-            symbol_id=uuid4(), file_path="pkg/main.py", kind="import",
+            symbol_id=uuid4(), file_path="abc/def.py", kind="import",
             signature="torch", name="torch",
         ),
     ]
     db = _build_session(symbols=syms, imports=imports)
 
-    # 'attention' is >= 3 chars (passes filter); 'os' and
+    # 'attention' is >= 3 chars (passes filter); 'jax' and
     # 'torch' are imported; both match.
-    out = structural_boost(db, [s1], "attention uses torch and os")
+    out = structural_boost(db, [s1], "attention uses torch and jax")
 
     # 2 import matches → 0.6 boost.
     assert out[s1] == pytest.approx(1.6)

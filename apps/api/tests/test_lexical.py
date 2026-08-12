@@ -28,7 +28,6 @@ import pytest
 
 from claim2code_api.indexing.lexical import lexical_search
 
-
 # ============================================================
 # Happy path
 # ============================================================

@@ -114,7 +114,7 @@ claim2code/
 | 3 | Repository Intelligence | GitHub clone + AST symbols + configs | Repo page shows functions/classes/configs with line numbers |
 | 4 | Semantic Indexing | Embeddings + pgvector retrieval | Top-5 candidate symbols for any claim |
 | 5 | Hybrid Retrieval | lexical + structural + ensemble | Recall@1/5/MRR vs embedding-only baseline (3 hand-labelled pairs in `evaluation/annotations/`) |
-| 6 | Verification | verdicts + deterministic hyperparam checks | Every result has evidence or UNVERIFIED |
+| 6 | Verification | deterministic checkers + LLM residual + paper+code evidence | Every verification has `paper_evidence AND code_evidence OR status==UNVERIFIED` (4 statuses: VERIFIED / PARTIALLY_VERIFIED / CONTRADICTED / UNVERIFIED). `POST /analyses/{id}/verifications` + `GET` return the list; 8 discrepancy types, 3 severities. |
 | 7 | Related Work | scholarly API + 5 structured comparable papers | Selected claim → related-work table |
 | 8 | Responsible AI | trust boundary + secret redaction + no-exec | All adversarial fixtures blocked |
 | 9 | Observability | OTel spans + per-step metrics + trace tree | One analysis → one trace tree |

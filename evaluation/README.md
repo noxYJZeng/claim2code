@@ -32,6 +32,14 @@ Phase 5: ✅ retrieval evaluator — 3 hand-labelled (paper, repo) pairs
   in `annotations/` + `baselines/{embedding_only,lexical_only,
   hybrid_claim2code}.py` + `evaluate_retrieval.py`. Run via
   `make eval-retrieval` (requires live Postgres + OpenAI).
-Phase 6+: wire verification evaluator.
+Phase 6: ✅ verifier implemented — 4-status output
+  (VERIFIED / PARTIALLY_VERIFIED / CONTRADICTED / UNVERIFIED),
+  8 discrepancy types × 3 severities, deterministic
+  HyperparameterChecker + 3 normalizers (models / datasets /
+  metrics) + LLMClient.verdict_for_claim residual. Acceptance
+  rule (`paper_evidence AND code_evidence OR UNVERIFIED`) is
+  enforced as the structural guard in `compose_verification`.
+  106 unit tests + 1 opt-in integration test cover the
+  pipeline. Wiring `evaluate_verification.py` is Phase 10's job.
 Phase 8+: wire safety evaluator.
 Phase 10: full eval suite + measured numbers back into README.

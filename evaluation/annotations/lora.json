@@ -1,0 +1,109 @@
+{
+  "pair_id": "lora",
+  "paper": {
+    "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+    "authors": ["Hu", "Shen", "Wallis", "Allen-Zhu", "Li", "Wang", "Chen"],
+    "year": 2021,
+    "venue": "ICLR",
+    "arxiv_id": "2106.09685",
+    "sha256": "Hu2021-placeholder"
+  },
+  "repo": {
+    "url": "https://github.com/microsoft/LoRA",
+    "commit": "main",
+    "description": "Microsoft LoRA — low-rank adaptation of large language models."
+  },
+  "claims": [
+    {
+      "claim_id": "lora_c1",
+      "text": "LoRA injects trainable low-rank decomposition matrices A and B alongside each frozen pretrained weight matrix.",
+      "evidence_span": {"section": "1", "page": 2, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "loralib/layers.py", "name": "LoRALayer", "kind": "class"},
+        {"file_path": "loralib/layers.py", "name": "Linear", "kind": "class"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "lora_c2",
+      "text": "The forward pass computes h = W_0 x + (B A) x scaled by alpha / r.",
+      "evidence_span": {"section": "1", "page": 2, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "loralib/layers.py", "name": "Linear", "kind": "class"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "lora_c3",
+      "text": "Matrix A is initialized with a Gaussian and matrix B is initialized to zero so the initial forward pass equals the pretrained model.",
+      "evidence_span": {"section": "4.1", "page": 5, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "loralib/layers.py", "name": "LoRALayer", "kind": "class"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "lora_c4",
+      "text": "The merged weight matrix can be recomputed at inference by folding B A back into W_0 so no extra latency is incurred.",
+      "evidence_span": {"section": "1", "page": 3, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "loralib/layers.py", "name": "MergedLinear", "kind": "class"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "lora_c5",
+      "text": "Only the low-rank matrices A and B receive gradient updates during training; the original weight matrix is frozen.",
+      "evidence_span": {"section": "1", "page": 2, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "loralib/layers.py", "name": "LoRALayer", "kind": "class"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "lora_c6",
+      "text": "The library exposes a function to mark specific linear layers as LoRA-adapted by replacing their forward method.",
+      "evidence_span": {"section": "5", "page": 6, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "loralib/utils.py", "name": "mark_only_lora_as_trainable", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "lora_c7",
+      "text": "The example training script applies LoRA to GPT-2 attention layers and trains on the E2E dataset.",
+      "evidence_span": {"section": "5", "page": 6, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "examples/NLG/src/train_e2e.py", "name": "main", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "lora_c8",
+      "text": "The GLUE benchmark evaluation fine-tunes RoBERTa with LoRA adapters on each task.",
+      "evidence_span": {"section": "5", "page": 7, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "examples/NLU/src/transformers/modeling_roberta.py", "name": "RobertaForSequenceClassification", "kind": "class"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "lora_c9",
+      "text": "The lora_state_dict helper extracts only the trainable A and B matrices for checkpoint saving.",
+      "evidence_span": {"section": "5", "page": 6, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "loralib/utils.py", "name": "lora_state_dict", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "lora_c10",
+      "text": "Rank r and scaling factor alpha are configurable hyperparameters of the LoRA layer.",
+      "evidence_span": {"section": "4.1", "page": 5, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "loralib/layers.py", "name": "Linear", "kind": "class"}
+      ],
+      "expected_verification": "VERIFIED"
+    }
+  ]
+}

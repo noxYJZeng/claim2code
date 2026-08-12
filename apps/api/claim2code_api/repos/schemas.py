@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -249,10 +250,17 @@ class RetrieveRequest(BaseModel):
 
     The ``claim`` is a natural-language sentence (e.g. extracted
     from a paper). The endpoint returns the top-``top_k`` symbols
-    from this repository whose structured representation is most
-    semantically similar to the claim.
+    from this repository.
 
-    ``top_k`` defaults to 5 — the design doc's acceptance criterion.
+    Phase 5 adds:
+
+      - ``mode`` — ``"semantic"`` (Phase 4 behaviour, cosine only),
+        ``"lexical"`` (Postgres tsvector + ts_rank_cd only), or
+        ``"hybrid"`` (RRF-fused default).
+      - ``weights`` — per-leg RRF weights; defaults to the
+        pre-declared triple ``{semantic: 0.55, lexical: 0.25,
+        structural: 0.20}`` from ``evaluation/README.md:30``.
+
     A claim like "uses softmax(QK^T / sqrt(d))" might return 5
     candidate symbols; the user picks one (or none) and the
     Phase 6 verifier does the deterministic check.
@@ -262,15 +270,41 @@ class RetrieveRequest(BaseModel):
 
     claim: str = Field(min_length=1)
     top_k: int = Field(default=5, ge=1, le=50)
+    mode: Literal["semantic", "lexical", "hybrid"] = "hybrid"
+    weights: RetrieveWeights | None = None
+
+
+class RetrieveWeights(BaseModel):
+    """Per-leg RRF weights for the ``hybrid`` mode.
+
+    Defaults match the pre-declared triple in
+    ``evaluation/README.md:30``. Sum is *not* required to be 1.0;
+    the ranker normalises by the theoretical max (all legs rank
+    d at position 1) which only equals 1.0 if the weights sum to
+    1.0.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    semantic: float = Field(default=0.55, ge=0.0, le=1.0)
+    lexical: float = Field(default=0.25, ge=0.0, le=1.0)
+    structural: float = Field(default=0.20, ge=0.0, le=1.0)
 
 
 class RetrieveMatch(BaseModel):
     """One hit in the returned retrieval list.
 
     Mirrors the parsed :class:`CodeSymbol` shape so the frontend
-    can render the same widget it uses for ``GET /symbols``; the
-    additional ``similarity`` field is the cosine score (0..1,
-    higher is better).
+    can render the same widget it uses for ``GET /symbols``. The
+    ``similarity`` field's scale depends on ``mode``:
+
+      - ``semantic``: cosine similarity in ``[0, 1]``.
+      - ``lexical``: ``ts_rank_cd`` (unbounded; typically ``[0, 1]``).
+      - ``hybrid``: RRF score × structural boost, normalised to
+        ``[0, sum(weights)]`` (default ``[0, 1]``).
+
+    The ``Field(ge=0.0)`` lower bound is the only invariant
+    (similarity is always non-negative).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -286,16 +320,41 @@ class RetrieveMatch(BaseModel):
     name: str
     signature: str
     docstring: str | None
-    similarity: float = Field(ge=0.0, le=1.0)
+    similarity: float = Field(ge=0.0)
+
+
+class ScoreBreakdown(BaseModel):
+    """Per-leg score breakdown for one hybrid-retrieval match.
+
+    Exposed so the UI can render "cosine 0.91, BM25 0.62,
+    struct 1.20" alongside each match — useful for understanding
+    *why* a symbol was retrieved and for diagnosing regressions
+    in the eval harness.
+
+    ``rank_*`` is 1-indexed; ``None`` means the symbol wasn't in
+    that leg's result. ``struct_boost`` is the multiplier
+    (default ``1.0`` = no boost).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol_id: UUID
+    rank_semantic: int | None
+    score_semantic: float | None
+    rank_lexical: int | None
+    score_lexical: float | None
+    rank_structural: int | None
+    struct_boost: float
 
 
 class RetrieveResponse(BaseModel):
     """Response body for ``POST /repositories/{repository_id}/retrieve``.
 
     ``symbols`` is the list of :class:`RetrieveMatch` (top-k by
-    similarity descending); ``scores`` is the parallel list of
-    similarity values, kept separate so the frontend can chart
-    historical scores without re-parsing the symbol rows.
+    score descending); ``scores`` is the parallel list of score
+    values. Phase 5 adds ``mode`` (which leg was used), ``weights``
+    (effective weights for hybrid), and ``breakdown`` (per-leg
+    scores, only populated for ``mode="hybrid"``).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -304,3 +363,6 @@ class RetrieveResponse(BaseModel):
     claim: str
     symbols: list[RetrieveMatch]
     scores: list[float]
+    mode: Literal["semantic", "lexical", "hybrid"] = "hybrid"
+    weights: RetrieveWeights | None = None
+    breakdown: list[ScoreBreakdown] = Field(default_factory=list)

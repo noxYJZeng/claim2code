@@ -24,12 +24,26 @@ Phase 4 (Semantic Indexing) adds:
     so the first retrieval call against a freshly-cloned repo is
     already served from the pgvector index.
 
+Phase 5 (Hybrid Retrieval) extends the same endpoint with:
+
+  * ``mode`` — ``"semantic"`` (Phase 4 behaviour), ``"lexical"``
+    (Postgres tsvector + ts_rank_cd), or ``"hybrid"`` (RRF-fused
+    default). The default is ``"hybrid"``; Phase 4 callers that
+    omit ``mode`` continue to receive semantic-only scores when
+    ``mode="semantic"`` is set explicitly.
+  * ``weights`` — per-leg RRF weights for hybrid mode; defaults to
+    ``{semantic: 0.55, lexical: 0.25, structural: 0.20}`` (the
+    pre-declared triple in ``evaluation/README.md:30``).
+  * ``breakdown`` — per-leg score breakdown in the response,
+    exposed so the UI can show "cosine 0.91, BM25 0.62,
+    struct 1.20".
+
 Exception → HTTP mapping:
 
   * ``RepoInvalidUrlError`` → 422
   * ``RepoTooLargeError`` → 413
   * ``RepoCloneError`` → 500
-  * ``EmbeddingError`` → 500
+  * ``EmbeddingError`` → 500 (semantic leg failure)
   * missing row on GET / DELETE → 404
   * missing repository on retrieve → 404
 """
@@ -52,6 +66,7 @@ from claim2code_api.db.models import (
 )
 from claim2code_api.indexing.embedding_client import get_embedding_client
 from claim2code_api.indexing.exceptions import EmbeddingError
+from claim2code_api.indexing.lexical import lexical_search
 from claim2code_api.indexing.retriever import retrieve_semantic
 from claim2code_api.repos import cloner
 from claim2code_api.repos.exceptions import (
@@ -73,6 +88,8 @@ from claim2code_api.repos.schemas import (
     RetrieveMatch,
     RetrieveRequest,
     RetrieveResponse,
+    RetrieveWeights,
+    ScoreBreakdown,
     SymbolsResponse,
 )
 from claim2code_api.repos.schemas import (
@@ -85,6 +102,7 @@ from claim2code_api.repos.schemas import (
     RepositoryDependency as RepositoryDependencySchema,
 )
 from claim2code_api.repos.workflow import RepoWorkflowResult, run_repo_workflow
+from claim2code_api.retrieval.hybrid_ranker import HybridWeights, hybrid_ranker
 
 logger = logging.getLogger(__name__)
 
@@ -402,7 +420,7 @@ def delete_repository(
 
 
 # ----------------------------------------------------------------------
-# POST /repositories/{repository_id}/retrieve  (Phase 4)
+# POST /repositories/{repository_id}/retrieve  (Phase 4 + Phase 5)
 # ----------------------------------------------------------------------
 
 
@@ -419,15 +437,25 @@ def retrieve_repository(
     body: RetrieveRequest,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> RetrieveResponse:
-    """Return the top-``top_k`` symbols most similar to ``claim``.
+    """Return the top-``top_k`` symbols matching ``claim``.
 
-    The endpoint embeds the claim (1 OpenAI call per request) and
-    runs the pgvector cosine query against the repository's
-    ``code_embeddings`` rows. Returns ``((symbol, similarity) * top_k)``
-    in similarity-descending order. An empty list is returned when
-    the repository has no embeddings yet (e.g. embedding failed
-    during the original clone) — the user can retry by re-cloning
-    or by hitting the (Phase 4.5+) re-index endpoint.
+    Phase 5 dispatches on ``body.mode``:
+
+      - ``"semantic"`` (Phase 4 behaviour) — embed the claim (1
+        OpenAI call) and run the pgvector cosine query against
+        ``code_embeddings``. Returns ``((symbol, similarity) * top_k)``
+        in similarity-descending order.
+      - ``"lexical"`` (Phase 5) — Postgres ``tsvector @@ query`` +
+        ``ts_rank_cd`` against ``code_symbols.lex_tsv``.
+      - ``"hybrid"`` (Phase 5 default) — RRF-fused over the three
+        legs (semantic, lexical, structural). The per-leg
+        ``breakdown`` is populated so the UI can show
+        "cosine 0.91, BM25 0.62, struct 1.20".
+
+    An empty list is returned when the repository has no
+    embeddings (semantic / hybrid mode) or no lex_tsv matches
+    (lexical mode). The user can retry by re-cloning or by
+    hitting a future re-index endpoint.
 
     :raises HTTPException: 404 if the repository row is missing;
         500 if the OpenAI embedding call fails irrecoverably.
@@ -439,12 +467,67 @@ def retrieve_repository(
             detail=f"repository {repository_id} not found",
         )
 
-    try:
-        results = retrieve_semantic(
+    # Resolve weights once; the same dict is forwarded to the
+    # ranker and echoed in the response.
+    weights = _resolve_weights(body.weights)
+
+    # ---- Dispatch on mode ----
+    if body.mode == "semantic":
+        matches, scores, breakdown = _retrieve_semantic_path(
             db=db,
             repository_id=repository_id,
             claim=body.claim,
             top_k=body.top_k,
+        )
+    elif body.mode == "lexical":
+        matches, scores, breakdown = _retrieve_lexical_path(
+            db=db,
+            repository_id=repository_id,
+            claim=body.claim,
+            top_k=body.top_k,
+        )
+    else:  # "hybrid" — Phase 5 default
+        matches, scores, breakdown = _retrieve_hybrid_path(
+            db=db,
+            repository_id=repository_id,
+            claim=body.claim,
+            top_k=body.top_k,
+            weights=weights,
+        )
+
+    return RetrieveResponse(
+        repository_id=repository_id,
+        claim=body.claim,
+        symbols=matches,
+        scores=scores,
+        mode=body.mode,
+        weights=weights,
+        breakdown=breakdown,
+    )
+
+
+def _resolve_weights(raw: RetrieveWeights | None) -> RetrieveWeights:
+    """Echo the requested weights or the defaults."""
+    return raw if raw is not None else RetrieveWeights()
+
+
+def _retrieve_semantic_path(
+    *,
+    db: Session,
+    repository_id: UUID,
+    claim: str,
+    top_k: int,
+) -> tuple[list[RetrieveMatch], list[float], list[ScoreBreakdown]]:
+    """Run the semantic-only leg and serialise to HTTP shapes.
+
+    Raises ``HTTPException(500)`` if the embedding call fails.
+    """
+    try:
+        results = retrieve_semantic(
+            db=db,
+            repository_id=repository_id,
+            claim=claim,
+            top_k=top_k,
             embedding_client=get_embedding_client(),
         )
     except EmbeddingError as exc:
@@ -470,13 +553,144 @@ def retrieve_repository(
             )
         )
         scores.append(similarity)
+    return matches, scores, []
 
-    return RetrieveResponse(
+
+def _retrieve_lexical_path(
+    *,
+    db: Session,
+    repository_id: UUID,
+    claim: str,
+    top_k: int,
+) -> tuple[list[RetrieveMatch], list[float], list[ScoreBreakdown]]:
+    """Run the lexical-only leg and serialise to HTTP shapes.
+
+    The lexical leg doesn't hit OpenAI, so no EmbeddingError
+    can surface here; missing rows just yield empty results.
+    The scores are unbounded ``ts_rank_cd`` values (typically
+    in ``[0, 1]``).
+    """
+    rows = lexical_search(
+        db=db,
         repository_id=repository_id,
-        claim=body.claim,
-        symbols=matches,
-        scores=scores,
+        claim=claim,
+        top_k=top_k,
     )
+    if not rows:
+        return [], [], []
+
+    symbol_ids = [sid for sid, _ in rows]
+    symbols = (
+        db.query(CodeSymbol)
+        .filter(CodeSymbol.symbol_id.in_(symbol_ids))
+        .all()
+    )
+    by_id = {s.symbol_id: s for s in symbols}
+
+    matches: list[RetrieveMatch] = []
+    scores: list[float] = []
+    for sid, score in rows:
+        sym = by_id.get(sid)
+        if sym is None:
+            continue
+        matches.append(
+            RetrieveMatch(
+                symbol_id=sym.symbol_id,
+                kind=CodeSymbolKind(sym.kind),
+                language=CodeLanguage(sym.language),
+                file_path=sym.file_path,
+                start_line=sym.start_line,
+                start_col=sym.start_col,
+                end_line=sym.end_line,
+                end_col=sym.end_col,
+                name=sym.name,
+                signature=sym.signature or "",
+                docstring=sym.docstring,
+                similarity=score,
+            )
+        )
+        scores.append(score)
+    return matches, scores, []
+
+
+def _retrieve_hybrid_path(
+    *,
+    db: Session,
+    repository_id: UUID,
+    claim: str,
+    top_k: int,
+    weights: RetrieveWeights,
+) -> tuple[list[RetrieveMatch], list[float], list[ScoreBreakdown]]:
+    """Run the hybrid ranker and serialise to HTTP shapes.
+
+    The hybrid ranker internally calls ``retrieve_semantic`` —
+    we still surface ``EmbeddingError`` as 500.
+    """
+    ranker_weights = HybridWeights(
+        semantic=weights.semantic,
+        lexical=weights.lexical,
+        structural=weights.structural,
+    )
+    try:
+        hybrid_matches = hybrid_ranker(
+            db=db,
+            repository_id=repository_id,
+            claim=claim,
+            top_k=top_k,
+            weights=ranker_weights,
+            embedding_client=get_embedding_client(),
+        )
+    except EmbeddingError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    if not hybrid_matches:
+        return [], [], []
+
+    # Bulk-fetch the CodeSymbol rows for the top-k matches.
+    top_ids = [m.symbol_id for m in hybrid_matches]
+    symbols = (
+        db.query(CodeSymbol)
+        .filter(CodeSymbol.symbol_id.in_(top_ids))
+        .all()
+    )
+    by_id = {s.symbol_id: s for s in symbols}
+
+    matches: list[RetrieveMatch] = []
+    scores: list[float] = []
+    breakdown: list[ScoreBreakdown] = []
+    for hm in hybrid_matches:
+        sym = by_id.get(hm.symbol_id)
+        if sym is None:
+            continue
+        matches.append(
+            RetrieveMatch(
+                symbol_id=sym.symbol_id,
+                kind=CodeSymbolKind(sym.kind),
+                language=CodeLanguage(sym.language),
+                file_path=sym.file_path,
+                start_line=sym.start_line,
+                start_col=sym.start_col,
+                end_line=sym.end_line,
+                end_col=sym.end_col,
+                name=sym.name,
+                signature=sym.signature or "",
+                docstring=sym.docstring,
+                similarity=hm.final_score,
+            )
+        )
+        scores.append(hm.final_score)
+        breakdown.append(
+            ScoreBreakdown(
+                symbol_id=hm.symbol_id,
+                rank_semantic=hm.rank_semantic,
+                score_semantic=hm.score_semantic,
+                rank_lexical=hm.rank_lexical,
+                score_lexical=hm.score_lexical,
+                rank_structural=hm.rank_structural,
+                struct_boost=hm.struct_boost,
+            )
+        )
+    return matches, scores, breakdown
 
 
 __all__ = [

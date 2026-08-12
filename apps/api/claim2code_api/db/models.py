@@ -267,6 +267,24 @@ class CodeSymbol(Base):
     docstring: Mapped[str | None] = mapped_column(Text, nullable=True)
     parent_symbol_id: Mapped[uuid.UUID | None] = mapped_column(_UUID, nullable=True)
 
+    # Phase 5 — lexical-search support columns. Generated columns
+    # on Postgres (see migration 0005); on SQLite (unit tests)
+    # they are plain Text columns and remain None unless explicitly
+    # populated. The retriever reads them only on Postgres.
+    #
+    # We deliberately type them as ``Mapped[str | None]`` so the
+    # ORM compile passes on both backends; the column exists in
+    # the table but is populated by the database, not the
+    # application. Tests that exercise the lexical scorer mock the
+    # SQL layer and don't touch this field.
+    lex_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lex_tsv: Mapped[object | None] = mapped_column(  # type: ignore[assignment]
+        # ``object`` because pgvector / tsvector have no generic
+        # SQLAlchemy type; the migration handles the schema side.
+        Text,
+        nullable=True,
+    )
+
     def __repr__(self) -> str:  # pragma: no cover — debug helper
         return (
             f"CodeSymbol(symbol_id={self.symbol_id!s}, "

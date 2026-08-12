@@ -1,19 +1,35 @@
-"""Tests for the Phase 4 retrieval HTTP endpoint.
+"""Tests for the Phase 4 + Phase 5 retrieval HTTP endpoint.
 
 Covers ``POST /repositories/{repository_id}/retrieve``. The
-underlying :func:`retrieve_semantic` is mocked at the router
-boundary because it uses pgvector's ``<=>`` operator which
-SQLite does not speak; the unit-level coverage of
-``retrieve_semantic`` itself lives in
-``tests/test_retriever.py``. This file proves the endpoint:
+underlying :func:`retrieve_semantic`, :func:`lexical_search`,
+and :func:`hybrid_ranker` are mocked at the router boundary
+because they each touch the live database (pgvector cosine,
+Postgres tsvector, and a three-leg union, respectively).
+SQLite does not speak ``<=>`` / ``@@`` / tsvector, so the
+unit-level coverage of each leg lives in:
 
-  - parses the ``RetrieveRequest`` body (claim + top_k)
+  - ``tests/test_retriever.py`` (Phase 4 semantic)
+  - ``tests/test_lexical.py`` (Phase 5 lexical)
+  - ``tests/test_structural.py`` (Phase 5 structural)
+  - ``tests/test_hybrid_ranker.py`` (Phase 5 RRF fusion)
+
+This file proves the endpoint:
+
+  - parses the ``RetrieveRequest`` body (claim, top_k, mode,
+    weights)
+  - defaults ``mode="hybrid"`` (Phase 5 default)
+  - dispatches to ``retrieve_semantic`` for ``mode="semantic"``
+  - dispatches to ``lexical_search`` for ``mode="lexical"``
+  - dispatches to ``hybrid_ranker`` for ``mode="hybrid"``
+  - accepts custom ``weights`` and forwards them to the ranker
+  - surfaces the per-leg ``breakdown`` for hybrid mode
   - returns a ``RetrieveResponse`` shaped like the Pydantic
-    schema (repository_id, claim, symbols, scores)
+    schema (repository_id, claim, symbols, scores, mode,
+    weights, breakdown)
   - maps missing repository → 404
   - maps malformed UUID → 422
   - maps body-validation errors → 422
-  - maps ``EmbeddingError`` from the retriever → 500
+  - maps ``EmbeddingError`` from any leg → 500
   - is registered in the OpenAPI schema
   - caps ``top_k`` at the documented upper bound (50)
   - defaults ``top_k`` to 5 when omitted
@@ -173,7 +189,12 @@ def _fake_symbols(rows_by_id: dict[str, object]):
 
 
 def test_retrieve_returns_top_matches(client: TestClient) -> None:
-    """200 + payload mirrors the RetrieveResponse schema."""
+    """200 + payload mirrors the RetrieveResponse schema.
+
+    Phase 5: the default ``mode`` is now ``hybrid``; this test
+    pins ``mode='semantic'`` to keep exercising the Phase 4
+    semantic-only path that ships the cosine scores.
+    """
     repo_id = client.repo_id  # type: ignore[attr-defined]
     sym_ids = client.sym_ids  # type: ignore[attr-defined]
 
@@ -209,13 +230,14 @@ def test_retrieve_returns_top_matches(client: TestClient) -> None:
     with patch("claim2code_api.repos.router.retrieve_semantic", side_effect=_fake_retrieve) as fake:
         response = client.post(
             f"/repositories/{repo_id}/retrieve",
-            json={"claim": "two-int adder", "top_k": 5},
+            json={"claim": "two-int adder", "top_k": 5, "mode": "semantic"},
         )
 
     assert response.status_code == 200
     body = response.json()
     assert body["repository_id"] == str(repo_id)
     assert body["claim"] == "two-int adder"
+    assert body["mode"] == "semantic"
     assert len(body["symbols"]) == 2
     assert body["scores"] == [pytest.approx(0.92), pytest.approx(0.61)]
 
@@ -249,7 +271,7 @@ def test_retrieve_default_top_k_is_5(client: TestClient) -> None:
     with patch("claim2code_api.repos.router.retrieve_semantic", side_effect=_fake_retrieve) as fake:
         response = client.post(
             f"/repositories/{repo_id}/retrieve",
-            json={"claim": "x"},
+            json={"claim": "x", "mode": "semantic"},
         )
     assert response.status_code == 200
     assert fake.call_args.kwargs["top_k"] == 5
@@ -262,7 +284,7 @@ def test_retrieve_empty_result_returns_empty_lists(client: TestClient) -> None:
     with patch("claim2code_api.repos.router.retrieve_semantic", return_value=[]) as fake:
         response = client.post(
             f"/repositories/{repo_id}/retrieve",
-            json={"claim": "claim with no match"},
+            json={"claim": "claim with no match", "mode": "semantic"},
         )
 
     assert response.status_code == 200
@@ -270,6 +292,7 @@ def test_retrieve_empty_result_returns_empty_lists(client: TestClient) -> None:
     assert body["symbols"] == []
     assert body["scores"] == []
     assert body["claim"] == "claim with no match"
+    assert body["mode"] == "semantic"
     assert fake.called
 
 
@@ -349,7 +372,7 @@ def test_retrieve_500_when_embedding_fails(client: TestClient) -> None:
     with patch("claim2code_api.repos.router.retrieve_semantic", side_effect=_raise):
         response = client.post(
             f"/repositories/{repo_id}/retrieve",
-            json={"claim": "x"},
+            json={"claim": "x", "mode": "semantic"},
         )
 
     assert response.status_code == 500
@@ -402,6 +425,368 @@ def test_retrieve_response_body_schema(client: TestClient) -> None:
     assert "claim" in res["properties"]
     assert "symbols" in res["properties"]
     assert "scores" in res["properties"]
+
+
+# ============================================================
+# Phase 5 — mode dispatch (semantic / lexical / hybrid)
+# ============================================================
+
+
+def _fake_semantic_result(sym_ids: dict[str, object]):
+    """Build a (symbol, similarity) list matching the seeded symbols."""
+
+    def _fake_retrieve(**_kwargs):
+        s_add = SimpleNamespace(
+            symbol_id=sym_ids["add"],
+            kind="function",
+            language="python",
+            file_path="pkg/core.py",
+            start_line=1,
+            start_col=0,
+            end_line=3,
+            end_col=0,
+            name="add",
+            signature="(a: int, b: int)",
+            docstring="Add two ints.",
+        )
+        s_w = SimpleNamespace(
+            symbol_id=sym_ids["Widget"],
+            kind="class",
+            language="python",
+            file_path="pkg/widget.py",
+            start_line=5,
+            start_col=0,
+            end_line=20,
+            end_col=0,
+            name="Widget",
+            signature="",
+            docstring=None,
+        )
+        return [(s_add, 0.92), (s_w, 0.61)]
+
+    return _fake_retrieve
+
+
+def test_retrieve_mode_semantic_calls_retrieve_semantic(client: TestClient) -> None:
+    """``mode='semantic'`` dispatches to the Phase 4 semantic leg."""
+    repo_id = client.repo_id  # type: ignore[attr-defined]
+    sym_ids = client.sym_ids  # type: ignore[attr-defined]
+
+    with patch(
+        "claim2code_api.repos.router.retrieve_semantic",
+        side_effect=_fake_semantic_result(sym_ids),
+    ) as fake_sem, patch(
+        "claim2code_api.repos.router.lexical_search",
+    ) as fake_lex, patch(
+        "claim2code_api.repos.router.hybrid_ranker",
+    ) as fake_hyb:
+        response = client.post(
+            f"/repositories/{repo_id}/retrieve",
+            json={"claim": "x", "mode": "semantic"},
+        )
+
+    assert response.status_code == 200
+    assert fake_sem.called
+    fake_lex.assert_not_called()
+    fake_hyb.assert_not_called()
+    body = response.json()
+    assert body["mode"] == "semantic"
+    # No breakdown for non-hybrid modes.
+    assert body["breakdown"] == []
+
+
+def test_retrieve_mode_lexical_calls_lexical_search(client: TestClient) -> None:
+    """``mode='lexical'`` dispatches to the lexical leg (no OpenAI)."""
+    repo_id = client.repo_id  # type: ignore[attr-defined]
+    sym_ids = client.sym_ids  # type: ignore[attr-defined]
+
+    def _fake_lexical(**_kwargs):
+        return [(sym_ids["add"], 0.45), (sym_ids["Widget"], 0.30)]
+
+    with patch(
+        "claim2code_api.repos.router.lexical_search",
+        side_effect=_fake_lexical,
+    ) as fake_lex, patch(
+        "claim2code_api.repos.router.retrieve_semantic",
+    ) as fake_sem, patch(
+        "claim2code_api.repos.router.hybrid_ranker",
+    ) as fake_hyb:
+        response = client.post(
+            f"/repositories/{repo_id}/retrieve",
+            json={"claim": "two-int adder", "mode": "lexical"},
+        )
+
+    assert response.status_code == 200
+    assert fake_lex.called
+    fake_sem.assert_not_called()
+    fake_hyb.assert_not_called()
+
+    body = response.json()
+    assert body["mode"] == "lexical"
+    assert body["breakdown"] == []
+    # Two matches in the order the leg returned them.
+    assert len(body["symbols"]) == 2
+    assert body["symbols"][0]["name"] == "add"
+    assert body["symbols"][0]["similarity"] == pytest.approx(0.45)
+    assert body["symbols"][1]["name"] == "Widget"
+
+
+def test_retrieve_default_mode_is_hybrid(client: TestClient) -> None:
+    """Omitting ``mode`` defaults to ``hybrid`` (Phase 5 default)."""
+    repo_id = client.repo_id  # type: ignore[attr-defined]
+    sym_ids = client.sym_ids  # type: ignore[attr-defined]
+
+    # Stub hybrid_ranker with one synthetic HybridMatch so the
+    # endpoint has something to bulk-fetch + serialise.
+    from claim2code_api.retrieval.hybrid_ranker import HybridMatch
+
+    hybrid_out = [
+        HybridMatch(
+            symbol_id=sym_ids["add"],
+            final_score=0.77,
+            rank_semantic=1,
+            score_semantic=0.9,
+            rank_lexical=2,
+            score_lexical=0.4,
+            rank_structural=None,
+            struct_boost=1.0,
+        ),
+    ]
+
+    with patch(
+        "claim2code_api.repos.router.hybrid_ranker",
+        return_value=hybrid_out,
+    ) as fake_hyb, patch(
+        "claim2code_api.repos.router.retrieve_semantic",
+    ) as fake_sem, patch(
+        "claim2code_api.repos.router.lexical_search",
+    ) as fake_lex:
+        response = client.post(
+            f"/repositories/{repo_id}/retrieve",
+            json={"claim": "x"},
+        )
+
+    assert response.status_code == 200
+    assert fake_hyb.called
+    fake_sem.assert_not_called()
+    fake_lex.assert_not_called()
+    body = response.json()
+    assert body["mode"] == "hybrid"
+
+
+def test_retrieve_mode_hybrid_calls_hybrid_ranker(client: TestClient) -> None:
+    """``mode='hybrid'`` dispatches to the hybrid ranker."""
+    repo_id = client.repo_id  # type: ignore[attr-defined]
+    sym_ids = client.sym_ids  # type: ignore[attr-defined]
+
+    from claim2code_api.retrieval.hybrid_ranker import HybridMatch
+
+    hybrid_out = [
+        HybridMatch(
+            symbol_id=sym_ids["add"],
+            final_score=0.70,
+            rank_semantic=1,
+            score_semantic=0.88,
+            rank_lexical=1,
+            score_lexical=0.50,
+            rank_structural=None,
+            struct_boost=1.0,
+        ),
+        HybridMatch(
+            symbol_id=sym_ids["Widget"],
+            final_score=0.42,
+            rank_semantic=2,
+            score_semantic=0.61,
+            rank_lexical=None,
+            score_lexical=None,
+            rank_structural=None,
+            struct_boost=1.15,
+        ),
+    ]
+
+    with patch(
+        "claim2code_api.repos.router.hybrid_ranker",
+        return_value=hybrid_out,
+    ) as fake_hyb:
+        response = client.post(
+            f"/repositories/{repo_id}/retrieve",
+            json={"claim": "x", "mode": "hybrid"},
+        )
+
+    assert response.status_code == 200
+    assert fake_hyb.called
+    body = response.json()
+
+    # Mode echoed, weights default applied, breakdown populated.
+    assert body["mode"] == "hybrid"
+    assert body["weights"] == {"semantic": 0.55, "lexical": 0.25, "structural": 0.20}
+    assert len(body["breakdown"]) == 2
+
+    first = body["breakdown"][0]
+    assert first["symbol_id"] == str(sym_ids["add"])
+    assert first["rank_semantic"] == 1
+    assert first["score_semantic"] == pytest.approx(0.88)
+    assert first["rank_lexical"] == 1
+    assert first["score_lexical"] == pytest.approx(0.50)
+    assert first["struct_boost"] == 1.0
+
+    second = body["breakdown"][1]
+    assert second["symbol_id"] == str(sym_ids["Widget"])
+    assert second["rank_lexical"] is None
+    assert second["score_lexical"] is None
+    assert second["struct_boost"] == 1.15
+
+
+def test_retrieve_custom_weights_forwarded_to_hybrid_ranker(client: TestClient) -> None:
+    """Custom ``weights`` are forwarded to ``hybrid_ranker``."""
+    from claim2code_api.retrieval.hybrid_ranker import HybridMatch
+
+    repo_id = client.repo_id  # type: ignore[attr-defined]
+    sym_ids = client.sym_ids  # type: ignore[attr-defined]
+
+    hybrid_out = [
+        HybridMatch(
+            symbol_id=sym_ids["add"],
+            final_score=1.0,
+            rank_semantic=1,
+            score_semantic=0.9,
+            rank_lexical=None,
+            score_lexical=None,
+            rank_structural=None,
+            struct_boost=1.0,
+        ),
+    ]
+
+    with patch(
+        "claim2code_api.repos.router.hybrid_ranker",
+        return_value=hybrid_out,
+    ) as fake_hyb:
+        response = client.post(
+            f"/repositories/{repo_id}/retrieve",
+            json={
+                "claim": "x",
+                "mode": "hybrid",
+                "weights": {
+                    "semantic": 1.0,
+                    "lexical": 0.0,
+                    "structural": 0.0,
+                },
+            },
+        )
+
+    assert response.status_code == 200
+    # The ranker was called with custom HybridWeights.
+    weights_arg = fake_hyb.call_args.kwargs["weights"]
+    assert weights_arg.semantic == 1.0
+    assert weights_arg.lexical == 0.0
+    assert weights_arg.structural == 0.0
+    # And echoed in the response.
+    body = response.json()
+    assert body["weights"] == {"semantic": 1.0, "lexical": 0.0, "structural": 0.0}
+
+
+def test_retrieve_mode_lexical_404_short_circuits(client: TestClient) -> None:
+    """The 404 check happens before any leg is called, even for lexical."""
+    with patch("claim2code_api.repos.router.lexical_search") as fake_lex, patch(
+        "claim2code_api.repos.router.retrieve_semantic",
+    ) as fake_sem:
+        response = client.post(
+            f"/repositories/{uuid4()}/retrieve",
+            json={"claim": "x", "mode": "lexical"},
+        )
+    assert response.status_code == 404
+    fake_lex.assert_not_called()
+    fake_sem.assert_not_called()
+
+
+def test_retrieve_mode_hybrid_500_when_embedding_fails(client: TestClient) -> None:
+    """``EmbeddingError`` from the semantic leg → 500 even in hybrid mode."""
+    repo_id = client.repo_id  # type: ignore[attr-defined]
+
+    with patch(
+        "claim2code_api.repos.router.hybrid_ranker",
+        side_effect=EmbeddingError("simulated OpenAI outage"),
+    ):
+        response = client.post(
+            f"/repositories/{repo_id}/retrieve",
+            json={"claim": "x", "mode": "hybrid"},
+        )
+
+    assert response.status_code == 500
+    assert "simulated OpenAI outage" in response.json()["detail"]
+
+
+def test_retrieve_422_for_weights_out_of_range(client: TestClient) -> None:
+    """``weights.semantic=1.5`` → 422 (Field le=1.0)."""
+    repo_id = client.repo_id  # type: ignore[attr-defined]
+    response = client.post(
+        f"/repositories/{repo_id}/retrieve",
+        json={
+            "claim": "x",
+            "weights": {"semantic": 1.5, "lexical": 0.0, "structural": 0.0},
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_retrieve_response_schema_includes_phase5_fields(client: TestClient) -> None:
+    """The OpenAPI schema includes ``mode``, ``weights``, ``breakdown``."""
+    schema = client.get("/openapi.json").json()
+    components = schema["components"]["schemas"]
+
+    assert "RetrieveResponse" in components
+    res = components["RetrieveResponse"]
+    for key in ("mode", "weights", "breakdown"):
+        assert key in res["properties"], f"missing {key} in RetrieveResponse"
+
+    assert "ScoreBreakdown" in components
+    sb = components["ScoreBreakdown"]
+    for key in (
+        "symbol_id",
+        "rank_semantic",
+        "score_semantic",
+        "rank_lexical",
+        "score_lexical",
+        "rank_structural",
+        "struct_boost",
+    ):
+        assert key in sb["properties"], f"missing {key} in ScoreBreakdown"
+
+    assert "RetrieveWeights" in components
+    rw = components["RetrieveWeights"]
+    for key in ("semantic", "lexical", "structural"):
+        assert key in rw["properties"], f"missing {key} in RetrieveWeights"
+
+
+def test_retrieve_request_schema_includes_mode_and_weights(client: TestClient) -> None:
+    """The OpenAPI schema for the body has ``mode`` and ``weights``."""
+    schema = client.get("/openapi.json").json()
+    components = schema["components"]["schemas"]
+    assert "RetrieveRequest" in components
+    req = components["RetrieveRequest"]
+    assert "mode" in req["properties"]
+    assert "weights" in req["properties"]
+
+
+def test_retrieve_mode_hybrid_empty_result(client: TestClient) -> None:
+    """An empty hybrid result → empty symbols + scores + breakdown."""
+    repo_id = client.repo_id  # type: ignore[attr-defined]
+
+    with patch(
+        "claim2code_api.repos.router.hybrid_ranker",
+        return_value=[],
+    ):
+        response = client.post(
+            f"/repositories/{repo_id}/retrieve",
+            json={"claim": "x", "mode": "hybrid"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["symbols"] == []
+    assert body["scores"] == []
+    assert body["breakdown"] == []
+    assert body["mode"] == "hybrid"
 
 
 # ============================================================

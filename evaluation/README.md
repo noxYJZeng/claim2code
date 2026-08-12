@@ -28,7 +28,10 @@ evaluation/
 
 Phase 0: empty layout.
 Phase 1+: wire annotation schema.
-Phase 5+: wire retrieval evaluator.
+Phase 5: ✅ retrieval evaluator — 3 hand-labelled (paper, repo) pairs
+  in `annotations/` + `baselines/{embedding_only,lexical_only,
+  hybrid_claim2code}.py` + `evaluate_retrieval.py`. Run via
+  `make eval-retrieval` (requires live Postgres + OpenAI).
 Phase 6+: wire verification evaluator.
 Phase 8+: wire safety evaluator.
 Phase 10: full eval suite + measured numbers back into README.

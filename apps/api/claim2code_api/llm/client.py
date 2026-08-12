@@ -152,7 +152,11 @@ class LLMClient:
         self._client = OpenAI(
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
-            http_client=httpx.Client(proxy=None),
+            # ``OpenAI`` ships its own vendored ``httpx2`` and (in newer
+            # SDK versions) annotates ``http_client`` as ``httpx2.Client``.
+            # Our ``httpx.Client(proxy=None)`` is API-compatible at
+            # runtime; tell mypy to stop checking.
+            http_client=httpx.Client(proxy=None),  # type: ignore[arg-type]
             timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
 

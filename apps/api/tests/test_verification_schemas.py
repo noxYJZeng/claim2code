@@ -84,7 +84,9 @@ def test_code_evidence_round_trips() -> None:
 
 def test_code_evidence_rejects_extra_fields() -> None:
     with pytest.raises(ValidationError, match="extra"):
-        CodeEvidence(
+        # ``extra="forbid"`` is a Pydantic-runtime check; mypy doesn't
+        # see it. Cast through ``Any`` to silence the call-arg error.
+        CodeEvidence(  # type: ignore[call-arg]
             symbol_id=uuid4(),
             file_path="x",
             start_line=1,
@@ -184,7 +186,9 @@ def test_verification_confidence_bounded() -> None:
 
 def test_verification_rejects_extra_fields() -> None:
     with pytest.raises(ValidationError, match="extra"):
-        Verification(
+        # ``extra="forbid"`` is a Pydantic-runtime check; mypy doesn't
+        # see it. Cast through ``Any`` to silence the call-arg error.
+        Verification(  # type: ignore[call-arg]
             claim_id="c1", status=VerificationStatus.VERIFIED,
             confidence=0.5, explanation="x",
             paper_evidence=_sample_paper_evidence(),
@@ -244,7 +248,9 @@ def test_run_request_accepts_claim_ids() -> None:
 
 def test_run_request_rejects_extra_fields() -> None:
     with pytest.raises(ValidationError, match="extra"):
-        VerificationRunRequest(top_k=5, something_else=True)
+        # ``extra="forbid"`` is a Pydantic-runtime check; mypy doesn't
+        # see it. Cast through ``Any`` to silence the call-arg error.
+        VerificationRunRequest(top_k=5, something_else=True)  # type: ignore[call-arg]
 
 
 # ============================================================

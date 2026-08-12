@@ -243,8 +243,17 @@ def _verify_one_claim(
     llm_verdict: Verification | None = None
     llm_error: str | None = None
     if not has_high:
+        # Phase 8: arm the safety violation callback so any secrets /
+        # injection patterns detected in the claim / candidate
+        # signatures are logged on ``state.errors``. The callback is
+        # scoped to this single LLM call (cleared in the finally).
+        from claim2code_api.llm.safety_bridge import make_violation_callback
+        llm_client = get_llm_client()
+        llm_client._on_violations = make_violation_callback(
+            db, analysis_id=analysis_id,
+        )
         try:
-            llm_verdict = get_llm_client().verdict_for_claim(
+            llm_verdict = llm_client.verdict_for_claim(
                 claim=claim,
                 paper_evidence=claim.paper_evidence,
                 candidates=retrieve_matches,
@@ -258,6 +267,8 @@ def _verify_one_claim(
             # treat llm_verdict=None and default to UNVERIFIED if
             # there are no code evidence or HIGH discrepancies.
             llm_error = f"{exc.__class__.__name__}: {exc}"
+        finally:
+            llm_client._on_violations = None
 
     # 5. Compose.
     verification = compose_verification(

@@ -194,11 +194,24 @@ def run_related_work_workflow(
     )
 
     llm = llm_client or get_llm_client()
-    ranked, llm_errors = _compare_papers(
-        ranked=ranked,
-        claim=claim,
-        llm=llm,
+    # Phase 8: arm the safety violation callback so any secrets /
+    # injection patterns detected in the related paper's metadata
+    # are logged on ``state.errors``. The callback is set once for
+    # the whole comparison loop; ``_compare_papers`` does not
+    # override it (the callback simply records violations on the
+    # same analysis row regardless of which paper triggered it).
+    from claim2code_api.llm.safety_bridge import make_violation_callback
+    llm._on_violations = make_violation_callback(
+        db, analysis_id=analysis_id,
     )
+    try:
+        ranked, llm_errors = _compare_papers(
+            ranked=ranked,
+            claim=claim,
+            llm=llm,
+        )
+    finally:
+        llm._on_violations = None
     errors = errors + llm_errors
     # Tally errors after the LLM step.
     n_with_comparison = sum(1 for p in ranked if p.comparison is not None)

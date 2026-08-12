@@ -1,0 +1,21 @@
+{
+  "_doc": "Dataset name aliases. Same shape as models.json: key is the canonical lowercase form; values are alias variants. Used by DatasetNormalizer for the DATASET_MISMATCH discrepancy.",
+
+  "glue":                   ["GLUE", "glue", "GLUE benchmark", "the GLUE benchmark"],
+  "squad":                  ["SQuAD", "squad", "Stanford Question Answering Dataset"],
+  "squad-v1":               ["SQuAD v1.1", "squad-v1.1", "SQuAD1.1"],
+  "squad-v2":               ["SQuAD v2.0", "squad-v2.0", "SQuAD2.0"],
+  "mnli":                   ["MNLI", "mnli", "Multi-Genre Natural Language Inference"],
+  "cola":                   ["CoLA", "cola", "Corpus of Linguistic Acceptability"],
+  "sst-2":                  ["SST-2", "sst2", "Stanford Sentiment Treebank"],
+  "qqp":                    ["QQP", "qqp", "Quora Question Pairs"],
+  "qnli":                   ["QNLI", "qnli", "Question Natural Language Inference"],
+  "rte":                    ["RTE", "rte", "Recognizing Textual Entailment"],
+  "e2e":                    ["E2E", "e2e", "E2E NLG", "E2E dataset"],
+  "wikitext":               ["WikiText", "wikitext", "WikiText-103", "wikitext-103"],
+  "imagenet":               ["ImageNet", "imagenet", "ILSVRC"],
+  "coco":                   ["COCO", "coco", "Common Objects in Context"],
+  "cifar-10":               ["CIFAR-10", "cifar-10", "CIFAR10"],
+  "cifar-100":              ["CIFAR-100", "cifar-100", "CIFAR100"],
+  "wmt14":                  ["WMT14", "wmt14", "WMT 2014"]
+}

@@ -1,0 +1,19 @@
+{
+  "_doc": "Metric name aliases. Used by MetricNameComparator for METRIC_MISMATCH (LOW severity).",
+
+  "f1":                     ["F1", "f1", "F1 score", "f1-score", "F1-score"],
+  "f1-micro":               ["F1-micro", "micro-F1", "f1_micro"],
+  "f1-macro":               ["F1-macro", "macro-F1", "f1_macro"],
+  "accuracy":               ["accuracy", "acc", "Accuracy", "ACC"],
+  "precision":              ["precision", "Precision"],
+  "recall":                 ["recall", "Recall"],
+  "bleu":                   ["BLEU", "bleu", "BLEU score", "BLEU-4"],
+  "rouge":                  ["ROUGE", "rouge", "ROUGE-L", "ROUGE-1"],
+  "perplexity":             ["perplexity", "PPL", "ppl", "Perplexity"],
+  "meteor":                 ["METEOR", "meteor"],
+  "exact-match":            ["Exact Match", "EM", "exact_match", "exact match"],
+  "auc":                    ["AUC", "auc", "AUC-ROC", "ROC AUC"],
+  "loss":                   ["loss", "cross-entropy", "cross_entropy", "CrossEntropyLoss"],
+  "mse":                    ["MSE", "mse", "Mean Squared Error"],
+  "mae":                    ["MAE", "mae", "Mean Absolute Error"]
+}

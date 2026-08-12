@@ -104,7 +104,11 @@ class OpenAIEmbeddingClient:
             # via env vars (``all_proxy``/``HTTPS_PROXY``). Necessary
             # because httpx 0.28+ rejects the ``socks://`` scheme
             # corporate proxies publish — see module docstring.
-            http_client=httpx.Client(proxy=None, trust_env=False),
+            # ``OpenAI`` ships its own vendored ``httpx2`` and (in newer
+            # SDK versions) annotates ``http_client`` as ``httpx2.Client``.
+            # Our ``httpx.Client(...)`` is API-compatible at runtime;
+            # tell mypy to stop checking.
+            http_client=httpx.Client(proxy=None, trust_env=False),  # type: ignore[arg-type]
             timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
         )
 

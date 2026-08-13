@@ -1,5 +1,13 @@
 """Related-work workflow — orchestration of the per-claim pipeline.
 
+Observability
+-------------
+
+Phase 9: every run opens a root span ``related_work_workflow.run``
+(via the package's :func:`get_tracer`); the per-paper loop opens
+child spans ``literature.paper_compare`` with a ``paper_id`` attribute
+so the trace tree is drillable per paper in the trace UI.
+
 Pipeline (mirrors ``verification/workflow.py`` shape, but at
 smaller scale):
 
@@ -57,6 +65,7 @@ from claim2code_api.literature.scholar_client import (
     SemanticScholarClient,
 )
 from claim2code_api.llm.client import LLMClient, get_llm_client
+from claim2code_api.observability import get_tracer
 from claim2code_api.papers.schemas import Claim
 
 if TYPE_CHECKING:
@@ -126,112 +135,141 @@ def run_related_work_workflow(
     """
     from fastapi import HTTPException
 
-    state = (
-        db.query(AnalysisState)
-        .filter(AnalysisState.analysis_id == analysis_id)
-        .one_or_none()
-    )
-    if state is None:
-        raise HTTPException(
-            status_code=404, detail=f"analysis {analysis_id} not found",
+    # Phase 9: open the root span up-front so the trace captures
+    # resolve → search → rank → compare → persist under one
+    # umbrella. The per-paper loop below opens child spans so
+    # each paper's trace is drillable independently.
+    tracer = get_tracer(__name__)
+    with tracer.start_as_current_span(
+        "related_work_workflow.run",
+        attributes={
+            "related_work.analysis_id": str(analysis_id),
+            "related_work.claim_id": claim_id,
+            "related_work.top_k": top_k,
+            "related_work.force_refresh": force_refresh,
+        },
+    ) as root_span:
+        state = (
+            db.query(AnalysisState)
+            .filter(AnalysisState.analysis_id == analysis_id)
+            .one_or_none()
         )
-
-    claim = _resolve_claim(state=state, claim_id=claim_id)
-
-    # Cache hit: return the existing entry if present and not force_refresh.
-    if not force_refresh:
-        cached = _find_existing_entry(state=state, claim_id=claim_id)
-        if cached is not None:
-            return RelatedWorkWorkflowResult(
-                analysis_id=analysis_id,
-                entry=cached,
-                n_papers=len(cached.papers),
-                n_with_comparison=sum(1 for p in cached.papers if p.comparison is not None),
-                errors=[],
+        if state is None:
+            root_span.set_attribute("related_work.cache_status", "missing_state")
+            raise HTTPException(
+                status_code=404, detail=f"analysis {analysis_id} not found",
             )
 
-    primary, fallback, source_used = _select_clients(
-        scholar_client=scholar_client,
-        fallback_client=fallback_client,
-    )
+        claim = _resolve_claim(state=state, claim_id=claim_id)
 
-    papers, errors = _search(
-        primary=primary,
-        fallback=fallback,
-        query=claim.text,
-        limit=top_k * over_fetch_multiplier,
-    )
+        # Cache hit: return the existing entry if present and not force_refresh.
+        if not force_refresh:
+            cached = _find_existing_entry(state=state, claim_id=claim_id)
+            if cached is not None:
+                root_span.set_attribute("related_work.cache_status", "hit")
+                root_span.set_attribute("related_work.n_papers", len(cached.papers))
+                return RelatedWorkWorkflowResult(
+                    analysis_id=analysis_id,
+                    entry=cached,
+                    n_papers=len(cached.papers),
+                    n_with_comparison=sum(
+                        1 for p in cached.papers if p.comparison is not None
+                    ),
+                    errors=[],
+                )
 
-    # Even if both clients failed, we still persist an empty entry
-    # + record the error so the UI can surface "no related work
-    # available" rather than pretend the run never happened.
-    if not papers:
+        root_span.set_attribute("related_work.cache_status", "miss")
+
+        primary, fallback, source_used = _select_clients(
+            scholar_client=scholar_client,
+            fallback_client=fallback_client,
+        )
+
+        papers, errors = _search(
+            primary=primary,
+            fallback=fallback,
+            query=claim.text,
+            limit=top_k * over_fetch_multiplier,
+        )
+        root_span.set_attribute("related_work.n_search_results", len(papers))
+
+        # Even if both clients failed, we still persist an empty entry
+        # + record the error so the UI can surface "no related work
+        # available" rather than pretend the run never happened.
+        if not papers:
+            entry = _build_entry(
+                claim_id=claim_id,
+                ranked=[],
+                source=source_used,
+                papers=[],
+            )
+            _persist(
+                state,
+                entry=entry,
+                new_errors=errors,
+            )
+            root_span.set_attribute("related_work.n_papers", 0)
+            root_span.set_attribute("related_work.n_with_comparison", 0)
+            return RelatedWorkWorkflowResult(
+                analysis_id=analysis_id,
+                entry=entry,
+                n_papers=0,
+                n_with_comparison=0,
+                errors=errors,
+            )
+
+        embed = embedding_client or get_embedding_client()
+        ranked = _rank_papers(
+            papers=papers,
+            claim_text=claim.text,
+            embed=embed,
+            weights=weights,
+        )
+
+        llm = llm_client or get_llm_client()
+        # Phase 8: arm the safety violation callback so any secrets /
+        # injection patterns detected in the related paper's metadata
+        # are logged on ``state.errors``. The callback is set once for
+        # the whole comparison loop; ``_compare_papers`` does not
+        # override it (the callback simply records violations on the
+        # same analysis row regardless of which paper triggered it).
+        from claim2code_api.llm.safety_bridge import make_violation_callback
+        llm._on_violations = make_violation_callback(
+            db, analysis_id=analysis_id,
+        )
+        try:
+            ranked, llm_errors = _compare_papers(
+                ranked=ranked,
+                claim=claim,
+                llm=llm,
+            )
+        finally:
+            llm._on_violations = None
+        errors = errors + llm_errors
+        # Tally errors after the LLM step.
+        n_with_comparison = sum(1 for p in ranked if p.comparison is not None)
+        truncated = ranked[:top_k]
+
         entry = _build_entry(
             claim_id=claim_id,
-            ranked=[],
+            ranked=truncated,
             source=source_used,
-            papers=[],
+            papers=papers,
         )
-        _persist(
-            state,
-            entry=entry,
-            new_errors=errors,
-        )
+
+        _persist(state, entry=entry, new_errors=errors)
+
+        root_span.set_attribute("related_work.n_papers", len(truncated))
+        root_span.set_attribute("related_work.n_with_comparison", n_with_comparison)
+        root_span.set_attribute("related_work.source", source_used.value)
+
         return RelatedWorkWorkflowResult(
             analysis_id=analysis_id,
             entry=entry,
-            n_papers=0,
-            n_with_comparison=0,
+            n_papers=len(truncated),
+            n_with_comparison=n_with_comparison,
             errors=errors,
         )
-
-    embed = embedding_client or get_embedding_client()
-    ranked = _rank_papers(
-        papers=papers,
-        claim_text=claim.text,
-        embed=embed,
-        weights=weights,
-    )
-
-    llm = llm_client or get_llm_client()
-    # Phase 8: arm the safety violation callback so any secrets /
-    # injection patterns detected in the related paper's metadata
-    # are logged on ``state.errors``. The callback is set once for
-    # the whole comparison loop; ``_compare_papers`` does not
-    # override it (the callback simply records violations on the
-    # same analysis row regardless of which paper triggered it).
-    from claim2code_api.llm.safety_bridge import make_violation_callback
-    llm._on_violations = make_violation_callback(
-        db, analysis_id=analysis_id,
-    )
-    try:
-        ranked, llm_errors = _compare_papers(
-            ranked=ranked,
-            claim=claim,
-            llm=llm,
-        )
-    finally:
-        llm._on_violations = None
-    errors = errors + llm_errors
-    # Tally errors after the LLM step.
-    n_with_comparison = sum(1 for p in ranked if p.comparison is not None)
-    truncated = ranked[:top_k]
-
-    entry = _build_entry(
-        claim_id=claim_id,
-        ranked=truncated,
-        source=source_used,
-        papers=papers,
-    )
-
-    _persist(state, entry=entry, new_errors=errors)
-    return RelatedWorkWorkflowResult(
-        analysis_id=analysis_id,
-        entry=entry,
-        n_papers=len(truncated),
-        n_with_comparison=n_with_comparison,
-        errors=errors,
-    )
 
 
 # ----------------------------------------------------------------------
@@ -408,22 +446,35 @@ def _compare_papers(
     """
     compared: list[RankedPaper] = []
     errors: list[str] = []
+    tracer = get_tracer(__name__)
     for rp in ranked:
-        try:
-            comparison = llm.extract_comparison(claim=claim, paper=rp.paper)
-        except Exception as exc:  # noqa: BLE001 — per-paper isolation
-            logger.warning(
-                "comparison failed paper=%s claim=%s: %s",
-                rp.paper.paper_id,
-                claim.claim_id,
-                exc,
-            )
-            errors.append(
-                f"{claim.claim_id}/{rp.paper.paper_id}: "
-                f"{exc.__class__.__name__}: {exc}"
-            )
-            compared.append(rp.model_copy(update={"comparison": None}))
-            continue
+        # Child span per paper — disambiguates the per-paper
+        # children under the related_work_workflow.run root span.
+        with tracer.start_as_current_span(
+            "literature.paper_compare",
+            attributes={
+                "paper.id": rp.paper.paper_id,
+                "claim.id": claim.claim_id,
+            },
+        ) as paper_span:
+            try:
+                comparison = llm.extract_comparison(claim=claim, paper=rp.paper)
+            except Exception as exc:  # noqa: BLE001 — per-paper isolation
+                paper_span.record_exception(exc)
+                logger.warning(
+                    "comparison failed paper=%s claim=%s: %s",
+                    rp.paper.paper_id,
+                    claim.claim_id,
+                    exc,
+                )
+                errors.append(
+                    f"{claim.claim_id}/{rp.paper.paper_id}: "
+                    f"{exc.__class__.__name__}: {exc}"
+                )
+                paper_span.set_attribute("literature.comparison_ok", False)
+                compared.append(rp.model_copy(update={"comparison": None}))
+                continue
+            paper_span.set_attribute("literature.comparison_ok", True)
         compared.append(rp.model_copy(update={"comparison": comparison}))
     return compared, errors
 

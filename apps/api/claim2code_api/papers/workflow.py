@@ -41,6 +41,7 @@ from sqlalchemy.orm import Session
 from claim2code_api.db.models import AnalysisState, Paper
 from claim2code_api.llm.client import LLMClient
 from claim2code_api.llm.safety_bridge import make_violation_callback
+from claim2code_api.observability import get_tracer
 from claim2code_api.papers import storage
 from claim2code_api.papers.exceptions import (
     ClaimExtractionError,
@@ -98,85 +99,104 @@ def run_paper_workflow(
     :raises ClaimExtractionError: if the LLM call fails or returns
         an unusable response.
     """
-    # Validate BEFORE any DB writes so a bad upload costs nothing.
-    _validate_upload(upload_bytes, max_size_bytes)
-    analysis_id = _create_analysis(db)
-    paper_id: UUID | None = None
-    try:
-        sha = storage.sha256_bytes(upload_bytes)
-        # ``write_pdf`` is atomic (exclusive create). A duplicate
-        # upload is detected here and surfaces as FileExistsError,
-        # which we map to PdfInvalidError.
+    # Phase 9: open the root span up-front so the trace captures
+    # parse + extract + persist under one umbrella. The
+    # ``analysis_id`` attribute is added after the row is created
+    # (below) so the trace UI can correlate with the workflow
+    # result.
+    tracer = get_tracer(__name__)
+    with tracer.start_as_current_span(
+        "paper_workflow.run",
+        attributes={
+            "paper.filename": filename,
+            "paper.size_bytes": len(upload_bytes),
+        },
+    ) as root_span:
+        # Validate BEFORE any DB writes so a bad upload costs nothing.
+        _validate_upload(upload_bytes, max_size_bytes)
+        root_span.set_attribute("paper.upload_validated", True)
+
+        analysis_id = _create_analysis(db)
+        root_span.set_attribute("paper.analysis_id", str(analysis_id))
+        paper_id: UUID | None = None
         try:
-            storage.write_pdf(sha, upload_bytes)
-        except FileExistsError as exc:
-            raise PdfInvalidError(
-                "A paper with this sha256 was already uploaded; dedup not yet wired"
-            ) from exc
+            sha = storage.sha256_bytes(upload_bytes)
+            # ``write_pdf`` is atomic (exclusive create). A duplicate
+            # upload is detected here and surfaces as FileExistsError,
+            # which we map to PdfInvalidError.
+            try:
+                storage.write_pdf(sha, upload_bytes)
+            except FileExistsError as exc:
+                raise PdfInvalidError(
+                    "A paper with this sha256 was already uploaded; dedup not yet wired"
+                ) from exc
 
-        paper_id = _insert_paper_row(
-            db,
-            analysis_id=analysis_id,
-            sha256=sha,
-            filename=filename,
-            size_bytes=len(upload_bytes),
-        )
-        _set_paper_status(db, analysis_id, "parsing")
-
-        # 5. PyMuPDF parse.
-        pdf_path = storage.path_for(sha)
-        paper = parse_pdf(pdf_path, filename=filename)
-        db.query(Paper).filter(Paper.paper_id == paper_id).update(
-            {
-                Paper.n_pages: paper.n_pages,
-                Paper.n_chars: paper.n_chars,
-                Paper.parse_status: "extracting",
-            }
-        )
-        _set_paper_status(db, analysis_id, "extracting")
-
-        # 8. LLM extract.
-        # Phase 8: arm the safety violation callback so any secrets /
-        # injection patterns detected in the paper text are logged on
-        # ``state.errors``. The callback is cleared after the call so a
-        # subsequent workflow step doesn't accidentally inherit it.
-        llm._on_violations = make_violation_callback(
-            db, analysis_id=analysis_id,
-        )
-        try:
-            claims: list[Claim] = extract_claims_from_paper(llm, paper)
-        finally:
-            llm._on_violations = None
-
-        # 9-10. Persist claims + mark done.
-        _persist_claims(db, analysis_id, claims)
-        db.query(Paper).filter(Paper.paper_id == paper_id).update(
-            {
-                Paper.parse_status: "done",
-                Paper.parsed_at: func.now(),
-            }
-        )
-        _set_paper_status(db, analysis_id, "done", completed=True)
-        db.commit()
-
-        return WorkflowResult(
-            analysis_id=analysis_id,
-            paper_id=paper_id,
-            parse_status="done",
-            n_claims=len(claims),
-        )
-    except Exception as exc:
-        db.rollback()
-        # Persist the error against the analysis row so a future
-        # GET /analyses/{id}/claims can surface it.
-        _record_error(db, analysis_id, exc)
-        if paper_id is not None and not isinstance(exc, ClaimExtractionError):
-            # Parse errors: keep the paper row visible with parse_status='error'.
-            db.query(Paper).filter(Paper.paper_id == paper_id).update(
-                {Paper.parse_status: "error", Paper.error: str(exc)[:500]}
+            paper_id = _insert_paper_row(
+                db,
+                analysis_id=analysis_id,
+                sha256=sha,
+                filename=filename,
+                size_bytes=len(upload_bytes),
             )
+            _set_paper_status(db, analysis_id, "parsing")
+
+            # 5. PyMuPDF parse.
+            pdf_path = storage.path_for(sha)
+            paper = parse_pdf(pdf_path, filename=filename)
+            db.query(Paper).filter(Paper.paper_id == paper_id).update(
+                {
+                    Paper.n_pages: paper.n_pages,
+                    Paper.n_chars: paper.n_chars,
+                    Paper.parse_status: "extracting",
+                }
+            )
+            _set_paper_status(db, analysis_id, "extracting")
+
+            # 8. LLM extract.
+            # Phase 8: arm the safety violation callback so any secrets /
+            # injection patterns detected in the paper text are logged on
+            # ``state.errors``. The callback is cleared after the call so a
+            # subsequent workflow step doesn't accidentally inherit it.
+            llm._on_violations = make_violation_callback(
+                db, analysis_id=analysis_id,
+            )
+            try:
+                claims: list[Claim] = extract_claims_from_paper(llm, paper)
+            finally:
+                llm._on_violations = None
+
+            # 9-10. Persist claims + mark done.
+            _persist_claims(db, analysis_id, claims)
+            db.query(Paper).filter(Paper.paper_id == paper_id).update(
+                {
+                    Paper.parse_status: "done",
+                    Paper.parsed_at: func.now(),
+                }
+            )
+            _set_paper_status(db, analysis_id, "done", completed=True)
             db.commit()
-        raise
+
+            root_span.set_attribute("paper.n_claims", len(claims))
+
+            return WorkflowResult(
+                analysis_id=analysis_id,
+                paper_id=paper_id,
+                parse_status="done",
+                n_claims=len(claims),
+            )
+        except Exception as exc:
+            db.rollback()
+            # Persist the error against the analysis row so a future
+            # GET /analyses/{id}/claims can surface it.
+            _record_error(db, analysis_id, exc)
+            if paper_id is not None and not isinstance(exc, ClaimExtractionError):
+                # Parse errors: keep the paper row visible with parse_status='error'.
+                db.query(Paper).filter(Paper.paper_id == paper_id).update(
+                    {Paper.parse_status: "error", Paper.error: str(exc)[:500]}
+                )
+                db.commit()
+            root_span.record_exception(exc)
+            raise
 
 
 # ----------------------------------------------------------------------

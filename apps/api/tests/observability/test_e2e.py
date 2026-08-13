@@ -18,7 +18,6 @@ as the unit tests, so they're self-contained and CI-safe.
 from __future__ import annotations
 
 import json
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest

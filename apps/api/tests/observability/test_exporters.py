@@ -10,15 +10,9 @@ Covers:
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import pytest
 
 from claim2code_api.app.config import Settings
-
-if TYPE_CHECKING:
-    from opentelemetry.sdk.trace import TracerProvider
-
 
 pytestmark = pytest.mark.observability
 

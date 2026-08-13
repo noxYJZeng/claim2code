@@ -68,6 +68,7 @@ is the Elasticsearch ``function_score`` / Vespa pattern.)
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -78,6 +79,8 @@ from claim2code_api.indexing.embedding_client import EmbeddingClient
 from claim2code_api.indexing.lexical import lexical_search
 from claim2code_api.indexing.retriever import retrieve_semantic
 from claim2code_api.indexing.structural import structural_boost
+from claim2code_api.observability import get_tracer
+from claim2code_api.observability.meter import retriever_request_duration_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -171,109 +174,148 @@ def hybrid_ranker(
     # but cap at 50 to mirror the Phase 4 endpoint cap.
     leg_top_k = min(max(top_k * 3, 15), 50)
 
-    # ---- Leg 1: semantic ----
-    sem_results = retrieve_semantic(
-        db,
-        repository_id,
-        claim,
-        top_k=leg_top_k,
-        embedding_client=embedding_client,
-    )
-
-    # ---- Leg 2: lexical ----
-    lex_results = lexical_search(
-        db,
-        repository_id,
-        claim,
-        top_k=leg_top_k,
-    )
-
-    # ---- Build rank + score maps per leg ----
-    # Ranks are 1-indexed; not-in-leg → omit from sum.
-    sem_ranks: dict[UUID, tuple[int, float]] = {
-        sym.symbol_id: (i + 1, float(sim))
-        for i, (sym, sim) in enumerate(sem_results)
-    }
-    lex_ranks: dict[UUID, tuple[int, float]] = {
-        sid: (i + 1, float(score))
-        for i, (sid, score) in enumerate(lex_results)
-    }
-
-    # Union of (sem,lex) candidates is the pool — structural
-    # isn't a ranker, so it doesn't expand the candidate set.
-    candidate_ids = list({*sem_ranks.keys(), *lex_ranks.keys()})
-    if not candidate_ids:
-        return []
-
-    # ---- Leg 3: structural (multiplier, not rank) ----
-    struct_boosts = structural_boost(db, candidate_ids, claim)
-
-    # ---- RRF fusion ----
-    raw_rrf: dict[UUID, float] = {sid: 0.0 for sid in candidate_ids}
-    for sid in candidate_ids:
-        if sid in sem_ranks:
-            rank, _ = sem_ranks[sid]
-            raw_rrf[sid] += weights.semantic / (_RRF_K + rank)
-        if sid in lex_ranks:
-            rank, _ = lex_ranks[sid]
-            raw_rrf[sid] += weights.lexical / (_RRF_K + rank)
-        # Structural is a multiplier, not a ranker; no RRF contribution.
-
-    # ---- Apply structural boost (multiplicative) ----
-    weight_sum = weights.semantic + weights.lexical + weights.structural
-    # Normaliser: max theoretical RRF = sum(weights) / (k + 1)
-    # (when every leg ranks d at position 1). We multiply so
-    # the surface value lands in ``[0, sum(weights)]``.
-    normaliser = (_RRF_K + 1)
-
-    matches: list[HybridMatch] = []
-    for sid in candidate_ids:
-        raw = raw_rrf[sid]
-        boost = struct_boosts.get(sid, 1.0)
-        # raw * normaliser → max raw * normaliser = sum(weights)
-        # at the theoretical-max RRF.
-        normalised = raw * normaliser * boost
-        # Clamp to [0, weight_sum * boost_max] so a future
-        # structural cap change doesn't push us over 1.
-        normalised = min(normalised, weight_sum * 2.2)
-
-        matches.append(
-            HybridMatch(
-                symbol_id=sid,
-                final_score=normalised,
-                rank_semantic=sem_ranks[sid][0] if sid in sem_ranks else None,
-                score_semantic=sem_ranks[sid][1] if sid in sem_ranks else None,
-                rank_lexical=lex_ranks[sid][0] if sid in lex_ranks else None,
-                score_lexical=lex_ranks[sid][1] if sid in lex_ranks else None,
-                rank_structural=None,  # structural isn't a ranker in v1
-                struct_boost=boost,
+    # Phase 9: open the orchestrator span up-front. The 3 legs
+    # each open a child span with the ``retrieval.leg`` attribute
+    # so per-leg latency is attributable in the trace UI.
+    # ``retriever_request_duration_seconds`` records the same wall
+    # time as a histogram observation per leg.
+    tracer = get_tracer(__name__)
+    retriever_duration = retriever_request_duration_seconds()
+    with tracer.start_as_current_span(
+        "retrieval.hybrid_ranker",
+        attributes={
+            "retrieval.top_k": top_k,
+            "retrieval.leg_top_k": leg_top_k,
+            "retrieval.weights": str(weights.as_dict()),
+        },
+    ) as root_span:
+        # ---- Leg 1: semantic ----
+        leg_start = time.monotonic()
+        with tracer.start_as_current_span(
+            "retrieval.semantic",
+            attributes={"retrieval.leg": "semantic"},
+        ):
+            sem_results = retrieve_semantic(
+                db,
+                repository_id,
+                claim,
+                top_k=leg_top_k,
+                embedding_client=embedding_client,
             )
+        retriever_duration.record(
+            time.monotonic() - leg_start, {"leg": "semantic"},
         )
 
-    # Sort by final_score desc, then by symbol_id (stable tie-break).
-    matches.sort(key=lambda m: (-m.final_score, str(m.symbol_id)))
+        # ---- Leg 2: lexical ----
+        leg_start = time.monotonic()
+        with tracer.start_as_current_span(
+            "retrieval.lexical",
+            attributes={"retrieval.leg": "lexical"},
+        ):
+            lex_results = lexical_search(
+                db,
+                repository_id,
+                claim,
+                top_k=leg_top_k,
+            )
+        retriever_duration.record(
+            time.monotonic() - leg_start, {"leg": "lexical"},
+        )
 
-    # Bulk-fetch CodeSymbol rows for the top_k survivors so the
-    # caller can render name / file_path / signature without a
-    # second query.
-    top = matches[:top_k]
-    if not top:
-        return []
+        # ---- Build rank + score maps per leg ----
+        # Ranks are 1-indexed; not-in-leg → omit from sum.
+        sem_ranks: dict[UUID, tuple[int, float]] = {
+            sym.symbol_id: (i + 1, float(sim))
+            for i, (sym, sim) in enumerate(sem_results)
+        }
+        lex_ranks: dict[UUID, tuple[int, float]] = {
+            sid: (i + 1, float(score))
+            for i, (sid, score) in enumerate(lex_results)
+        }
 
-    top_ids = [m.symbol_id for m in top]
-    symbols = (
-        db.query(CodeSymbol)
-        .filter(CodeSymbol.symbol_id.in_(top_ids))
-        .all()
-    )
-    by_id = {s.symbol_id: s for s in symbols}
+        # Union of (sem,lex) candidates is the pool — structural
+        # isn't a ranker, so it doesn't expand the candidate set.
+        candidate_ids = list({*sem_ranks.keys(), *lex_ranks.keys()})
+        if not candidate_ids:
+            root_span.set_attribute("retrieval.result_count", 0)
+            return []
 
-    # Filter out any matches whose symbol row vanished (orphan).
-    return [
-        m
-        for m in top
-        if m.symbol_id in by_id
-    ]
+        # ---- Leg 3: structural (multiplier, not rank) ----
+        leg_start = time.monotonic()
+        with tracer.start_as_current_span(
+            "retrieval.structural",
+            attributes={"retrieval.leg": "structural"},
+        ):
+            struct_boosts = structural_boost(db, candidate_ids, claim)
+        retriever_duration.record(
+            time.monotonic() - leg_start, {"leg": "structural"},
+        )
+
+        # ---- RRF fusion ----
+        raw_rrf: dict[UUID, float] = {sid: 0.0 for sid in candidate_ids}
+        for sid in candidate_ids:
+            if sid in sem_ranks:
+                rank, _ = sem_ranks[sid]
+                raw_rrf[sid] += weights.semantic / (_RRF_K + rank)
+            if sid in lex_ranks:
+                rank, _ = lex_ranks[sid]
+                raw_rrf[sid] += weights.lexical / (_RRF_K + rank)
+            # Structural is a multiplier, not a ranker; no RRF contribution.
+
+        # ---- Apply structural boost (multiplicative) ----
+        weight_sum = weights.semantic + weights.lexical + weights.structural
+        # Normaliser: max theoretical RRF = sum(weights) / (k + 1)
+        # (when every leg ranks d at position 1). We multiply so
+        # the surface value lands in ``[0, sum(weights)]``.
+        normaliser = (_RRF_K + 1)
+
+        matches: list[HybridMatch] = []
+        for sid in candidate_ids:
+            raw = raw_rrf[sid]
+            boost = struct_boosts.get(sid, 1.0)
+            # raw * normaliser → max raw * normaliser = sum(weights)
+            # at the theoretical-max RRF.
+            normalised = raw * normaliser * boost
+            # Clamp to [0, weight_sum * boost_max] so a future
+            # structural cap change doesn't push us over 1.
+            normalised = min(normalised, weight_sum * 2.2)
+
+            matches.append(
+                HybridMatch(
+                    symbol_id=sid,
+                    final_score=normalised,
+                    rank_semantic=sem_ranks[sid][0] if sid in sem_ranks else None,
+                    score_semantic=sem_ranks[sid][1] if sid in sem_ranks else None,
+                    rank_lexical=lex_ranks[sid][0] if sid in lex_ranks else None,
+                    score_lexical=lex_ranks[sid][1] if sid in lex_ranks else None,
+                    rank_structural=None,  # structural isn't a ranker in v1
+                    struct_boost=boost,
+                )
+            )
+
+        # Sort by final_score desc, then by symbol_id (stable tie-break).
+        matches.sort(key=lambda m: (-m.final_score, str(m.symbol_id)))
+
+        # Bulk-fetch CodeSymbol rows for the top_k survivors so the
+        # caller can render name / file_path / signature without a
+        # second query.
+        top = matches[:top_k]
+        if not top:
+            root_span.set_attribute("retrieval.result_count", 0)
+            return []
+
+        top_ids = [m.symbol_id for m in top]
+        symbols = (
+            db.query(CodeSymbol)
+            .filter(CodeSymbol.symbol_id.in_(top_ids))
+            .all()
+        )
+        by_id = {s.symbol_id: s for s in symbols}
+
+        # Filter out any matches whose symbol row vanished (orphan).
+        survivors = [m for m in top if m.symbol_id in by_id]
+        root_span.set_attribute("retrieval.result_count", len(survivors))
+        return survivors
 
 
 __all__ = ["hybrid_ranker", "HybridMatch", "HybridWeights"]

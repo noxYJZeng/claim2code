@@ -63,5 +63,22 @@ Phase 8: ✅ responsible-AI safety gate — `SafetyGate` wraps every
   (`pytest -m safety`); new CI job `backend-safety` gates
   Phase 8. Wiring `evaluate_safety.py` (secret-leak + injection-
   block rate vs target 100%) is Phase 10's job.
-Phase 9+: wire observability evaluator.
+Phase 9: ✅ OpenTelemetry spans + per-step metrics. Every workflow
+  call opens a root span (`paper_workflow.run`,
+  `verification_workflow.run`, `related_work_workflow.run`); child
+  spans for per-claim (`verification.claim_verify`), per-paper
+  (`literature.paper_compare`), per-LLM-call
+  (`llm.{extract_claims,verdict,compare}`), per-retriever-leg
+  (`retrieval.{semantic,lexical,structural}`); `safety.gate_wrap`
+  auto-parents under each LLM span via OTel contextvars. 4 metric
+  instruments — `llm_tokens_total` (counter, model+kind),
+  `llm_request_duration_seconds` (histogram),
+  `retriever_request_duration_seconds` (histogram, leg label),
+  `safety_violations_total` (counter, pattern label). Console
+  exporter default + OTLP-HTTP optional via
+  `OTEL_EXPORTER_OTLP_ENDPOINT`; `FastAPIInstrumentor` wraps every
+  HTTP request as a server span. 29 tests (`pytest -m
+  observability`); new CI job `backend-observability` gates
+  Phase 9. Wiring `evaluate_observability.py` (per-leg latency
+  distribution + token cost + violation rate) is Phase 10's job.
 Phase 10: full eval suite + measured numbers back into README.

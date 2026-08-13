@@ -31,6 +31,15 @@ single LLM failure does NOT abort the whole run — the
 problematic claim gets an UNVERIFIED status with an empty
 code_evidence list (and the workflow records the error on
 ``AnalysisState.errors``).
+
+Observability
+-------------
+
+Phase 9: every run opens a root span ``verification_workflow.run``
+(via the package's :func:`get_tracer`); each per-claim iteration
+opens a child span ``verification.claim_verify`` with the
+``claim.id`` and ``claim.type`` attributes so the trace tree is
+drillable per claim in the trace UI.
 """
 from __future__ import annotations
 
@@ -42,6 +51,7 @@ from uuid import UUID
 from claim2code_api.db.models import AnalysisState, CodeSymbol, Repository
 from claim2code_api.indexing.embedding_client import get_embedding_client
 from claim2code_api.llm.client import get_llm_client
+from claim2code_api.observability import get_tracer
 from claim2code_api.papers.schemas import Claim
 from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch
 from claim2code_api.retrieval.hybrid_ranker import HybridWeights, hybrid_ranker
@@ -120,66 +130,105 @@ def run_verification_workflow(
     claims_dicts = _load_claims(state=state, claim_ids=claim_ids)
     repository_id = _repository_id_for(db, analysis_id)
 
-    verifications: list[Verification] = []
-    errors: list[str] = []
+    # Phase 9: open the root span for this verification run. The
+    # per-claim loop below opens child spans so each claim's trace
+    # is drillable independently in the trace UI.
+    tracer = get_tracer(__name__)
+    with tracer.start_as_current_span(
+        "verification_workflow.run",
+        attributes={
+            "verification.analysis_id": str(analysis_id),
+            "verification.top_k": top_k,
+            "verification.n_claims": len(claims_dicts),
+        },
+    ) as root_span:
+        verifications: list[Verification] = []
+        errors: list[str] = []
 
-    for claim_dict in claims_dicts:
-        claim = Claim.model_validate(claim_dict)
-        try:
-            verification, llm_error = _verify_one_claim(
-                db=db,
-                analysis_id=analysis_id,
-                claim=claim,
-                repository_id=repository_id,
-                top_k=top_k,
-            )
-        except Exception as exc:  # noqa: BLE001 — per-claim isolation
-            logger.exception(
-                "verification failed claim=%s: %s", claim.claim_id, exc,
-            )
-            errors.append(f"{claim.claim_id}: {exc.__class__.__name__}: {exc}")
-            verification = _error_verification(claim, exc)
-        else:
-            # LLM failure is isolated (the claim still gets a
-            # UNVERIFIED verification), but we surface the error
-            # on the workflow result so callers can see what went
-            # wrong per claim.
-            if llm_error is not None:
-                errors.append(f"{claim.claim_id}: {llm_error}")
-        verifications.append(verification)
+        for claim_dict in claims_dicts:
+            claim = Claim.model_validate(claim_dict)
+            # Child span per claim — disambiguates the per-claim
+            # children in the trace UI and tags the final status.
+            with tracer.start_as_current_span(
+                "verification.claim_verify",
+                attributes={
+                    "claim.id": claim.claim_id,
+                    "claim.type": claim.claim_type.value
+                    if hasattr(claim.claim_type, "value")
+                    else str(claim.claim_type),
+                },
+            ) as claim_span:
+                try:
+                    verification, llm_error = _verify_one_claim(
+                        db=db,
+                        analysis_id=analysis_id,
+                        claim=claim,
+                        repository_id=repository_id,
+                        top_k=top_k,
+                    )
+                except Exception as exc:  # noqa: BLE001 — per-claim isolation
+                    claim_span.record_exception(exc)
+                    logger.exception(
+                        "verification failed claim=%s: %s", claim.claim_id, exc,
+                    )
+                    errors.append(
+                        f"{claim.claim_id}: {exc.__class__.__name__}: {exc}",
+                    )
+                    verification = _error_verification(claim, exc)
+                else:
+                    # LLM failure is isolated (the claim still gets a
+                    # UNVERIFIED verification), but we surface the
+                    # error on the workflow result so callers can see
+                    # what failed per claim.
+                    if llm_error is not None:
+                        errors.append(f"{claim.claim_id}: {llm_error}")
+                claim_span.set_attribute(
+                    "verification.status",
+                    verification.status.value
+                    if hasattr(verification.status, "value")
+                    else str(verification.status),
+                )
+            verifications.append(verification)
 
-    verifications.sort(key=lambda v: v.claim_id)
+        verifications.sort(key=lambda v: v.claim_id)
 
-    # Persist to JSONB. The AnalysisState.verifications column was
-    # pre-staged in Phase 1's 0001_init migration; Phase 6 only
-    # writes to it.
-    state.verifications = [v.model_dump(mode="json") for v in verifications]
-    state.errors = (state.errors or []) + [
-        {"stage": "verify", "message": e} for e in errors
-    ]
-    db.flush()
+        # Persist to JSONB. The AnalysisState.verifications column
+        # was pre-staged in Phase 1's 0001_init migration; Phase 6
+        # only writes to it.
+        state.verifications = [v.model_dump(mode="json") for v in verifications]
+        state.errors = (state.errors or []) + [
+            {"stage": "verify", "message": e} for e in errors
+        ]
+        db.flush()
 
-    # Tally status counts.
-    n_verified = sum(1 for v in verifications if v.status == VerificationStatus.VERIFIED)
-    n_partial = sum(
-        1 for v in verifications if v.status == VerificationStatus.PARTIALLY_VERIFIED
-    )
-    n_contradicted = sum(
-        1 for v in verifications if v.status == VerificationStatus.CONTRADICTED
-    )
-    n_unverified = sum(
-        1 for v in verifications if v.status == VerificationStatus.UNVERIFIED
-    )
+        # Tally status counts.
+        n_verified = sum(
+            1 for v in verifications if v.status == VerificationStatus.VERIFIED
+        )
+        n_partial = sum(
+            1 for v in verifications if v.status == VerificationStatus.PARTIALLY_VERIFIED
+        )
+        n_contradicted = sum(
+            1 for v in verifications if v.status == VerificationStatus.CONTRADICTED
+        )
+        n_unverified = sum(
+            1 for v in verifications if v.status == VerificationStatus.UNVERIFIED
+        )
 
-    return VerificationWorkflowResult(
-        analysis_id=analysis_id,
-        verifications=verifications,
-        n_verified=n_verified,
-        n_partially_verified=n_partial,
-        n_contradicted=n_contradicted,
-        n_unverified=n_unverified,
-        errors=errors,
-    )
+        root_span.set_attribute("verification.n_verified", n_verified)
+        root_span.set_attribute("verification.n_partially_verified", n_partial)
+        root_span.set_attribute("verification.n_contradicted", n_contradicted)
+        root_span.set_attribute("verification.n_unverified", n_unverified)
+
+        return VerificationWorkflowResult(
+            analysis_id=analysis_id,
+            verifications=verifications,
+            n_verified=n_verified,
+            n_partially_verified=n_partial,
+            n_contradicted=n_contradicted,
+            n_unverified=n_unverified,
+            errors=errors,
+        )
 
 
 # ----------------------------------------------------------------------

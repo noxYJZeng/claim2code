@@ -30,8 +30,10 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from threading import Lock
+from typing import Any
 
 import httpx
 from openai import (
@@ -41,11 +43,17 @@ from openai import (
     AuthenticationError,
     OpenAI,
 )
+from opentelemetry.trace import Span
 from pydantic import ValidationError
 
 from claim2code_api.app.config import Settings, get_settings
 from claim2code_api.literature.exceptions import LiteratureComparisonError
 from claim2code_api.literature.schemas import Comparison, ScholarPaper
+from claim2code_api.observability import (
+    get_tracer,
+    llm_request_duration_seconds,
+    llm_tokens_total,
+)
 from claim2code_api.papers.exceptions import ClaimExtractionError
 from claim2code_api.papers.schemas import Claim, ClaimList, Paper, PaperEvidence
 from claim2code_api.repos.schemas import RetrieveMatch
@@ -214,6 +222,40 @@ class LLMClient:
             Callable[[str, list[SafetyViolation]], None] | None
         ) = None
 
+    def _record_llm_metrics(
+        self,
+        *,
+        span: Span,
+        response: Any,
+        kind: str,
+        duration_seconds: float,
+    ) -> None:
+        """Phase 9: attribute tokens + duration on the active span + metric.
+
+        OpenAI returns ``response.usage`` on every successful call
+        (prompt_tokens / completion_tokens / total_tokens). We
+        record both on the span (for per-call drill-down) and on
+        the global counter / histogram (for fleet-wide rollup).
+
+        The duration is the wall-clock time around
+        ``chat.completions.create(...)`` — it includes the SDK's
+        own retries on 429 / 5xx.
+        """
+        model = self._settings.openai_model_chat
+        usage = getattr(response, "usage", None)
+        if usage is not None:
+            prompt = getattr(usage, "prompt_tokens", None) or 0
+            completion = getattr(usage, "completion_tokens", None) or 0
+            total = getattr(usage, "total_tokens", None) or 0
+            span.set_attribute("llm.tokens.prompt", int(prompt))
+            span.set_attribute("llm.tokens.completion", int(completion))
+            span.set_attribute("llm.tokens.total", int(total))
+            llm_tokens_total().add(int(total), {"model": model, "kind": kind})
+        llm_request_duration_seconds().record(
+            duration_seconds,
+            {"model": model, "kind": kind},
+        )
+
     # ------------------------------------------------------------------
     # Claim extraction
     # ------------------------------------------------------------------
@@ -234,33 +276,70 @@ class LLMClient:
             {"role": "system", "content": _EXTRACT_SYSTEM_PROMPT},
             {"role": "user", "content": user_payload},
         ]
-        gate_result = self._gate.wrap_messages(messages, kind="extract_claims")
 
-        try:
-            response = self._client.chat.completions.create(
-                model=self._settings.openai_model_chat,
-                messages=gate_result.messages,  # type: ignore[call-overload]
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "claim_list",
-                        "strict": True,
-                        "schema": schema,
-                    },
-                },
+        # Phase 9: wrap the SDK call in an OTel span. The
+        # ``safety.gate_wrap`` child span (Phase 8) auto-parents
+        # under this span via OTel's contextvars propagation because
+        # we call ``wrap_messages`` *inside* the span block.
+        tracer = get_tracer(__name__)
+        with tracer.start_as_current_span(
+            "llm.extract_claims",
+            attributes={
+                "llm.method": "extract_claims",
+                "llm.model": self._settings.openai_model_chat,
+            },
+        ) as span:
+            gate_result = self._gate.wrap_messages(messages, kind="extract_claims")
+            span.set_attribute(
+                "llm.message_count", len(gate_result.messages),
             )
-        except (APIConnectionError, APITimeoutError) as exc:
-            raise ClaimExtractionError(
-                f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
-            ) from exc
-        except AuthenticationError as exc:
-            raise ClaimExtractionError(
-                f"LLM auth error (check OPENAI_API_KEY): {exc}"
-            ) from exc
-        except APIStatusError as exc:
-            raise ClaimExtractionError(
-                f"LLM returned {exc.status_code}: {exc.message}"
-            ) from exc
+            span.set_attribute(
+                "llm.violations.secret_count",
+                sum(v.span_count for v in gate_result.violations if v.kind == "secret"),
+            )
+            span.set_attribute(
+                "llm.violations.injection_count",
+                sum(
+                    v.span_count
+                    for v in gate_result.violations
+                    if v.kind == "injection"
+                ),
+            )
+            start = time.monotonic()
+            try:
+                response = self._client.chat.completions.create(
+                    model=self._settings.openai_model_chat,
+                    messages=gate_result.messages,  # type: ignore[call-overload]
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "claim_list",
+                            "strict": True,
+                            "schema": schema,
+                        },
+                    },
+                )
+            except (APIConnectionError, APITimeoutError) as exc:
+                span.record_exception(exc)
+                raise ClaimExtractionError(
+                    f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
+                ) from exc
+            except AuthenticationError as exc:
+                span.record_exception(exc)
+                raise ClaimExtractionError(
+                    f"LLM auth error (check OPENAI_API_KEY): {exc}"
+                ) from exc
+            except APIStatusError as exc:
+                span.record_exception(exc)
+                raise ClaimExtractionError(
+                    f"LLM returned {exc.status_code}: {exc.message}"
+                ) from exc
+            self._record_llm_metrics(
+                span=span,
+                response=response,
+                kind="extract_claims",
+                duration_seconds=time.monotonic() - start,
+            )
 
         if not response.choices:
             raise ClaimExtractionError("LLM returned no choices")
@@ -336,33 +415,69 @@ class LLMClient:
             {"role": "system", "content": _VERIFY_SYSTEM_PROMPT},
             {"role": "user", "content": user_payload},
         ]
-        gate_result = self._gate.wrap_messages(messages, kind="verdict")
 
-        try:
-            response = self._client.chat.completions.create(
-                model=self._settings.openai_model_chat,
-                messages=gate_result.messages,  # type: ignore[call-overload]
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "verification",
-                        "strict": True,
-                        "schema": schema,
-                    },
-                },
+        # Phase 9: wrap the SDK call in an OTel span. The
+        # ``safety.gate_wrap`` child span auto-parents under this
+        # span via OTel's contextvars propagation because
+        # ``wrap_messages`` is called inside it.
+        tracer = get_tracer(__name__)
+        with tracer.start_as_current_span(
+            "llm.verdict",
+            attributes={
+                "llm.method": "verdict",
+                "llm.model": self._settings.openai_model_chat,
+                "llm.candidate_count": len(candidates),
+            },
+        ) as span:
+            gate_result = self._gate.wrap_messages(messages, kind="verdict")
+            span.set_attribute("llm.message_count", len(gate_result.messages))
+            span.set_attribute(
+                "llm.violations.secret_count",
+                sum(v.span_count for v in gate_result.violations if v.kind == "secret"),
             )
-        except (APIConnectionError, APITimeoutError) as exc:
-            raise VerificationLLMError(
-                f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
-            ) from exc
-        except AuthenticationError as exc:
-            raise VerificationLLMError(
-                f"LLM auth error (check OPENAI_API_KEY): {exc}"
-            ) from exc
-        except APIStatusError as exc:
-            raise VerificationLLMError(
-                f"LLM returned {exc.status_code}: {exc.message}"
-            ) from exc
+            span.set_attribute(
+                "llm.violations.injection_count",
+                sum(
+                    v.span_count
+                    for v in gate_result.violations
+                    if v.kind == "injection"
+                ),
+            )
+            start = time.monotonic()
+            try:
+                response = self._client.chat.completions.create(
+                    model=self._settings.openai_model_chat,
+                    messages=gate_result.messages,  # type: ignore[call-overload]
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "verification",
+                            "strict": True,
+                            "schema": schema,
+                        },
+                    },
+                )
+            except (APIConnectionError, APITimeoutError) as exc:
+                span.record_exception(exc)
+                raise VerificationLLMError(
+                    f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
+                ) from exc
+            except AuthenticationError as exc:
+                span.record_exception(exc)
+                raise VerificationLLMError(
+                    f"LLM auth error (check OPENAI_API_KEY): {exc}"
+                ) from exc
+            except APIStatusError as exc:
+                span.record_exception(exc)
+                raise VerificationLLMError(
+                    f"LLM returned {exc.status_code}: {exc.message}"
+                ) from exc
+            self._record_llm_metrics(
+                span=span,
+                response=response,
+                kind="verdict",
+                duration_seconds=time.monotonic() - start,
+            )
 
         if not response.choices:
             raise VerificationLLMError("LLM returned no choices")
@@ -455,33 +570,69 @@ class LLMClient:
             {"role": "system", "content": _COMPARE_SYSTEM_PROMPT},
             {"role": "user", "content": user_payload},
         ]
-        gate_result = self._gate.wrap_messages(messages, kind="compare")
 
-        try:
-            response = self._client.chat.completions.create(
-                model=self._settings.openai_model_chat,
-                messages=gate_result.messages,  # type: ignore[call-overload]
-                response_format={
-                    "type": "json_schema",
-                    "json_schema": {
-                        "name": "comparison",
-                        "strict": True,
-                        "schema": schema,
-                    },
-                },
+        # Phase 9: wrap the SDK call in an OTel span. The
+        # ``safety.gate_wrap`` child span auto-parents under this
+        # span via OTel's contextvars propagation because
+        # ``wrap_messages`` is called inside it.
+        tracer = get_tracer(__name__)
+        with tracer.start_as_current_span(
+            "llm.compare",
+            attributes={
+                "llm.method": "compare",
+                "llm.model": self._settings.openai_model_chat,
+                "llm.paper_id": paper.paper_id,
+            },
+        ) as span:
+            gate_result = self._gate.wrap_messages(messages, kind="compare")
+            span.set_attribute("llm.message_count", len(gate_result.messages))
+            span.set_attribute(
+                "llm.violations.secret_count",
+                sum(v.span_count for v in gate_result.violations if v.kind == "secret"),
             )
-        except (APIConnectionError, APITimeoutError) as exc:
-            raise LiteratureComparisonError(
-                f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
-            ) from exc
-        except AuthenticationError as exc:
-            raise LiteratureComparisonError(
-                f"LLM auth error (check OPENAI_API_KEY): {exc}"
-            ) from exc
-        except APIStatusError as exc:
-            raise LiteratureComparisonError(
-                f"LLM returned {exc.status_code}: {exc.message}"
-            ) from exc
+            span.set_attribute(
+                "llm.violations.injection_count",
+                sum(
+                    v.span_count
+                    for v in gate_result.violations
+                    if v.kind == "injection"
+                ),
+            )
+            start = time.monotonic()
+            try:
+                response = self._client.chat.completions.create(
+                    model=self._settings.openai_model_chat,
+                    messages=gate_result.messages,  # type: ignore[call-overload]
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": "comparison",
+                            "strict": True,
+                            "schema": schema,
+                        },
+                    },
+                )
+            except (APIConnectionError, APITimeoutError) as exc:
+                span.record_exception(exc)
+                raise LiteratureComparisonError(
+                    f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
+                ) from exc
+            except AuthenticationError as exc:
+                span.record_exception(exc)
+                raise LiteratureComparisonError(
+                    f"LLM auth error (check OPENAI_API_KEY): {exc}"
+                ) from exc
+            except APIStatusError as exc:
+                span.record_exception(exc)
+                raise LiteratureComparisonError(
+                    f"LLM returned {exc.status_code}: {exc.message}"
+                ) from exc
+            self._record_llm_metrics(
+                span=span,
+                response=response,
+                kind="compare",
+                duration_seconds=time.monotonic() - start,
+            )
 
         if not response.choices:
             raise LiteratureComparisonError("LLM returned no choices")

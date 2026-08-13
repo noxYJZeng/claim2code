@@ -26,8 +26,41 @@ from claim2code_api.verification.router import router as verification_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Application lifespan. Phase 1 has no startup work; the engine is lazy."""
-    yield
+    """Application lifespan.
+
+    Startup:
+      * Wire the global OTel TracerProvider + MeterProvider from
+        Settings (console exporter default; OTLP when
+        ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set).
+      * Install ``FastAPIInstrumentor`` so every HTTP request
+        opens a server span (idempotent — safe across hot reloads).
+
+    Teardown:
+      * Flush + shut down both providers so any in-flight spans /
+        metric batches are exported before the process exits.
+    """
+    # Imported lazily so module import doesn't require the OTel
+    # instrumentation package to be installed in the test default
+    # path. ``FastAPIInstrumentor`` is an idempotent no-op when
+    # called twice — keep the same FastAPIInstrumentor.instrument_app
+    # invocation pattern as the FastAPI docs.
+    from claim2code_api.observability import setup_metrics, setup_tracing
+
+    settings = get_settings()
+    tracer_provider = setup_tracing(settings)
+    meter_provider = setup_metrics(settings)
+
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+    FastAPIInstrumentor.instrument_app(app)
+
+    try:
+        yield
+    finally:
+        if tracer_provider is not None:
+            tracer_provider.shutdown()
+        if meter_provider is not None:
+            meter_provider.shutdown()
 
 
 def create_app() -> FastAPI:

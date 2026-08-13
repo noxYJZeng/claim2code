@@ -38,6 +38,14 @@ dependencies = [
     # itself is provided by the pgvector image; this Python package
     # teaches the driver the ``VECTOR(...)`` type).
     "pgvector>=0.3",
+    # Phase 9 — OpenTelemetry tracing + metrics. API + SDK + OTLP-HTTP
+    # exporter + FastAPI instrumentation. Console exporter lives in the
+    # SDK itself. Pin minor versions so a future OTel release cannot
+    # silently change span semantics on us.
+    "opentelemetry-api>=1.27,<2",
+    "opentelemetry-sdk>=1.27,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.27,<2",
+    "opentelemetry-instrumentation-fastapi>=0.48b0,<1",
 ]
 
 [project.optional-dependencies]
@@ -74,8 +82,9 @@ testpaths = ["tests"]
 # Integration tests are opt-in: ``make test-integration`` adds the
 # ``-m integration`` flag, so plain ``pytest`` runs only unit tests
 # (and skips anything that needs a real Postgres / docker).
-addopts = "-m 'not integration and not safety'"
+addopts = "-m 'not integration and not safety and not observability'"
 markers = [
     "integration: integration tests (require docker / testcontainers)",
     "safety: responsible-AI adversarial tests",
+    "observability: Phase 9 OTel tracing/metrics tests (opt-in; default suite skips)",
 ]

@@ -276,28 +276,35 @@ class LLMClient:
             {"role": "system", "content": _EXTRACT_SYSTEM_PROMPT},
             {"role": "user", "content": user_payload},
         ]
-        gate_result = self._gate.wrap_messages(messages, kind="extract_claims")
 
         # Phase 9: wrap the SDK call in an OTel span. The
-        # ``safety.gate_wrap`` child span (Phase 8) automatically
-        # parents under this span via OTel's contextvars propagation.
+        # ``safety.gate_wrap`` child span (Phase 8) auto-parents
+        # under this span via OTel's contextvars propagation because
+        # we call ``wrap_messages`` *inside* the span block.
         tracer = get_tracer(__name__)
         with tracer.start_as_current_span(
             "llm.extract_claims",
             attributes={
                 "llm.method": "extract_claims",
                 "llm.model": self._settings.openai_model_chat,
-                "llm.message_count": len(gate_result.messages),
-                "llm.violations.secret_count": sum(
-                    v.span_count for v in gate_result.violations if v.kind == "secret"
-                ),
-                "llm.violations.injection_count": sum(
+            },
+        ) as span:
+            gate_result = self._gate.wrap_messages(messages, kind="extract_claims")
+            span.set_attribute(
+                "llm.message_count", len(gate_result.messages),
+            )
+            span.set_attribute(
+                "llm.violations.secret_count",
+                sum(v.span_count for v in gate_result.violations if v.kind == "secret"),
+            )
+            span.set_attribute(
+                "llm.violations.injection_count",
+                sum(
                     v.span_count
                     for v in gate_result.violations
                     if v.kind == "injection"
                 ),
-            },
-        ) as span:
+            )
             start = time.monotonic()
             try:
                 response = self._client.chat.completions.create(
@@ -408,27 +415,34 @@ class LLMClient:
             {"role": "system", "content": _VERIFY_SYSTEM_PROMPT},
             {"role": "user", "content": user_payload},
         ]
-        gate_result = self._gate.wrap_messages(messages, kind="verdict")
 
-        # Phase 9: wrap the SDK call in an OTel span.
+        # Phase 9: wrap the SDK call in an OTel span. The
+        # ``safety.gate_wrap`` child span auto-parents under this
+        # span via OTel's contextvars propagation because
+        # ``wrap_messages`` is called inside it.
         tracer = get_tracer(__name__)
         with tracer.start_as_current_span(
             "llm.verdict",
             attributes={
                 "llm.method": "verdict",
                 "llm.model": self._settings.openai_model_chat,
-                "llm.message_count": len(gate_result.messages),
                 "llm.candidate_count": len(candidates),
-                "llm.violations.secret_count": sum(
-                    v.span_count for v in gate_result.violations if v.kind == "secret"
-                ),
-                "llm.violations.injection_count": sum(
+            },
+        ) as span:
+            gate_result = self._gate.wrap_messages(messages, kind="verdict")
+            span.set_attribute("llm.message_count", len(gate_result.messages))
+            span.set_attribute(
+                "llm.violations.secret_count",
+                sum(v.span_count for v in gate_result.violations if v.kind == "secret"),
+            )
+            span.set_attribute(
+                "llm.violations.injection_count",
+                sum(
                     v.span_count
                     for v in gate_result.violations
                     if v.kind == "injection"
                 ),
-            },
-        ) as span:
+            )
             start = time.monotonic()
             try:
                 response = self._client.chat.completions.create(
@@ -556,27 +570,34 @@ class LLMClient:
             {"role": "system", "content": _COMPARE_SYSTEM_PROMPT},
             {"role": "user", "content": user_payload},
         ]
-        gate_result = self._gate.wrap_messages(messages, kind="compare")
 
-        # Phase 9: wrap the SDK call in an OTel span.
+        # Phase 9: wrap the SDK call in an OTel span. The
+        # ``safety.gate_wrap`` child span auto-parents under this
+        # span via OTel's contextvars propagation because
+        # ``wrap_messages`` is called inside it.
         tracer = get_tracer(__name__)
         with tracer.start_as_current_span(
             "llm.compare",
             attributes={
                 "llm.method": "compare",
                 "llm.model": self._settings.openai_model_chat,
-                "llm.message_count": len(gate_result.messages),
                 "llm.paper_id": paper.paper_id,
-                "llm.violations.secret_count": sum(
-                    v.span_count for v in gate_result.violations if v.kind == "secret"
-                ),
-                "llm.violations.injection_count": sum(
+            },
+        ) as span:
+            gate_result = self._gate.wrap_messages(messages, kind="compare")
+            span.set_attribute("llm.message_count", len(gate_result.messages))
+            span.set_attribute(
+                "llm.violations.secret_count",
+                sum(v.span_count for v in gate_result.violations if v.kind == "secret"),
+            )
+            span.set_attribute(
+                "llm.violations.injection_count",
+                sum(
                     v.span_count
                     for v in gate_result.violations
                     if v.kind == "injection"
                 ),
-            },
-        ) as span:
+            )
             start = time.monotonic()
             try:
                 response = self._client.chat.completions.create(

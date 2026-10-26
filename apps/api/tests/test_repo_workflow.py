@@ -38,6 +38,7 @@ from claim2code_api.db.models import (
 )
 from claim2code_api.repos import cloner
 from claim2code_api.repos.exceptions import (
+    RepoAlreadyExistsError,
     RepoCloneError,
     RepoInvalidUrlError,
     RepoTooLargeError,
@@ -293,6 +294,53 @@ def test_workflow_records_error_when_clone_raises_clone_error(
     assert err_blob[0]["type"] == "RepoCloneError"
 
 
+def test_workflow_retry_replaces_row_left_by_failed_ingest(
+    session, analysis_id, fake_clone_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed ingest leaves an ``error`` row; (owner, name) is UNIQUE,
+    so the retry must replace it rather than die on the INSERT."""
+
+    def _fail(url):
+        raise RepoCloneError("git clone failed: timeout")
+
+    monkeypatch.setattr(cloner, "clone_repository", _fail)
+    with pytest.raises(RepoCloneError):
+        run_repo_workflow(db=session, analysis_id=analysis_id, url="https://github.com/acme/demo")
+    (failed,) = session.query(Repository).all()
+    assert failed.index_status == "error"
+    failed_id = failed.repository_id
+
+    removed: list[Path] = []
+    monkeypatch.setattr(cloner, "remove_clone", removed.append)
+    fake_result = MagicMock(clone_path=fake_clone_dir, default_branch="main")
+    monkeypatch.setattr(cloner, "clone_repository", lambda url: fake_result)
+    result = run_repo_workflow(
+        db=session, analysis_id=analysis_id, url="https://github.com/acme/demo"
+    )
+
+    assert result.index_status == "done"
+    (row,) = session.query(Repository).all()
+    assert row.repository_id == result.repository_id != failed_id
+    assert removed == [Path(failed.clone_path)]
+
+
+def test_workflow_refuses_to_reingest_a_done_repository(
+    session, analysis_id, fake_clone_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_result = MagicMock(clone_path=fake_clone_dir, default_branch="main")
+    monkeypatch.setattr(cloner, "clone_repository", lambda url: fake_result)
+    first = run_repo_workflow(
+        db=session, analysis_id=analysis_id, url="https://github.com/acme/demo"
+    )
+
+    with pytest.raises(RepoAlreadyExistsError) as excinfo:
+        run_repo_workflow(db=session, analysis_id=analysis_id, url="https://github.com/acme/demo")
+
+    assert excinfo.value.repository_id == first.repository_id
+    assert session.query(Repository).count() == 1
+    assert session.query(CodeSymbol).count() == first.n_symbols
+
+
 # ============================================================
 # HTTP layer — POST /repositories
 # ============================================================
@@ -348,7 +396,11 @@ def _wire_workflow_to_insert_row(m: MagicMock, session_factory) -> None:
     repository_id = uuid4()
 
     def _side_effect(
-        *, db, analysis_id: UUID, url: str, exclude_paths: list[str] | None = None,
+        *,
+        db,
+        analysis_id: UUID,
+        url: str,
+        exclude_paths: list[str] | None = None,
     ) -> RepoWorkflowResult:
         row = Repository(
             repository_id=repository_id,
@@ -549,6 +601,26 @@ def test_post_repositories_maps_clone_error_to_500(
     )
     assert response.status_code == 500
     assert "git clone failed" in response.json()["detail"]
+
+
+def test_post_repositories_maps_already_exists_to_409(
+    repo_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import claim2code_api.repos.router as router_mod
+
+    existing = uuid4()
+    monkeypatch.setattr(
+        router_mod,
+        "run_repo_workflow",
+        MagicMock(side_effect=RepoAlreadyExistsError(existing, "done")),
+    )
+    seeded = repo_client.seed_analysis_id  # type: ignore[attr-defined]
+    response = repo_client.post(
+        "/repositories",
+        json={"url": "https://github.com/acme/demo", "analysis_id": str(seeded)},
+    )
+    assert response.status_code == 409
+    assert str(existing) in response.json()["detail"]
 
 
 def test_post_repositories_rejects_missing_url(repo_client: TestClient) -> None:

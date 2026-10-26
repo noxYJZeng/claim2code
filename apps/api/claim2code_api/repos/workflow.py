@@ -33,6 +33,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import func
@@ -49,6 +50,7 @@ from claim2code_api.indexing.indexer import embed_and_persist_symbols
 from claim2code_api.repos import cloner
 from claim2code_api.repos.configs import parse_config_file
 from claim2code_api.repos.exceptions import (  # noqa: F401  — referenced in docstrings
+    RepoAlreadyExistsError,
     RepoCloneError,
     RepoInvalidUrlError,
     RepoTooLargeError,
@@ -100,11 +102,14 @@ def run_repo_workflow(
         walking (see :func:`storage.walk_repo_files`).
 
     :raises RepoInvalidUrlError: URL is malformed or non-GitHub.
+    :raises RepoAlreadyExistsError: a non-``error`` row for the same
+        ``owner/name`` exists.
     :raises RepoTooLargeError: GitHub-reported size exceeds the cap.
     :raises RepoCloneError: ``git clone`` failed.
     """
     # Validate URL — this raises RepoInvalidUrlError (mapped to 422).
     parsed = cloner.parse_github_url(url)
+    _clear_failed_repository(db, parsed.owner, parsed.name)
 
     # Insert a placeholder Repository row so we have an id to thread
     # through status updates. Use ``init`` to get the PK without a
@@ -182,6 +187,37 @@ def run_repo_workflow(
         db.commit()
         _record_error(db, analysis_id, exc)
         raise
+
+
+def _clear_failed_repository(db: Session, owner: str, name: str) -> None:
+    """Make room for a fresh ingest of ``owner/name``.
+
+    ``(owner, name)`` is UNIQUE, and a failed ingest leaves its row in
+    ``index_status='error'`` (plus a partial clone on disk), so every
+    retry used to die on the INSERT with a UniqueViolation. Such a row
+    is dead — delete it (FKs cascade its symbols / configs) and its
+    clone. Any other status is a live or in-progress ingest: refuse.
+    """
+    existing = (
+        db.query(Repository)
+        .filter(Repository.owner == owner, Repository.name == name)
+        .one_or_none()
+    )
+    if existing is None:
+        return
+    if existing.index_status != "error":
+        raise RepoAlreadyExistsError(existing.repository_id, existing.index_status)
+    logger.info(
+        "replacing failed repository %s/%s (%s): %s",
+        owner,
+        name,
+        existing.repository_id,
+        existing.error,
+    )
+    clone_path = Path(existing.clone_path)
+    db.delete(existing)
+    db.commit()
+    cloner.remove_clone(clone_path)
 
 
 # ----------------------------------------------------------------------

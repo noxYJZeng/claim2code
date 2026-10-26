@@ -48,7 +48,7 @@ from claim2code_api.db.models import (
 )
 from claim2code_api.indexing.indexer import embed_and_persist_symbols
 from claim2code_api.repos import cloner
-from claim2code_api.repos.configs import parse_config_file
+from claim2code_api.repos.configs import config_symbol, parse_config_file
 from claim2code_api.repos.exceptions import (  # noqa: F401  — referenced in docstrings
     RepoAlreadyExistsError,
     RepoCloneError,
@@ -258,7 +258,9 @@ def _walk_and_persist(
         if cls.mode == "source":
             n_symbols += _extract_symbols(db, repository_id, wf, name_to_symbol_id)
         elif cls.mode == "config":
-            n_configs += _extract_config(db, repository_id, wf)
+            configs, symbols = _extract_config(db, repository_id, wf)
+            n_configs += configs
+            n_symbols += symbols
         elif cls.mode == "lockfile":
             n_deps += _extract_lockfile(db, repository_id, wf)
 
@@ -338,13 +340,18 @@ def _extract_config(
     db: Session,
     repository_id: UUID,
     wf: WalkedFile,
-) -> int:
-    """Parse one config file and persist a RepositoryConfig row."""
+) -> tuple[int, int]:
+    """Parse one config file and persist a RepositoryConfig row.
+
+    Small parsed configs also get one CodeSymbol (see
+    :func:`config_symbol`) so retrieval can surface them. Returns
+    ``(n_configs, n_symbols)`` persisted.
+    """
     try:
         cfg = parse_config_file(wf.absolute_path, wf.relative_path)
     except Exception as exc:  # noqa: BLE001
         logger.warning("config parse failed for %s: %s", wf.relative_path, exc)
-        return 0
+        return 0, 0
     row = RepositoryConfig(
         repository_id=repository_id,
         file_path=cfg.file_path,
@@ -355,7 +362,28 @@ def _extract_config(
     )
     db.add(row)
     db.flush()
-    return 1
+
+    text = wf.absolute_path.read_text(encoding="utf-8", errors="replace")
+    sym = config_symbol(cfg, text)
+    if sym is None:
+        return 1, 0
+    db.add(
+        CodeSymbol(
+            repository_id=repository_id,
+            kind=sym.kind.value,
+            language=sym.language.value,
+            file_path=sym.file_path,
+            start_line=sym.start_line,
+            start_col=sym.start_col,
+            end_line=sym.end_line,
+            end_col=sym.end_col,
+            name=sym.name,
+            signature=sym.signature,
+            docstring=sym.docstring,
+        )
+    )
+    db.flush()
+    return 1, 1
 
 
 def _extract_lockfile(

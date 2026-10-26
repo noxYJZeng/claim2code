@@ -207,6 +207,23 @@ def test_workflow_persists_config_row(
     assert "config.yaml" in paths
 
 
+def test_workflow_indexes_config_file_as_symbol(
+    session, analysis_id, fake_clone_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake_result = MagicMock(clone_path=fake_clone_dir, default_branch="main")
+    monkeypatch.setattr(cloner, "clone_repository", lambda url: fake_result)
+
+    result = run_repo_workflow(
+        db=session, analysis_id=analysis_id, url="https://github.com/acme/demo"
+    )
+
+    (sym,) = session.query(CodeSymbol).filter(CodeSymbol.language == "config").all()
+    assert sym.file_path == "config.yaml"
+    assert sym.kind == "config_schema"
+    assert sym.signature == "name: demo; version: 0.1"
+    assert result.n_symbols == session.query(CodeSymbol).count()
+
+
 def test_workflow_persists_dependency_rows(
     session, analysis_id, fake_clone_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

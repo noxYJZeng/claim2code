@@ -53,6 +53,9 @@ class CodeLanguage(StrEnum):
     # Launch scripts: no grammar, just the ``--flag value`` arguments of
     # each command (see :func:`claim2code_api.repos.parser._parse_shell`).
     SHELL = "shell"
+    # YAML / JSON / TOML / INI files, one symbol per file (see
+    # :func:`claim2code_api.repos.configs.config_symbol`).
+    CONFIG = "config"
 
 
 class CodeSymbolKind(StrEnum):

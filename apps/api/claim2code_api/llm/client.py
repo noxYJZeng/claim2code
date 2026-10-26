@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from collections.abc import Callable
 from threading import Lock
@@ -755,16 +756,24 @@ def reset_llm_for_tests() -> None:
 # ----------------------------------------------------------------------
 
 
+_REFERENCES_TITLE = re.compile(r"^\s*(\d+\.?\s*)?(references|bibliography)\s*$", re.IGNORECASE)
+
+
 def _build_user_payload(paper: Paper) -> str:
     """Serialize the parsed paper into the user-message text.
 
-    Phase 2 v1 includes only sections + text — equations and tables
+    Phase 2 v1 includes only sections + text (minus the references
+    section) — equations and tables
     are part of the parsed ``Paper`` but are not surfaced in the v1
     claim-extraction prompt (see ``docs/architecture/phase-2-design.md``
     §3 "what we explicitly do NOT do").
     """
     sections_md = []
     for section in paper.sections:
+        # The bibliography holds no testable claim and costs ~10k chars
+        # of a local model's context window.
+        if _REFERENCES_TITLE.match(section.title or ""):
+            continue
         heading = section.title or "(preamble)"
         sections_md.append(f"## {heading}\n\n{section.text}\n")
     return (

@@ -94,6 +94,36 @@ def test_parse_computes_sha256(sample_pdf: Path) -> None:
     assert paper.sha256 == paper2.sha256
 
 
+@pytest.fixture
+def paper_like_pdf(tmp_path: Path) -> Path:
+    """Real-paper typography: 10pt body, 12pt headings, 5pt subscripts.
+
+    The section number sits on its own line above the title (as in
+    ICLR / NeurIPS layouts) and an arXiv stamp runs up the margin.
+    """
+    path = tmp_path / "paper_like.pdf"
+    doc = pymupdf.open()
+    body = "We train with a learning rate of 0.001 and batch size 64. " * 6
+    for heading_no, heading in [("1", "Introduction"), ("2", "Method")]:
+        page = doc.new_page(width=595, height=842)
+        page.insert_text((72, 60), heading_no, fontname="helv", fontsize=12)
+        page.insert_text((72, 76), heading, fontname="helv", fontsize=12)
+        page.insert_textbox(pymupdf.Rect(72, 90, 520, 400), body, fontname="helv", fontsize=10)
+        page.insert_text((300, 420), "t", fontname="helv", fontsize=5)
+        page.insert_text((20, 600), "arXiv:2010.02502v4", fontname="helv", fontsize=20, rotate=90)
+    doc.save(str(path))
+    doc.close()
+    return path
+
+
+def test_parse_real_typography_keeps_body_out_of_headings(paper_like_pdf: Path) -> None:
+    paper = parse_pdf(paper_like_pdf)
+    assert [s.title for s in paper.sections] == ["1 Introduction", "2 Method"]
+    for section in paper.sections:
+        assert "learning rate of 0.001" in section.text
+    assert paper.n_pages == 2
+
+
 def test_parse_rejects_image_only_pdf(tmp_path: Path) -> None:
     """A PDF with only an image (no text layer) must raise."""
     path = tmp_path / "image_only.pdf"

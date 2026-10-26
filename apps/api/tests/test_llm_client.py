@@ -178,6 +178,24 @@ def test_extract_claims_sends_system_and_user_messages(sample_paper: Paper) -> N
 # ============================================================
 
 
+def test_user_payload_skips_references_section() -> None:
+    paper = Paper(
+        filename="x.pdf",
+        sha256="0" * 64,
+        n_pages=2,
+        n_chars=200,
+        sections=[
+            PaperSection(title="Method", page=1, char_start=0, char_end=100, text="we use beta"),
+            PaperSection(title="References", page=2, char_start=100, char_end=200, text="[1] Foo"),
+            PaperSection(title="A Appendix", page=2, char_start=200, char_end=300, text="lr 1e-6"),
+        ],
+    )
+    payload = llm_client_mod._build_user_payload(paper)
+    assert "we use beta" in payload
+    assert "lr 1e-6" in payload
+    assert "[1] Foo" not in payload
+
+
 def test_extract_claims_raises_on_timeout(sample_paper: Paper) -> None:
     client = _build_client(_client_with_response("<RAISE_TIMEOUT>"), pytest.MonkeyPatch())
     with pytest.raises(ClaimExtractionError, match="connection/timeout"):

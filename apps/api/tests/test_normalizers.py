@@ -208,6 +208,22 @@ def test_metric_comparator_compare_emits_low_severity() -> None:
     assert out[0].severity == DiscrepancySeverity.LOW
 
 
+def test_metric_comparator_ignores_training_loss() -> None:
+    """Code computing a loss does not contradict a reported accuracy."""
+    out = MetricNameComparator().compare(
+        claim_text="Fine-tuning reaches 85.4% accuracy.",
+        candidates=[_make_candidate(signature="loss = forward_loss(imgs, pred, mask)")],
+    )
+    assert out == []
+
+
+def test_metric_comparator_does_not_read_mae_model_name_as_metric() -> None:
+    """MAE (Masked Autoencoder) is a model name, not mean absolute error."""
+    n = MetricNameComparator()
+    assert n.extract_names("MAE pre-training with mae_vit_large_patch16") == set()
+    assert n.extract_names("we report mean absolute error") == {"mean-absolute-error"}
+
+
 # ============================================================
 # Config-error path
 # ============================================================

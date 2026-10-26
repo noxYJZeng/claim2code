@@ -103,6 +103,25 @@ def test_walk_skips_ignored_dirs(tmp_path: Path) -> None:
     assert rels == {"src/main.py"}
 
 
+def test_walk_skips_exclude_paths(tmp_path: Path) -> None:
+    """A directory path excludes its subtree; globs match too."""
+    clone = _make_clone(
+        tmp_path,
+        {
+            "loralib/layers.py": "x",
+            "examples/NLU/src/transformers/models/bert.py": "y",
+            "examples/NLU/run_glue.py": "z",
+            "examples/NLG/src/gpt2_beam.py": "w",
+        },
+    )
+    files = walk_repo_files(
+        clone,
+        exclude_paths=["examples/NLU/src/transformers/", "examples/*/src/gpt2_*.py"],
+    )
+    rels = {f.relative_path for f in files}
+    assert rels == {"loralib/layers.py", "examples/NLU/run_glue.py"}
+
+
 def test_walk_skips_git_even_if_not_in_ignore(tmp_path: Path) -> None:
     """``.git`` is hard-coded to skip regardless of ignore_dirs."""
     clone = _make_clone(

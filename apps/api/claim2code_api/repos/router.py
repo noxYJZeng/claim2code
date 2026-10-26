@@ -151,6 +151,7 @@ def create_repository(
             db=db,
             analysis_id=body.analysis_id,
             url=body.url,
+            exclude_paths=body.exclude_paths,
         )
     except RepoInvalidUrlError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

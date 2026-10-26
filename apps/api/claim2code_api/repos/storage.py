@@ -20,6 +20,7 @@ inspects disk.
 
 from __future__ import annotations
 
+import fnmatch
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -133,6 +134,7 @@ def walk_repo_files(
     clone_path: Path,
     *,
     ignore_dirs: list[str] | None = None,
+    exclude_paths: list[str] | None = None,
     max_file_kb: int | None = None,
     max_files: int | None = None,
 ) -> list[WalkedFile]:
@@ -144,6 +146,10 @@ def walk_repo_files(
         ignore_dirs: Directory basenames to skip (default:
             :attr:`Settings.repo_parse_ignore_dirs`). A leading
             ``.git`` is always skipped.
+        exclude_paths: Repo-relative paths or ``fnmatch`` globs to skip
+            (e.g. ``examples/NLU/src/transformers`` for a vendored
+            copy of a library). A pattern naming a directory also
+            excludes everything under it.
         max_file_kb: Per-file size cap in KiB (default:
             :attr:`Settings.max_file_kb`).
         max_files: Cap on the total number of files returned (default:
@@ -162,6 +168,7 @@ def walk_repo_files(
     cap_kb = max_file_kb if max_file_kb is not None else settings.max_file_kb
     cap_files = max_files if max_files is not None else settings.max_repo_files
     cap_bytes = cap_kb * 1024
+    exclude = [p.strip("/") for p in (exclude_paths or []) if p.strip("/")]
 
     if not clone_path.exists():
         return []
@@ -175,17 +182,27 @@ def walk_repo_files(
         # in many repos.
         if any(part in ignore for part in path.parts):
             continue
+        rel = path.relative_to(clone_path).as_posix()
+        if exclude and _is_excluded(rel, exclude):
+            continue
         try:
             size = path.stat().st_size
         except OSError:
             continue
         if size > cap_bytes:
             continue
-        rel = path.relative_to(clone_path).as_posix()
         out.append(WalkedFile(absolute_path=path, relative_path=rel, size_bytes=size))
         if len(out) >= cap_files:
             break
     return out
+
+
+def _is_excluded(rel_path: str, patterns: list[str]) -> bool:
+    """True if ``rel_path`` matches a pattern or lies under one."""
+    for pat in patterns:
+        if fnmatch.fnmatch(rel_path, pat) or fnmatch.fnmatch(rel_path, pat + "/*"):
+            return True
+    return False
 
 
 __all__ = [

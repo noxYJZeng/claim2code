@@ -89,12 +89,15 @@ def run_repo_workflow(
     db: Session,
     analysis_id: UUID,
     url: str,
+    exclude_paths: list[str] | None = None,
 ) -> RepoWorkflowResult:
     """Execute the clone + walk + parse + persist pipeline for one repo.
 
     :param db: a SQLAlchemy session (caller owns the lifecycle).
     :param analysis_id: the analysis this repo is bound to.
     :param url: a GitHub URL (``https://github.com/<owner>/<repo>``).
+    :param exclude_paths: repo-relative paths / globs to skip while
+        walking (see :func:`storage.walk_repo_files`).
 
     :raises RepoInvalidUrlError: URL is malformed or non-GitHub.
     :raises RepoTooLargeError: GitHub-reported size exceeds the cap.
@@ -138,6 +141,7 @@ def run_repo_workflow(
             db=db,
             repository_id=repository_id,
             clone_path=clone_result.clone_path,
+            exclude_paths=exclude_paths,
         )
 
         # 10-11. Mark done.
@@ -190,6 +194,7 @@ def _walk_and_persist(
     db: Session,
     repository_id: UUID,
     clone_path,
+    exclude_paths: list[str] | None = None,
 ) -> tuple[int, int, int, int]:
     """Walk the clone, dispatch to extractors, return counts.
 
@@ -203,7 +208,7 @@ def _walk_and_persist(
     """
     from pathlib import Path  # local import to avoid circular import at module load
 
-    files = walk_repo_files(Path(clone_path))
+    files = walk_repo_files(Path(clone_path), exclude_paths=exclude_paths)
     n_files = len(files)
     n_symbols = 0
     n_configs = 0

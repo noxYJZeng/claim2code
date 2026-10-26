@@ -347,7 +347,9 @@ def _wire_workflow_to_insert_row(m: MagicMock, session_factory) -> None:
     """
     repository_id = uuid4()
 
-    def _side_effect(*, db, analysis_id: UUID, url: str) -> RepoWorkflowResult:
+    def _side_effect(
+        *, db, analysis_id: UUID, url: str, exclude_paths: list[str] | None = None,
+    ) -> RepoWorkflowResult:
         row = Repository(
             repository_id=repository_id,
             analysis_id=analysis_id,

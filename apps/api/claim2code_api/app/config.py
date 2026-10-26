@@ -125,6 +125,10 @@ class Settings(BaseSettings):
             ".vscode",
             "venv",
             "env",
+            # Vendored third-party code: indexing it floods retrieval
+            # with symbols the paper's authors did not write.
+            "third_party",
+            "vendor",
         ]
     )
     # HTTP timeout for the GitHub HEAD pre-flight size guard.

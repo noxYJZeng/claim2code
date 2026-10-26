@@ -172,6 +172,10 @@ class RepoCreateRequest(BaseModel):
 
     url: str = Field(min_length=1)
     analysis_id: UUID
+    # Repo-relative paths / fnmatch globs to leave out of parsing and
+    # indexing, e.g. ``["examples/NLU/src/transformers"]`` for a
+    # vendored library copy. See ``storage.walk_repo_files``.
+    exclude_paths: list[str] = Field(default_factory=list)
 
 
 class RepoCreateResponse(BaseModel):

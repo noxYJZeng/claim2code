@@ -67,6 +67,11 @@ from claim2code_api.verification.schemas import (
 
 logger = logging.getLogger(__name__)
 
+# Per-candidate cap on the source body shown to the verifier. 3 000
+# chars (~750 tokens) x top-5 keeps the verify prompt well inside an
+# 8k-32k context while covering most functions/methods in full.
+_VERIFY_SOURCE_CHAR_CAP = 3000
+
 # System prompt for claim extraction. Phrased as a rubric so the model
 # knows the granularity boundary between METHOD vs IMPLEMENTATION, and
 # that HYPERPARAMETER cites a verbatim value (not "we use a small
@@ -108,14 +113,14 @@ RULES (non-negotiable):
      must be a verbatim substring of the paper_evidence.quote
      provided. Every piece of code evidence you cite must reference
      a specific candidate from the list provided (its symbol_id,
-     file_path, line numbers, signature, or docstring). You MAY NOT
+     file_path, line numbers, signature, docstring, or source). You MAY NOT
      use knowledge of the paper, the library, or the algorithm
      beyond what is explicitly given in the inputs.
 
   2. **One of four verdicts:**
        VERIFIED, PARTIALLY_VERIFIED, CONTRADICTED, UNVERIFIED.
 
-       - VERIFIED only when >=1 candidate's signature/docstring
+       - VERIFIED only when >=1 candidate's signature/docstring/source
          directly implements the claim and no HIGH-severity
          discrepancies exist.
        - PARTIALLY_VERIFIED when >=1 candidate is relevant but
@@ -133,7 +138,7 @@ RULES (non-negotiable):
 
   4. **Cite deterministically.** Each ``code_evidence`` entry must
      include ``symbol_id`` (UUID string), ``quote`` (verbatim from
-     candidate.signature or candidate.docstring), and
+     candidate.signature, candidate.docstring, or candidate.source), and
      ``file_path`` + line numbers that match the candidate.
 
   5. The deterministic checker has already produced the following
@@ -752,7 +757,7 @@ def _build_verify_payload(
         these (per the system prompt rule 5).
       - **# Candidates** — up to 5 RetrieveMatch entries,
         rendered with symbol_id, file_path, line range, name,
-        signature, and docstring. The LLM must cite from this
+        signature, docstring, and (when available) source body. The LLM must cite from this
         list when emitting code_evidence (per the system prompt
         rule 1).
 
@@ -791,6 +796,11 @@ def _build_verify_payload(
             )
             if c.docstring:
                 parts.append(f"docstring: {c.docstring}\n")
+            if c.source:
+                body = c.source
+                if len(body) > _VERIFY_SOURCE_CHAR_CAP:
+                    body = body[:_VERIFY_SOURCE_CHAR_CAP] + "\n[... truncated ...]"
+                parts.append(f"source:\n```\n{body}\n```\n")
             parts.append("")
     else:
         parts.append("# Candidates\n\n(none — top-K retrieval returned empty)\n")

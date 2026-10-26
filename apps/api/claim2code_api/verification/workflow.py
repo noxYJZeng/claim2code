@@ -45,11 +45,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 from claim2code_api.db.models import AnalysisState, CodeSymbol, Repository
 from claim2code_api.indexing.embedding_client import get_embedding_client
+from claim2code_api.indexing.indexer import _read_source_range
 from claim2code_api.llm.client import get_llm_client
 from claim2code_api.observability import get_tracer
 from claim2code_api.papers.schemas import Claim
@@ -281,7 +283,9 @@ def _verify_one_claim(
             )
         except Exception:
             hybrid_matches = []
-        retrieve_matches = _hybrid_to_retrieve_matches(db=db, matches=hybrid_matches)
+        retrieve_matches = _hybrid_to_retrieve_matches(
+            db=db, matches=hybrid_matches, repository_id=repository_id,
+        )
 
     # 2 + 3. Deterministic checkers; skip LLM on HIGH-severity.
     from claim2code_api.verification.verifier import run_deterministic_checkers
@@ -335,6 +339,7 @@ def _hybrid_to_retrieve_matches(
     *,
     db: Session,
     matches: list,
+    repository_id: UUID | None = None,
 ) -> list[RetrieveMatch]:
     """Convert Phase 5 ``HybridMatch`` objects to ``RetrieveMatch``.
 
@@ -346,9 +351,18 @@ def _hybrid_to_retrieve_matches(
     Orphan matches (whose ``CodeSymbol`` row vanished between
     retrieval and lookup) are silently skipped — they're not
     actionable evidence.
+
+    When ``repository_id`` is given, each match also carries its
+    source body read from the repo's clone (``""`` → ``None`` if the
+    clone is gone), so the verifier sees the implementation.
     """
     if not matches:
         return []
+    clone_path: Path | None = None
+    if repository_id is not None:
+        repo = db.get(Repository, repository_id)
+        if repo is not None and repo.clone_path:
+            clone_path = Path(repo.clone_path)
     symbol_ids = [m.symbol_id for m in matches]
     symbols = (
         db.query(CodeSymbol)
@@ -375,6 +389,17 @@ def _hybrid_to_retrieve_matches(
                 signature=sym.signature or "",
                 docstring=sym.docstring,
                 similarity=m.final_score,
+                source=(
+                    _read_source_range(
+                        clone_path=clone_path,
+                        rel_path=sym.file_path,
+                        start_line=sym.start_line,
+                        end_line=sym.end_line,
+                    )
+                    or None
+                    if clone_path is not None
+                    else None
+                ),
             )
         )
     return out

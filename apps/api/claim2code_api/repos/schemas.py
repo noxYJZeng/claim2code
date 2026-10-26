@@ -321,6 +321,11 @@ class RetrieveMatch(BaseModel):
     signature: str
     docstring: str | None
     similarity: float = Field(ge=0.0)
+    # Source body (``start_line``..``end_line``). Only the verification
+    # workflow fills it, so the verifier LLM can judge the
+    # implementation rather than just signature + docstring;
+    # ``/retrieve`` leaves it ``None``.
+    source: str | None = None
 
 
 class ScoreBreakdown(BaseModel):

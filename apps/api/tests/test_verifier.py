@@ -442,3 +442,42 @@ def test_verdict_for_claim_empty_choices_raises() -> None:
             claim=_claim(), paper_evidence=_paper_evidence(),
             candidates=[], deterministic_discrepancies=[],
         )
+
+# ============================================================
+# Verify payload: candidate source bodies
+# ============================================================
+
+
+def test_verify_payload_includes_candidate_source() -> None:
+    """The verifier sees the code body, not just signature + docstring."""
+    from claim2code_api.llm.client import _build_verify_payload
+
+    cand = _candidate().model_copy(update={"source": "def train():\n    lr = 5e-5"})
+    payload = _build_verify_payload(
+        claim=_claim(), paper_evidence=_paper_evidence(),
+        candidates=[cand], deterministic_discrepancies=[],
+    )
+    assert "source:\n```\ndef train():\n    lr = 5e-5\n```" in payload
+
+
+def test_verify_payload_truncates_long_source() -> None:
+    from claim2code_api.llm import client as llm_client_mod
+
+    cap = llm_client_mod._VERIFY_SOURCE_CHAR_CAP
+    cand = _candidate().model_copy(update={"source": "x" * (cap + 500)})
+    payload = llm_client_mod._build_verify_payload(
+        claim=_claim(), paper_evidence=_paper_evidence(),
+        candidates=[cand], deterministic_discrepancies=[],
+    )
+    assert "x" * cap + "\n[... truncated ...]" in payload
+    assert "x" * (cap + 1) not in payload
+
+
+def test_verify_payload_omits_source_when_absent() -> None:
+    from claim2code_api.llm.client import _build_verify_payload
+
+    payload = _build_verify_payload(
+        claim=_claim(), paper_evidence=_paper_evidence(),
+        candidates=[_candidate()], deterministic_discrepancies=[],
+    )
+    assert "source:" not in payload

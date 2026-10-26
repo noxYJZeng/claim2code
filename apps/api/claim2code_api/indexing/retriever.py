@@ -94,10 +94,10 @@ def retrieve_semantic(
     # 2. Cosine-distance query on the repo's embeddings.
     sql = text(
         "SELECT symbol_id, "
-        f"embedding {op_str()} :claim_vec::vector AS distance "
+        f"embedding {op_str()} CAST(:claim_vec AS vector) AS distance "
         "FROM code_embeddings "
         "WHERE repository_id = :repository_id "
-        f"ORDER BY embedding {op_str()} :claim_vec::vector "
+        f"ORDER BY embedding {op_str()} CAST(:claim_vec AS vector) "
         "LIMIT :top_k"
     )
     rows = db.execute(

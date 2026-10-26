@@ -11,14 +11,25 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CHAR, BigInteger, DateTime, Integer, String, Text, TypeDecorator, func
+from sqlalchemy import (
+    CHAR,
+    BigInteger,
+    DateTime,
+    FetchedValue,
+    Integer,
+    String,
+    Text,
+    TypeDecorator,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.dialects.sqlite import JSON as SQLITE_JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
+from claim2code_api.app.config import get_settings
 from claim2code_api.db.base import Base
 
-# pgvector's SQLAlchemy type — adds ``VECTOR(1536)`` columns. The
+# pgvector's SQLAlchemy type — adds ``VECTOR(openai_embed_dim)`` columns. The
 # driver-side adapter is required for psycopg to round-trip the
 # vector type; the Postgres extension itself is enabled by 0001_init.
 try:
@@ -280,12 +291,24 @@ class CodeSymbol(Base):
     # the table but is populated by the database, not the
     # application. Tests that exercise the lexical scorer mock the
     # SQL layer and don't touch this field.
-    lex_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #
+    # ``FetchedValue`` marks both as server-generated so the ORM
+    # leaves them out of INSERT/UPDATE (SQLAlchemy 2.1 otherwise
+    # binds NULL, which Postgres rejects for GENERATED columns).
+    # It emits no DDL, so SQLite ``create_all`` is unchanged.
+    lex_text: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        server_default=FetchedValue(),
+        server_onupdate=FetchedValue(),
+    )
     lex_tsv: Mapped[object | None] = mapped_column(  # type: ignore[assignment]
         # ``object`` because pgvector / tsvector have no generic
         # SQLAlchemy type; the migration handles the schema side.
         Text,
         nullable=True,
+        server_default=FetchedValue(),
+        server_onupdate=FetchedValue(),
     )
 
     def __repr__(self) -> str:  # pragma: no cover — debug helper
@@ -373,7 +396,7 @@ class CodeEmbedding(Base):
     name; the old rows stay (re-buildable from the symbol row)
     but become unreferenced.
 
-    The ``embedding`` column is ``VECTOR(1536)`` per
+    The ``embedding`` column is ``VECTOR(openai_embed_dim)`` per
     ``Settings.openai_embed_dim``. Mismatch (e.g. swapping
     models with a different dim) raises during schema creation;
     the retriever does not silently coerces.
@@ -411,7 +434,7 @@ class CodeEmbedding(Base):
     # not include the vector content to avoid megabytes of
     # output in logs.
     embedding: Mapped[object] = mapped_column(  # type: ignore[assignment]
-        Vector(dim=1536) if Vector is not None else Text,  # type: ignore[arg-type]
+        Vector(dim=get_settings().openai_embed_dim) if Vector is not None else Text,  # type: ignore[arg-type]
         nullable=False,
     )
     model_name: Mapped[str] = mapped_column(String(64), nullable=False)

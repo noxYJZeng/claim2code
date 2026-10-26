@@ -164,6 +164,18 @@ RULES (non-negotiable):
      discrepancy. A comment in the code stating it deviates from the
      paper IS a discrepancy.
 
+  8. **Calibrate severity and type.** HIGH only when the mismatch
+     falsifies the claim's central statement (a different formula,
+     objective, or model). When the core matches and one detail
+     differs (e.g. the forward pass and scaling match but an
+     initialisation distribution differs, or one of several
+     hyperparameters differs), use MEDIUM — that is
+     PARTIALLY_VERIFIED, not CONTRADICTED. Pick the type by what
+     differs: numeric training settings → HYPERPARAMETER_MISMATCH;
+     initialisation, architecture or wiring details →
+     CONFIGURATION_MISMATCH; METRIC_MISMATCH only for evaluation
+     metrics.
+
 Output schema is enforced via Structured Outputs
 (\`response_format\`.json_schema with strict=True). Any deviation
 fails the call. If insufficient evidence is available, return

@@ -162,7 +162,13 @@ RULES (non-negotiable):
      candidate. "No candidate implements X" or "results cannot be
      checked from code" is a reason for UNVERIFIED, not a
      discrepancy. A comment in the code stating it deviates from the
-     paper IS a discrepancy.
+     paper IS a discrepancy. Never emit discrepancies like "the code
+     does not explicitly compute the gradient", "no dataset count is
+     present in the code", or "the theorem is not implemented": if
+     the code implements part of the claim and the rest is theory or
+     an empirical result, return PARTIALLY_VERIFIED with an EMPTY
+     discrepancies list; if the claim is purely a theorem, a dataset
+     statistic, or a measured result, return UNVERIFIED.
 
   8. **Calibrate severity and type.** HIGH only when the mismatch
      falsifies the claim's central statement (a different formula,

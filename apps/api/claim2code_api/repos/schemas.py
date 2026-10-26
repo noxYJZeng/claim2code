@@ -330,6 +330,10 @@ class RetrieveMatch(BaseModel):
     # implementation rather than just signature + docstring;
     # ``/retrieve`` leaves it ``None``.
     source: str | None = None
+    # For a method: the source of its class's setup methods
+    # (``__init__``, ``reset_parameters``, ...), where initialisation
+    # and scaling usually live. Also verification-only.
+    class_context: str | None = None
 
 
 class ScoreBreakdown(BaseModel):

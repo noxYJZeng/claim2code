@@ -400,9 +400,54 @@ def _hybrid_to_retrieve_matches(
                     if clone_path is not None
                     else None
                 ),
+                class_context=(
+                    _class_context(db, sym, clone_path)
+                    if clone_path is not None
+                    else None
+                ),
             )
         )
     return out
+
+
+# Methods that set a class up. A claim about initialisation or
+# scaling ("B is initialised to 0", "scaled by alpha/r") is
+# implemented here, not in the ``forward`` that retrieval tends to
+# surface.
+_SETUP_METHOD_NAMES = (
+    "__init__",
+    "reset_parameters",
+    "_reset_parameters",
+    "init_weights",
+    "_init_weights",
+)
+
+
+def _class_context(db: Session, sym: CodeSymbol, clone_path: Path) -> str | None:
+    """Return the source of ``sym``'s sibling setup methods, if any."""
+    if sym.parent_symbol_id is None:
+        return None
+    siblings = (
+        db.query(CodeSymbol)
+        .filter(
+            CodeSymbol.parent_symbol_id == sym.parent_symbol_id,
+            CodeSymbol.name.in_(_SETUP_METHOD_NAMES),
+            CodeSymbol.symbol_id != sym.symbol_id,
+        )
+        .order_by(CodeSymbol.start_line)
+        .all()
+    )
+    parts: list[str] = []
+    for sib in siblings:
+        body = _read_source_range(
+            clone_path=clone_path,
+            rel_path=sib.file_path,
+            start_line=sib.start_line,
+            end_line=sib.end_line,
+        )
+        if body:
+            parts.append(f"# {sib.name} (lines {sib.start_line}-{sib.end_line})\n{body}")
+    return "\n\n".join(parts) or None
 
 
 def _error_verification(claim: Claim, exc: Exception) -> Verification:

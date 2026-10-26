@@ -481,3 +481,40 @@ def test_verify_payload_omits_source_when_absent() -> None:
         candidates=[_candidate()], deterministic_discrepancies=[],
     )
     assert "source:" not in payload
+
+
+def test_compose_drops_llm_discrepancies_without_code_evidence() -> None:
+    """"No code found" restated as a HIGH discrepancy is noise."""
+    det = Discrepancy(
+        type=DiscrepancyType.DATASET_MISMATCH,
+        severity=DiscrepancySeverity.MEDIUM,
+        detail="deterministic",
+    )
+    llm = _llm_verdict(status=VerificationStatus.UNVERIFIED).model_copy(
+        update={"discrepancies": [Discrepancy(
+            type=DiscrepancyType.METRIC_MISMATCH,
+            severity=DiscrepancySeverity.HIGH,
+            detail="No candidate implements the benchmark.",
+        )]},
+    )
+    out = compose_verification(
+        claim=_claim(),
+        candidates=[_candidate()],
+        deterministic_discrepancies=[det],
+        llm_verdict=llm,
+    )
+    assert out.status == VerificationStatus.UNVERIFIED
+    assert out.discrepancies == [det]
+
+
+def test_verify_payload_includes_class_context() -> None:
+    from claim2code_api.llm.client import _build_verify_payload
+
+    cand = _candidate().model_copy(
+        update={"class_context": "# reset_parameters (lines 5-6)\ninit_zeros(self.B)"},
+    )
+    payload = _build_verify_payload(
+        claim=_claim(), paper_evidence=_paper_evidence(),
+        candidates=[cand], deterministic_discrepancies=[],
+    )
+    assert "class_context (setup methods of its class):\n```\n# reset_parameters" in payload

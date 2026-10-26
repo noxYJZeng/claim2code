@@ -98,6 +98,12 @@ def compose_verification(
     discrepancies found; no LLM verdict").
     """
     llm_emitted = llm_verdict.discrepancies if llm_verdict else []
+    if llm_verdict is not None and not llm_verdict.code_evidence:
+        # Without code evidence the verdict is UNVERIFIED by the
+        # structural guard; LLM "discrepancies" there are just "no
+        # code found" restated (often as HIGH), which reads as a real
+        # mismatch in the report. Keep only the deterministic ones.
+        llm_emitted = []
     all_discrepancies = merge_discrepancies(
         deterministic=deterministic_discrepancies,
         llm_emitted=llm_emitted,

@@ -113,7 +113,8 @@ RULES (non-negotiable):
      must be a verbatim substring of the paper_evidence.quote
      provided. Every piece of code evidence you cite must reference
      a specific candidate from the list provided (its symbol_id,
-     file_path, line numbers, signature, docstring, or source). You MAY NOT
+     file_path, line numbers, signature, docstring, source, or
+     class_context). You MAY NOT
      use knowledge of the paper, the library, or the algorithm
      beyond what is explicitly given in the inputs.
 
@@ -138,7 +139,8 @@ RULES (non-negotiable):
 
   4. **Cite deterministically.** Each ``code_evidence`` entry must
      include ``symbol_id`` (UUID string), ``quote`` (verbatim from
-     candidate.signature, candidate.docstring, or candidate.source), and
+     candidate.signature, candidate.docstring, candidate.source, or
+     candidate.class_context), and
      ``file_path`` + line numbers that match the candidate.
 
   5. The deterministic checker has already produced the following
@@ -146,6 +148,21 @@ RULES (non-negotiable):
      do not re-emit the same type twice — focus on residual
      judgement, novel discrepancies, or AMBIGUOUS cases where the
      deterministic check is uncertain.
+
+  6. **Same scope or UNVERIFIED.** CONTRADICTED requires a candidate
+     that implements the *same* model / experiment / setting the
+     claim describes and disagrees with it. If the claim is about,
+     say, GPT-3 175B training and the candidates are a GPT-2 or GLUE
+     script, they are not evidence either way: return UNVERIFIED.
+     Default argument values in an unrelated script never contradict
+     a paper's reported hyperparameters.
+
+  7. **Missing code is not a discrepancy.** Only emit a discrepancy
+     for a concrete mismatch between the claim and a relevant
+     candidate. "No candidate implements X" or "results cannot be
+     checked from code" is a reason for UNVERIFIED, not a
+     discrepancy. A comment in the code stating it deviates from the
+     paper IS a discrepancy.
 
 Output schema is enforced via Structured Outputs
 (\`response_format\`.json_schema with strict=True). Any deviation
@@ -757,7 +774,8 @@ def _build_verify_payload(
         these (per the system prompt rule 5).
       - **# Candidates** — up to 5 RetrieveMatch entries,
         rendered with symbol_id, file_path, line range, name,
-        signature, docstring, and (when available) source body. The LLM must cite from this
+        signature, docstring, and (when available) source body and
+        class context. The LLM must cite from this
         list when emitting code_evidence (per the system prompt
         rule 1).
 
@@ -801,6 +819,11 @@ def _build_verify_payload(
                 if len(body) > _VERIFY_SOURCE_CHAR_CAP:
                     body = body[:_VERIFY_SOURCE_CHAR_CAP] + "\n[... truncated ...]"
                 parts.append(f"source:\n```\n{body}\n```\n")
+            if c.class_context:
+                ctx = c.class_context
+                if len(ctx) > _VERIFY_SOURCE_CHAR_CAP:
+                    ctx = ctx[:_VERIFY_SOURCE_CHAR_CAP] + "\n[... truncated ...]"
+                parts.append(f"class_context (setup methods of its class):\n```\n{ctx}\n```\n")
             parts.append("")
     else:
         parts.append("# Candidates\n\n(none — top-K retrieval returned empty)\n")

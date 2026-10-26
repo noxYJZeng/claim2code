@@ -256,7 +256,8 @@ def _extract_symbols(
         sym.file_path = wf.relative_path
 
     inserted = 0
-    file_methods: list[tuple[str, UUID, UUID | None]] = []
+    class_rows: list[CodeSymbol] = []
+    method_rows: list[CodeSymbol] = []
     for sym in symbols:
         row = CodeSymbol(
             repository_id=repository_id,
@@ -277,11 +278,23 @@ def _extract_symbols(
         # Track class rows so methods can pick up parent_symbol_id later.
         if sym.kind.value == "class":
             name_to_symbol_id[(sym.file_path, sym.name)] = row.symbol_id
+            class_rows.append(row)
         elif sym.kind.value == "method":
-            # Best-effort: methods always have a class parent in Python
-            # (the walker guarantees this). We record the relationship
-            # after the loop when classes are also persisted.
-            file_methods.append((sym.name, row.symbol_id, None))
+            method_rows.append(row)
+
+    # Link each method to the innermost class in this file whose line
+    # range encloses it. Line containment works for every parsed
+    # language and handles nested / same-named classes, which a
+    # name lookup cannot.
+    for method in method_rows:
+        enclosing = [
+            c
+            for c in class_rows
+            if c.start_line <= method.start_line and method.end_line <= c.end_line
+        ]
+        if enclosing:
+            parent = max(enclosing, key=lambda c: c.start_line)
+            method.parent_symbol_id = parent.symbol_id
     return inserted
 
 

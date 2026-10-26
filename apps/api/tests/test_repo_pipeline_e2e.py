@@ -247,3 +247,54 @@ def test_pipeline_handles_empty_repo_without_crashing(
     )
     assert repo.index_status == "done"
     assert repo.n_files == 0
+
+# ============================================================
+# Method -> class linkage + verifier class context
+# ============================================================
+
+
+def test_methods_link_to_enclosing_class_and_feed_class_context(
+    session, tmp_path: Path,
+) -> None:
+    """Methods get ``parent_symbol_id`` by line containment, which the
+    verifier uses to attach the class's setup methods to a candidate."""
+    import uuid
+
+    from claim2code_api.repos.storage import WalkedFile
+    from claim2code_api.repos.workflow import _extract_symbols
+    from claim2code_api.verification.workflow import _class_context
+
+    src = tmp_path / "layers.py"
+    src.write_text(
+        "class Linear:\n"
+        "    def __init__(self, r):\n"
+        "        self.scaling = 1 / r\n"
+        "\n"
+        "    def reset_parameters(self):\n"
+        "        init_zeros(self.B)\n"
+        "\n"
+        "    def forward(self, x):\n"
+        "        return x * self.scaling\n"
+        "\n"
+        "\n"
+        "class Other:\n"
+        "    def forward(self, x):\n"
+        "        return x\n"
+    )
+    repo_id = uuid.uuid4()
+    wf = WalkedFile(absolute_path=src, relative_path="layers.py", size_bytes=src.stat().st_size)
+    _extract_symbols(session, repo_id, wf, {})
+    session.flush()
+
+    rows = {(s.name, s.start_line): s for s in session.query(CodeSymbol).all()}
+    linear, other = rows[("Linear", 1)], rows[("Other", 12)]
+    assert rows[("__init__", 2)].parent_symbol_id == linear.symbol_id
+    assert rows[("forward", 8)].parent_symbol_id == linear.symbol_id
+    assert rows[("forward", 13)].parent_symbol_id == other.symbol_id
+
+    ctx = _class_context(session, rows[("forward", 8)], tmp_path)
+    assert ctx is not None
+    assert "# __init__ (lines 2-3)" in ctx and "self.scaling = 1 / r" in ctx
+    assert "# reset_parameters (lines 5-6)" in ctx and "init_zeros(self.B)" in ctx
+    assert "return x * self.scaling" not in ctx  # not the candidate itself
+    assert _class_context(session, rows[("forward", 13)], tmp_path) is None

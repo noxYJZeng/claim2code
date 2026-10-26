@@ -67,10 +67,6 @@ from claim2code_api.verification.schemas import (
 
 logger = logging.getLogger(__name__)
 
-# Default timeout for one LLM call. Keep tight so a hung call doesn't
-# burn the entire ``workflow_timeout_paper`` budget on a single attempt.
-_DEFAULT_REQUEST_TIMEOUT_SECONDS = 60.0
-
 # System prompt for claim extraction. Phrased as a rubric so the model
 # knows the granularity boundary between METHOD vs IMPLEMENTATION, and
 # that HYPERPARAMETER cites a verbatim value (not "we use a small
@@ -209,7 +205,9 @@ class LLMClient:
             # Our ``httpx.Client(proxy=None)`` is API-compatible at
             # runtime; tell mypy to stop checking.
             http_client=httpx.Client(proxy=None),  # type: ignore[arg-type]
-            timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+            # Keep tight so a hung call doesn't burn the entire
+            # ``workflow_timeout_paper`` budget on a single attempt.
+            timeout=settings.llm_request_timeout_seconds,
         )
         # Phase 8: SafetyGate wraps every LLM call at the SDK seam
         # (see docs/architecture/phase-8-design.md §2). The gate

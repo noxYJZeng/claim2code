@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     openai_model_chat: str = "gpt-4o"
     openai_model_embed: str = "text-embedding-3-small"
     openai_embed_dim: int = 1536
+    # Per-call chat timeout. 60s suits hosted gpt-4o; a local model
+    # (e.g. LM Studio) prefilling a whole paper needs several minutes.
+    llm_request_timeout_seconds: float = 60.0
 
     # ---- Web (Vite reads these at build/dev time; declared here so a
     # shared ``.env`` does not trip extra="forbid") ----

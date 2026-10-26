@@ -69,7 +69,7 @@ export type CodeSymbolKind =
   "function" | "method" | "class" | "import" | "constant" | "config_schema";
 
 export type CodeLanguage =
-  "python" | "javascript" | "typescript" | "java" | "go" | "rust";
+  "python" | "javascript" | "typescript" | "java" | "go" | "rust" | "shell";
 
 export type CodeSymbol = {
   kind: CodeSymbolKind;

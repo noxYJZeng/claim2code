@@ -108,6 +108,8 @@ class Settings(BaseSettings):
             ".java",
             ".go",
             ".rs",
+            ".sh",
+            ".bash",
         ]
     )
     # Directory basenames the walk skips — see

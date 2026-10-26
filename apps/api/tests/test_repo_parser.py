@@ -293,3 +293,51 @@ def test_empty_file_returns_empty_list(tmp_path: Path) -> None:
     p = tmp_path / "empty.py"
     p.write_text("")
     assert parse_file(p) == []
+
+
+# ============================================================
+# Shell launch scripts
+# ============================================================
+
+
+def test_detect_language_shell(tmp_path: Path) -> None:
+    p = tmp_path / "train.sh"
+    p.write_text("")
+    assert detect_language(p) == CodeLanguage.SHELL
+
+
+def test_shell_launch_command_becomes_config_schema(tmp_path: Path) -> None:
+    p = tmp_path / "roberta_base_mrpc.sh"
+    p.write_text(
+        "export num_gpus=8\n"
+        "# launch\n"
+        "python -m torch.distributed.launch --nproc_per_node=$num_gpus \\\n"
+        "examples/text-classification/run_glue.py \\\n"
+        "--model_name_or_path roberta-base \\\n"
+        "--do_train \\\n"
+        "--lora_r 8 \\\n"
+        "--lora_alpha 16 \\\n"
+        "--seed -1\n"
+        "echo done\n"
+    )
+    symbols = parse_file(p)
+    assert len(symbols) == 1
+    sym = symbols[0]
+    assert sym.kind == CodeSymbolKind.CONFIG_SCHEMA
+    assert sym.language == CodeLanguage.SHELL
+    assert sym.name == "examples/text-classification/run_glue.py"
+    assert (sym.start_line, sym.end_line) == (3, 9)
+    assert sym.signature == (
+        "--nproc_per_node=$num_gpus --model_name_or_path roberta-base "
+        "--do_train --lora_r 8 --lora_alpha 16 --seed -1"
+    )
+    assert sym.docstring == "Launch script roberta base mrpc; model roberta base"
+
+
+def test_shell_module_entry_and_unbalanced_quotes(tmp_path: Path) -> None:
+    p = tmp_path / "run.sh"
+    p.write_text('python -m src.train --lr 2e-4 --note "unclosed\n')
+    (sym,) = parse_file(p)
+    assert sym.name == "src.train"
+    assert sym.signature.startswith("--lr 2e-4")
+    assert sym.docstring == "Launch script run"

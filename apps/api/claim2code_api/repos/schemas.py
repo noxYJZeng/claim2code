@@ -50,6 +50,9 @@ class CodeLanguage(StrEnum):
     JAVA = "java"
     GO = "go"
     RUST = "rust"
+    # Launch scripts: no grammar, just the ``--flag value`` arguments of
+    # each command (see :func:`claim2code_api.repos.parser._parse_shell`).
+    SHELL = "shell"
 
 
 class CodeSymbolKind(StrEnum):

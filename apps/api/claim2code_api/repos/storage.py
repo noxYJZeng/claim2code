@@ -28,8 +28,9 @@ from claim2code_api.app.config import get_settings
 from claim2code_api.repos.cloner import data_repos_root
 
 # File extensions that should be parsed for code symbols. Matches the
-# v1 grammar list (Python, JS, TS, Java, Go, Rust) — C / C++ / PHP /
-# Ruby / Kotlin / Swift / Scala are deferred (see phase-3-design.md §3).
+# v1 grammar list (Python, JS, TS, Java, Go, Rust) plus shell launch
+# scripts — C / C++ / PHP / Ruby / Kotlin / Swift / Scala are deferred
+# (see phase-3-design.md §3).
 SOURCE_EXTENSIONS: set[str] = {
     ".py",
     ".js",
@@ -41,6 +42,8 @@ SOURCE_EXTENSIONS: set[str] = {
     ".java",
     ".go",
     ".rs",
+    ".sh",
+    ".bash",
 }
 
 # Config file extensions. Each maps to a single format.

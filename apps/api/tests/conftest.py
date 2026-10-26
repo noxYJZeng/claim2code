@@ -11,8 +11,13 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from claim2code_api.app.config import get_settings
+from claim2code_api.app.config import Settings, get_settings
 from claim2code_api.app.main import create_app
+
+# Keep unit tests hermetic: assert against the Settings defaults, not
+# whatever a developer's local ``.env`` (e.g. a local LLM) configures.
+Settings.model_config["env_file"] = None
+get_settings.cache_clear()
 
 
 @pytest.fixture

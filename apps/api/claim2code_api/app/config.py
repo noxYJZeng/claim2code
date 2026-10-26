@@ -14,8 +14,15 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# apps/api/claim2code_api/app/config.py → project root is 3 levels up.
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+# apps/api/claim2code_api/app/config.py → the project root (with
+# ``.env``) is 4 levels up in a checkout. Search upward for ``.env``
+# rather than hard-indexing; fall back to ``parents[3]`` (``/app`` in
+# the Docker image, which gets its config from env vars instead).
+_HERE = Path(__file__).resolve()
+_PROJECT_ROOT = next(
+    (p for p in _HERE.parents if (p / ".env").is_file()),
+    _HERE.parents[3],
+)
 _DEFAULT_ENV_FILE = _PROJECT_ROOT / ".env"
 
 

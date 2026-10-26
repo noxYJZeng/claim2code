@@ -36,6 +36,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from claim2code_api.app.config import _PROJECT_ROOT as _CONFIG_PROJECT_ROOT
 from claim2code_api.app.config import get_settings
 from claim2code_api.repos.exceptions import (
     RepoCloneError,
@@ -96,9 +97,10 @@ def parse_github_url(url: str) -> ParsedRepoUrl:
 # ============================================================
 
 # ``data/repos/`` is provisioned by ``scripts/dev-up.sh:18`` with a
-# ``.gitkeep``. We resolve relative to the project root (3 levels up
-# from this file) so the same code works in dev, CI, and Docker.
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+# ``.gitkeep``. We resolve relative to the project root found by
+# :mod:`claim2code_api.app.config` so the same code works in dev, CI,
+# and Docker.
+_PROJECT_ROOT = _CONFIG_PROJECT_ROOT
 
 
 def data_repos_root() -> Path:

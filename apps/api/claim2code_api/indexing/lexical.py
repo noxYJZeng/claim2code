@@ -22,15 +22,18 @@ matches, proximity matters (a docstring that says "scaled
 dot-product attention" should beat the same two words split
 between docstring and signature).
 
-Why ``websearch_to_tsquery``
-----------------------------
+Why an OR of the claim's terms
+------------------------------
 
-``websearch_to_tsquery`` parses the claim the way a search
-engine would — quoted phrases stay together, ``OR`` is honoured,
-``-foo`` excludes the term. Much friendlier than ``to_tsquery``
-(which requires pre-formatted ``lexemes``) for arbitrary user
-input. We don't expose ``OR`` / quotes to the user; we just
-benefit from the parser.
+Claims are whole sentences. ``websearch_to_tsquery`` /
+``plainto_tsquery`` AND every term together, so a 15-word claim
+("The modified forward pass for LoRA is Wx + BAx, where B is
+initialized to 0 ...") matched no symbol at all and the lexical
+leg was silently empty. We take ``plainto_tsquery``'s stemmed,
+stop-word-free lexemes and OR them (``' & '`` → ``' | '``);
+``ts_rank_cd`` then rewards symbols that hit more terms, closer
+together. Normalization flag ``1`` divides by ``1 + log(length)``
+so huge docstring constants don't win on sheer term count.
 
 What this does NOT do
 ---------------------
@@ -55,12 +58,14 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 # The single SQL string used by ``lexical_search``. Inlined so
-# the tests can grep for the canonical tokens (``websearch_to_tsquery``,
+# the tests can grep for the canonical tokens (``plainto_tsquery``,
 # ``ts_rank_cd``, ``@@``).
 _LEXICAL_SQL = text(
-    "SELECT symbol_id, ts_rank_cd(lex_tsv, query) AS score "
+    "SELECT symbol_id, ts_rank_cd(lex_tsv, query, 1) AS score "
     "FROM code_symbols, "
-    "     websearch_to_tsquery('english', :claim) AS query "
+    "     to_tsquery('english', "
+    "       replace(plainto_tsquery('english', :claim)::text, ' & ', ' | ')"
+    "     ) AS query "
     "WHERE repository_id = :repository_id "
     "  AND lex_tsv @@ query "
     "ORDER BY score DESC "
@@ -81,7 +86,7 @@ def lexical_search(
     :param repository_id: scope the search to this repository.
     :param claim: the natural-language claim string. Tokenised by
         Postgres's ``english`` config (lowercase + Porter stem +
-        stopword removal) via ``websearch_to_tsquery``.
+        stopword removal) via ``plainto_tsquery``; terms are OR-ed.
     :param top_k: number of results to return (default 5).
     :returns: ``list[(symbol_id, score)]`` ordered by
         ``ts_rank_cd`` descending. ``score`` is the raw rank
@@ -89,7 +94,7 @@ def lexical_search(
     """
     if not claim.strip():
         # Empty claim → empty result. Saves a round-trip and
-        # avoids passing an empty query to websearch_to_tsquery
+        # avoids passing an empty query to to_tsquery
         # which raises.
         return []
 

@@ -5,9 +5,8 @@ Coverage:
   - ``lexical_search`` returns ``(symbol_id, score)`` pairs in
     ``ts_rank_cd`` descending order.
   - Empty / whitespace claim short-circuits without hitting the DB.
-  - The query uses ``websearch_to_tsquery`` (search-engine parser),
-    ``@@`` (tsvector match), and ``ts_rank_cd`` (cover-density
-    rank).
+  - The query OR-s ``plainto_tsquery``'s lexemes, and uses ``@@``
+    (tsvector match) and ``ts_rank_cd`` (cover-density rank).
   - The query is scoped to the requested ``repository_id``.
   - ``top_k`` is honoured.
   - Empty result → ``[]``.
@@ -103,16 +102,20 @@ def test_lexical_search_uses_default_top_k_5() -> None:
 # ============================================================
 
 
-def test_lexical_search_query_uses_websearch_to_tsquery() -> None:
-    """The SQL uses ``websearch_to_tsquery`` (search-engine parser)."""
+def test_lexical_search_query_ors_claim_terms() -> None:
+    """The SQL OR-s ``plainto_tsquery``'s lexemes.
+
+    AND-ing every term of a sentence-length claim matched nothing.
+    """
     repo_id = uuid4()
     session = MagicMock(name="session")
     session.execute.return_value.fetchall.return_value = []
 
     lexical_search(session, repo_id, "x")
 
-    sql = session.execute.call_args.args[0]
-    assert "websearch_to_tsquery" in str(sql)
+    sql = str(session.execute.call_args.args[0])
+    assert "plainto_tsquery" in sql
+    assert "' & ', ' | '" in sql
 
 
 def test_lexical_search_query_uses_tsvector_match_operator() -> None:

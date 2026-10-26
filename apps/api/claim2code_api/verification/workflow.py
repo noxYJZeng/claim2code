@@ -97,7 +97,7 @@ def run_verification_workflow(
     db: Session,
     analysis_id: UUID,
     claim_ids: list[str] | None = None,
-    top_k: int = 5,
+    top_k: int = 8,
 ) -> VerificationWorkflowResult:
     """Run the verify pipeline for one analysis.
 

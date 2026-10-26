@@ -183,13 +183,15 @@ class VerificationRunRequest(BaseModel):
     """Optional request body for ``POST /analyses/{id}/verifications``.
 
     Empty body / no body → verify all extracted claims with
-    ``top_k=5`` (matches Phase 5's ``RetrieveRequest`` defaults).
+    ``top_k=8``: paper prose ranks the implementing symbol 6th-8th
+    often enough (e.g. a sampler named ``generalized_steps`` for a
+    claim about σ_t = 0) that 5 candidates miss it.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     claim_ids: list[str] | None = None
-    top_k: int = Field(default=5, ge=1, le=20)
+    top_k: int = Field(default=8, ge=1, le=20)
 
 
 class VerificationRunResponse(BaseModel):

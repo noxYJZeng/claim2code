@@ -69,7 +69,7 @@ from claim2code_api.verification.schemas import (
 logger = logging.getLogger(__name__)
 
 # Per-candidate cap on the source body shown to the verifier. 3 000
-# chars (~750 tokens) x top-5 keeps the verify prompt well inside an
+# chars (~750 tokens) x top-8 keeps the verify prompt well inside an
 # 8k-32k context while covering most functions/methods in full.
 _VERIFY_SOURCE_CHAR_CAP = 3000
 
@@ -104,7 +104,7 @@ specifics. If a section contains no testable claim, omit it.
 _VERIFY_SYSTEM_PROMPT = """\
 You are a meticulous paper-to-code verifier. Given (1) a technical
 claim extracted from a paper, (2) a verbatim snippet of the paper
-that grounds it, and (3) up to 5 candidate code symbols retrieved
+that grounds it, and (3) up to 8 candidate code symbols retrieved
 from the reference implementation, judge whether the code actually
 implements the claim.
 
@@ -403,7 +403,12 @@ class LLMClient:
         if gate_result.violations and self._on_violations is not None:
             self._on_violations("extract_claims", gate_result.violations)
 
-        return claim_list.claims
+        # The model's own ids come back as "c001", "C10" or even
+        # "}]}" (a JSON fragment), so number the claims ourselves.
+        return [
+            claim.model_copy(update={"claim_id": f"C{i}"})
+            for i, claim in enumerate(claim_list.claims, start=1)
+        ]
 
     # ------------------------------------------------------------------
     # Verification (Phase 6)
@@ -799,7 +804,7 @@ def _build_verify_payload(
       - **# Deterministic discrepancies** — what the regex-based
         checkers already found. The LLM is told not to re-emit
         these (per the system prompt rule 5).
-      - **# Candidates** — up to 5 RetrieveMatch entries,
+      - **# Candidates** — up to ``top_k`` (default 8) RetrieveMatch entries,
         rendered with symbol_id, file_path, line range, name,
         signature, docstring, and (when available) source body and
         class context. The LLM must cite from this

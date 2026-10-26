@@ -76,9 +76,9 @@ class PaperEvidence(BaseModel):
 class Claim(BaseModel):
     """One structured technical claim extracted from the paper.
 
-    ``claim_id`` is generated client-side (UUID4 string) so the
-    server can idempotently merge LLM re-runs into the existing
-    claims list without re-numbering.
+    ``claim_id`` is assigned after extraction (``C1``..``Cn`` in
+    paper order) by :meth:`LLMClient.extract_claims`; whatever id
+    the model emitted is discarded.
     """
 
     model_config = ConfigDict(extra="forbid")

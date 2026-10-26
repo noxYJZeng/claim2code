@@ -8,7 +8,7 @@ decisions"):
     LLM verdict → compose) for one analysis and persists the
     results into ``AnalysisState.verifications`` (JSONB).
     Optional body: :class:`VerificationRunRequest` (defaults
-    to ``top_k=5`` and ``claim_ids=None`` → verify all).
+    to ``top_k=8`` and ``claim_ids=None`` → verify all).
   * ``GET /analyses/{analysis_id}/verifications`` — the one
     named in the roadmap (``phase-roadmap.md:126``). Returns
     the persisted list verbatim.

@@ -27,17 +27,23 @@ Reciprocal Rank Fusion score:
 
   - ``k = 60`` (Cormack et al. 2009 default; the standard
     ElasticSearch / OpenSearch RRF constant).
-  - ``w_i ∈ {0.55, 0.25, 0.20}`` for ``{semantic, lexical,
-    structural}``. The weights default to the pre-declared
-    triple from ``evaluation/README.md:30`` but can be
-    overridden via the ``weights`` parameter (Phase 5 eval uses
-    this to study per-leg contribution).
+  - ``w_i ∈ {0.40, 0.40, 0.20}`` for ``{semantic, lexical,
+    structural}``. Semantic and lexical weigh the same: with
+    the pre-declared ``0.55 / 0.25`` a lexical rank-1 hit
+    (``0.25 / 61``) scored below a semantic rank-15 one
+    (``0.55 / 75``), so a symbol only the lexical leg found —
+    the one sharing the claim's exact terms — could never
+    reach the top-k. Overridable via the ``weights`` parameter
+    (Phase 5 eval uses this to study per-leg contribution).
   - ``rank_i(d)`` is the 1-indexed rank of ``d`` in leg ``i``'s
     result. Symbols **not** in leg ``i``'s result contribute
     ``0`` (we omit them from the sum).
 
 Then:
 
+  - Drop ``kind='import'`` symbols: an import line is not an
+    implementation of anything, yet its one-line text matches
+    library names in the claim and crowds real code out.
   - Apply the structural multiplier (``>= 1.0``) to ``rrf(d)``.
   - Normalise to ``[0, 1]`` by multiplying by ``(k + 1)`` — the
     maximum theoretical RRF with all three legs ranking ``d`` at
@@ -92,7 +98,7 @@ _RRF_K = 60
 
 @dataclass(frozen=True)
 class HybridWeights:
-    """Per-leg RRF weights. Defaults match ``evaluation/README.md:30``.
+    """Per-leg RRF weights (see the module docstring for the defaults).
 
     Sum is not required to be 1 — the normaliser uses the
     *theoretical max* (all legs rank 1) which only equals 1
@@ -102,8 +108,8 @@ class HybridWeights:
     ``[0, 1]``. Tests assert the default case.
     """
 
-    semantic: float = 0.55
-    lexical: float = 0.25
+    semantic: float = 0.40
+    lexical: float = 0.40
     structural: float = 0.20
 
     def as_dict(self) -> dict[str, float]:
@@ -296,24 +302,23 @@ def hybrid_ranker(
         # Sort by final_score desc, then by symbol_id (stable tie-break).
         matches.sort(key=lambda m: (-m.final_score, str(m.symbol_id)))
 
-        # Bulk-fetch CodeSymbol rows for the top_k survivors so the
-        # caller can render name / file_path / signature without a
-        # second query.
-        top = matches[:top_k]
-        if not top:
-            root_span.set_attribute("retrieval.result_count", 0)
-            return []
-
-        top_ids = [m.symbol_id for m in top]
+        # Bulk-fetch the pool's CodeSymbol rows (at most
+        # ``2 * leg_top_k``) so imports can be dropped before the
+        # top_k cut.
         symbols = (
             db.query(CodeSymbol)
-            .filter(CodeSymbol.symbol_id.in_(top_ids))
+            .filter(CodeSymbol.symbol_id.in_([m.symbol_id for m in matches]))
             .all()
         )
         by_id = {s.symbol_id: s for s in symbols}
 
-        # Filter out any matches whose symbol row vanished (orphan).
-        survivors = [m for m in top if m.symbol_id in by_id]
+        # Filter out imports and any matches whose symbol row
+        # vanished (orphan).
+        survivors = [
+            m
+            for m in matches
+            if m.symbol_id in by_id and getattr(by_id[m.symbol_id], "kind", None) != "import"
+        ][:top_k]
         root_span.set_attribute("retrieval.result_count", len(survivors))
         return survivors
 

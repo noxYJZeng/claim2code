@@ -160,6 +160,14 @@ def test_extract_claims_parses_valid_response(sample_paper: Paper) -> None:
     assert rf["json_schema"]["schema"]["properties"]["claims"]["maxItems"] == 20
 
 
+def test_extract_claims_renumbers_claim_ids(sample_paper: Paper) -> None:
+    payload = json.loads(_make_valid_claims_json())
+    payload["claims"][0]["claim_id"] = "}]}"
+    payload["claims"][1]["claim_id"] = "c001"
+    client = _build_client(_client_with_response(json.dumps(payload)), pytest.MonkeyPatch())
+    assert [c.claim_id for c in client.extract_claims(sample_paper)] == ["C1", "C2"]
+
+
 def test_extract_claims_sends_system_and_user_messages(sample_paper: Paper) -> None:
     fake = _client_with_response(_make_valid_claims_json())
     client = _build_client(fake, pytest.MonkeyPatch())

@@ -1,6 +1,60 @@
 {
   "per_dataset": [
     {
+      "dataset": "attention_is_all_you_need",
+      "baseline": "embedding_only",
+      "n_claims": 12,
+      "recall_at_1": 0.5833333333333334,
+      "recall_at_5": 0.9166666666666666,
+      "mrr": 0.7041666666666666,
+      "error": null
+    },
+    {
+      "dataset": "attention_is_all_you_need",
+      "baseline": "lexical_only",
+      "n_claims": 12,
+      "recall_at_1": 0.3333333333333333,
+      "recall_at_5": 0.6666666666666666,
+      "mrr": 0.4263888888888889,
+      "error": null
+    },
+    {
+      "dataset": "attention_is_all_you_need",
+      "baseline": "hybrid_claim2code",
+      "n_claims": 12,
+      "recall_at_1": 0.4166666666666667,
+      "recall_at_5": 0.8333333333333334,
+      "mrr": 0.5833333333333334,
+      "error": null
+    },
+    {
+      "dataset": "bert",
+      "baseline": "embedding_only",
+      "n_claims": 11,
+      "recall_at_1": 0.45454545454545453,
+      "recall_at_5": 0.6363636363636364,
+      "mrr": 0.5181818181818182,
+      "error": null
+    },
+    {
+      "dataset": "bert",
+      "baseline": "lexical_only",
+      "n_claims": 11,
+      "recall_at_1": 0.18181818181818182,
+      "recall_at_5": 0.5454545454545454,
+      "mrr": 0.3181818181818182,
+      "error": null
+    },
+    {
+      "dataset": "bert",
+      "baseline": "hybrid_claim2code",
+      "n_claims": 11,
+      "recall_at_1": 0.45454545454545453,
+      "recall_at_5": 0.8181818181818182,
+      "mrr": 0.5787878787878787,
+      "error": null
+    },
+    {
       "dataset": "ddim",
       "baseline": "embedding_only",
       "n_claims": 8,
@@ -25,6 +79,33 @@
       "recall_at_1": 0.375,
       "recall_at_5": 0.5,
       "mrr": 0.4166666666666667,
+      "error": null
+    },
+    {
+      "dataset": "ddpm",
+      "baseline": "embedding_only",
+      "n_claims": 12,
+      "recall_at_1": 0.5,
+      "recall_at_5": 0.6666666666666666,
+      "mrr": 0.5833333333333334,
+      "error": null
+    },
+    {
+      "dataset": "ddpm",
+      "baseline": "lexical_only",
+      "n_claims": 12,
+      "recall_at_1": 0.08333333333333333,
+      "recall_at_5": 0.5,
+      "mrr": 0.24166666666666667,
+      "error": null
+    },
+    {
+      "dataset": "ddpm",
+      "baseline": "hybrid_claim2code",
+      "n_claims": 12,
+      "recall_at_1": 0.5,
+      "recall_at_5": 0.75,
+      "mrr": 0.611111111111111,
       "error": null
     },
     {
@@ -59,8 +140,8 @@
       "baseline": "embedding_only",
       "n_claims": 10,
       "recall_at_1": 0.0,
-      "recall_at_5": 0.5,
-      "mrr": 0.225,
+      "recall_at_5": 0.4,
+      "mrr": 0.2,
       "error": null
     },
     {
@@ -78,7 +159,7 @@
       "n_claims": 10,
       "recall_at_1": 0.2,
       "recall_at_5": 0.7,
-      "mrr": 0.4083333333333333,
+      "mrr": 0.4333333333333333,
       "error": null
     },
     {
@@ -138,19 +219,19 @@
   ],
   "aggregate_by_baseline": {
     "embedding_only": {
-      "avg_recall_at_1": 0.22777777777777777,
-      "avg_recall_at_5": 0.6083333333333333,
-      "avg_mrr": 0.3827777777777778
+      "avg_recall_at_1": 0.3345959595959596,
+      "avg_recall_at_5": 0.6451704545454545,
+      "avg_mrr": 0.4618213383838384
     },
     "lexical_only": {
-      "avg_recall_at_1": 0.2333333333333333,
-      "avg_recall_at_5": 0.48611111111111105,
-      "avg_mrr": 0.3149537037037037
+      "avg_recall_at_1": 0.2206439393939394,
+      "avg_recall_at_5": 0.5178345959595959,
+      "avg_mrr": 0.3201257365319865
     },
     "hybrid_claim2code": {
-      "avg_recall_at_1": 0.3622222222222222,
-      "avg_recall_at_5": 0.6983333333333334,
-      "avg_mrr": 0.4865277777777778
+      "avg_recall_at_1": 0.39779040404040406,
+      "avg_recall_at_5": 0.7366477272727273,
+      "avg_mrr": 0.5288589015151515
     }
   }
 }

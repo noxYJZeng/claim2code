@@ -111,7 +111,6 @@ Phase 9: ✅ OpenTelemetry spans + per-step metrics. Every workflow
   Phase 9. Wiring `evaluate_observability.py` (per-leg latency
   distribution + token cost + violation rate) is Phase 10's job.
 Phase 10: ✅ evaluators shipped — `evaluate_verification.py`,
-  `evaluate_safety.py`, `report.py`, `evaluate_all.py`; measured on the 5
-  indexed pairs (DDIM, DPO, LoRA, MAE, Reflexion; 44 claims), numbers in
-  `report.md` and the top-level README. Still open: annotate more pairs
-  (target 8–12) and index the attention / BERT repos.
+  `evaluate_safety.py`, `report.py`, `evaluate_all.py`; measured on 8
+  pairs (Attention, BERT, DDIM, DDPM, DPO, LoRA, MAE, Reflexion; 79 claims),
+  numbers in `report.md` and the top-level README.

@@ -1,40 +1,106 @@
 {
   "top_k": 8,
   "aggregate": {
-    "n_claims": 44,
-    "status_accuracy": 0.7727272727272727,
-    "support_rate": 0.8409090909090909,
-    "discrepancy_precision": 0.5714285714285714,
-    "discrepancy_recall": 0.6666666666666666,
-    "n_expected_discrepancy": 6,
-    "n_flagged": 7,
-    "grounding_rate": 1.0,
-    "line_accuracy": 0.9099099099099099,
-    "n_code_evidence": 111,
-    "evidence_hit_rate": 0.9459459459459459,
+    "n_claims": 79,
+    "status_accuracy": 0.810126582278481,
+    "support_rate": 0.8734177215189873,
+    "discrepancy_precision": 0.5833333333333334,
+    "discrepancy_recall": 0.7777777777777778,
+    "n_expected_discrepancy": 9,
+    "n_flagged": 12,
+    "grounding_rate": 0.9947643979057592,
+    "line_accuracy": 0.9214659685863874,
+    "n_code_evidence": 191,
+    "evidence_hit_rate": 0.927536231884058,
     "n_llm_errors": 0,
     "predicted_counts": {
-      "VERIFIED": 31,
-      "PARTIALLY_VERIFIED": 6,
-      "UNVERIFIED": 6,
-      "CONTRADICTED": 1
+      "VERIFIED": 59,
+      "PARTIALLY_VERIFIED": 10,
+      "UNVERIFIED": 8,
+      "CONTRADICTED": 2
     },
     "confusion": {
       "VERIFIED": {
-        "VERIFIED": 31,
-        "PARTIALLY_VERIFIED": 3,
+        "VERIFIED": 59,
+        "PARTIALLY_VERIFIED": 5,
         "CONTRADICTED": 0,
-        "UNVERIFIED": 4
+        "UNVERIFIED": 6
       },
       "PARTIALLY_VERIFIED": {
         "VERIFIED": 0,
-        "PARTIALLY_VERIFIED": 3,
-        "CONTRADICTED": 1,
+        "PARTIALLY_VERIFIED": 5,
+        "CONTRADICTED": 2,
         "UNVERIFIED": 2
       }
     }
   },
   "per_pair": {
+    "attention_is_all_you_need": {
+      "n_claims": 12,
+      "status_accuracy": 0.9166666666666666,
+      "support_rate": 1.0,
+      "discrepancy_precision": 0.5,
+      "discrepancy_recall": 1.0,
+      "n_expected_discrepancy": 1,
+      "n_flagged": 2,
+      "grounding_rate": 1.0,
+      "line_accuracy": 0.9166666666666666,
+      "n_code_evidence": 24,
+      "evidence_hit_rate": 0.8333333333333334,
+      "n_llm_errors": 0,
+      "predicted_counts": {
+        "VERIFIED": 10,
+        "PARTIALLY_VERIFIED": 2
+      },
+      "confusion": {
+        "VERIFIED": {
+          "VERIFIED": 10,
+          "PARTIALLY_VERIFIED": 1,
+          "CONTRADICTED": 0,
+          "UNVERIFIED": 0
+        },
+        "PARTIALLY_VERIFIED": {
+          "VERIFIED": 0,
+          "PARTIALLY_VERIFIED": 1,
+          "CONTRADICTED": 0,
+          "UNVERIFIED": 0
+        }
+      }
+    },
+    "bert": {
+      "n_claims": 11,
+      "status_accuracy": 0.7272727272727273,
+      "support_rate": 0.8181818181818182,
+      "discrepancy_precision": 0.5,
+      "discrepancy_recall": 1.0,
+      "n_expected_discrepancy": 1,
+      "n_flagged": 2,
+      "grounding_rate": 1.0,
+      "line_accuracy": 0.9259259259259259,
+      "n_code_evidence": 27,
+      "evidence_hit_rate": 1.0,
+      "n_llm_errors": 0,
+      "predicted_counts": {
+        "VERIFIED": 8,
+        "UNVERIFIED": 1,
+        "CONTRADICTED": 1,
+        "PARTIALLY_VERIFIED": 1
+      },
+      "confusion": {
+        "VERIFIED": {
+          "VERIFIED": 8,
+          "PARTIALLY_VERIFIED": 1,
+          "CONTRADICTED": 0,
+          "UNVERIFIED": 1
+        },
+        "PARTIALLY_VERIFIED": {
+          "VERIFIED": 0,
+          "PARTIALLY_VERIFIED": 0,
+          "CONTRADICTED": 1,
+          "UNVERIFIED": 0
+        }
+      }
+    },
     "ddim": {
       "n_claims": 8,
       "status_accuracy": 0.75,
@@ -59,6 +125,39 @@
           "PARTIALLY_VERIFIED": 1,
           "CONTRADICTED": 0,
           "UNVERIFIED": 1
+        }
+      }
+    },
+    "ddpm": {
+      "n_claims": 12,
+      "status_accuracy": 0.9166666666666666,
+      "support_rate": 0.9166666666666666,
+      "discrepancy_precision": 1.0,
+      "discrepancy_recall": 1.0,
+      "n_expected_discrepancy": 1,
+      "n_flagged": 1,
+      "grounding_rate": 0.9655172413793104,
+      "line_accuracy": 0.9655172413793104,
+      "n_code_evidence": 29,
+      "evidence_hit_rate": 0.9090909090909091,
+      "n_llm_errors": 0,
+      "predicted_counts": {
+        "VERIFIED": 10,
+        "PARTIALLY_VERIFIED": 1,
+        "UNVERIFIED": 1
+      },
+      "confusion": {
+        "VERIFIED": {
+          "VERIFIED": 10,
+          "PARTIALLY_VERIFIED": 0,
+          "CONTRADICTED": 0,
+          "UNVERIFIED": 1
+        },
+        "PARTIALLY_VERIFIED": {
+          "VERIFIED": 0,
+          "PARTIALLY_VERIFIED": 1,
+          "CONTRADICTED": 0,
+          "UNVERIFIED": 0
         }
       }
     },
@@ -193,10 +292,7 @@
       }
     }
   },
-  "skipped_pairs": [
-    "attention_is_all_you_need",
-    "bert"
-  ],
+  "skipped_pairs": [],
   "claims": [
     {
       "pair_id": "ddim",
@@ -1802,6 +1898,1210 @@
       "discrepancies": [],
       "error": null,
       "seconds": 100.5
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c1",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 519,
+          "end_line": 528,
+          "quote": "d_k = query.size(-1)\n    scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(d_k)\n    if mask is not None:\n        scores = scores.masked_fill(mask == 0, -1e9)\n    p_attn = scores.softmax(dim=-1)",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 58.5
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c2",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 3,
+      "n_grounded": 3,
+      "n_line_accurate": 3,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 589,
+          "end_line": 628,
+          "quote": "self.linears = clones(nn.Linear(d_model, d_model), 4)",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 601,
+          "end_line": 628,
+          "quote": "query, key, value = [\n            lin(x).view(nbatches, -1, self.h, self.d_k).transpose(1, 2)\n            for lin, x in zip(self.linears, (query, key, value))\n        ]",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 519,
+          "end_line": 528,
+          "quote": "def attention(query, key, value, mask=None, dropout=None):",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 94.3
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c3",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 2,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 748,
+          "end_line": 768,
+          "quote": "div_term = torch.exp(\n            torch.arange(0, d_model, 2) * -(math.log(10000.0) / d_model)\n        )\n        pe[:, 0::2] = torch.sin(position * div_term)\n        pe[:, 1::2] = torch.cos(position * div_term)",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 778,
+          "end_line": 801,
+          "quote": "pe = PositionalEncoding(20, 0)\n    y = pe.forward(torch.zeros(1, 100, 20))",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 74.6
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c4",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 680,
+          "end_line": 687,
+          "quote": "def __init__(self, d_model, d_ff, dropout=0.1):\n        super(PositionwiseFeedForward, self).__init__()\n        self.w_1 = nn.Linear(d_model, d_ff)\n        self.w_2 = nn.Linear(d_ff, d_model)\n        self.dropout = nn.Dropout(dropout)\n\n    def forward(self, x):\n        return self.w_2(self.dropout(self.w_1(x).relu()))",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 60.3
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c5",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 3,
+      "n_grounded": 3,
+      "n_line_accurate": 3,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 292,
+          "end_line": 304,
+          "quote": "class Encoder(nn.Module):\n    \"Core encoder is a stack of N layers\"\n\n    def __init__(self, layer, N):\n        super(Encoder, self).__init__()\n        self.layers = clones(layer, N)\n        self.norm = LayerNorm(layer.size)",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 295,
+          "end_line": 298,
+          "quote": "    def __init__(self, layer, N):\n        super(Encoder, self).__init__()\n        self.layers = clones(layer, N)\n        self.norm = LayerNorm(layer.size)",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 2034,
+          "end_line": 2053,
+          "quote": "    layer_viz = [\n        visualize_layer(\n            model, layer, get_encoder, len(example[1]), example[1], example[1]\n        )\n        for layer in range(6)\n    ]",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 91.8
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c6",
+      "expected": "PARTIALLY_VERIFIED",
+      "predicted": "PARTIALLY_VERIFIED",
+      "n_evidence": 3,
+      "n_grounded": 3,
+      "n_line_accurate": 3,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 344,
+          "end_line": 357,
+          "quote": "A residual connection followed by a layer norm.\n    Note for code simplicity the norm is first as opposed to last.",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 355,
+          "end_line": 357,
+          "quote": "return x + self.dropout(sublayer(self.norm(x)))",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 315,
+          "end_line": 327,
+          "quote": "return self.a_2 * (x - mean) / (std + self.eps) + self.b_2",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [
+        {
+          "type": "CONFIGURATION_MISMATCH",
+          "severity": "MEDIUM",
+          "detail": "The claim states the output is LayerNorm(x + Sublayer(x)), but the code implements x + Dropout(Sublayer(Norm(x))). The docstring explicitly notes 'the norm is first as opposed to last', confirming the order differs from the paper's description. The residual connection is present but LayerNorm is applied before the sublayer rather than after the addition."
+        }
+      ],
+      "error": null,
+      "seconds": 96.4
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c7",
+      "expected": "VERIFIED",
+      "predicted": "PARTIALLY_VERIFIED",
+      "n_evidence": 3,
+      "n_grounded": 3,
+      "n_line_accurate": 3,
+      "evidence_hit": false,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 390,
+          "end_line": 401,
+          "quote": "def forward(self, x, memory, src_mask, tgt_mask):\n        for layer in self.layers:\n            x = layer(x, memory, src_mask, tgt_mask)\n        return self.norm(x)",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 1997,
+          "end_line": 1998,
+          "quote": "def get_decoder_src(model, layer):\n    return model.decoder.layers[layer].src_attn.attn",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 2095,
+          "end_line": 2117,
+          "quote": "def viz_decoder_src():\n    model, example_data = run_model_example(n_examples=1)\n    example = example_data[len(example_data) - 1]\n\n    layer_viz = [\n        visualize_layer(\n            model,\n            layer,\n            get_decoder_src,\n            max(len(example[1]), len(example[2])),\n            example[1],\n            example[2],\n        )\n        for layer in range(6)\n    ]",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [
+        {
+          "type": "CONFIGURATION_MISMATCH",
+          "severity": "MEDIUM",
+          "detail": "The claim specifies the source attention is the *third* sub-layer. While candidates confirm a src_attn module exists in decoder layers and receives encoder output (memory), the DecoderLayer class definition is not among the candidates. Therefore, the specific ordering of sub-layers (self-attn -> src-attn -> feed-forward) cannot be directly verified from the provided snippets, leaving the 'third' position unconfirmed by code evidence."
+        }
+      ],
+      "error": null,
+      "seconds": 103.3
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c8",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 2,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 704,
+          "end_line": 711,
+          "quote": "return self.lut(x) * math.sqrt(self.d_model)",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 705,
+          "end_line": 708,
+          "quote": "self.d_model = d_model",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 61.8
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c9",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 1638,
+          "end_line": 1640,
+          "quote": "criterion = LabelSmoothing(\n        size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1\n    )",
+          "grounded": true,
+          "line_accurate": false
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 1154,
+          "end_line": 1156,
+          "quote": "self.criterion = nn.KLDivLoss(reduction=\"sum\")\n        self.padding_idx = padding_idx\n        self.confidence = 1.0 - smoothing",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 81.2
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c10",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": false,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 1340,
+          "end_line": 1342,
+          "quote": "optimizer = torch.optim.Adam(\n        model.parameters(), lr=0.5, betas=(0.9, 0.98), eps=1e-9\n    )",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 77.3
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c11",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 1058,
+          "end_line": 1067,
+          "quote": "return factor * (\n        model_size ** (-0.5) * min(step ** (-0.5), step * warmup ** (-1.5))\n    )",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 1658,
+          "end_line": 1662,
+          "quote": "lr_scheduler = LambdaLR(\n        optimizer=optimizer,\n        lr_lambda=lambda step: rate(\n            step, d_model, factor=1, warmup=config[\"warmup\"]\n        ),\n    )",
+          "grounded": true,
+          "line_accurate": false
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 94.6
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c12",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "start_line": 822,
+          "end_line": 843,
+          "quote": "def make_model(\n    src_vocab, tgt_vocab, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1\n):",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 73.9
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c1",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 3,
+      "n_grounded": 3,
+      "n_line_accurate": 3,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "create_pretraining_data.py",
+          "start_line": 60,
+          "end_line": 60,
+          "quote": "flags.DEFINE_float(\"masked_lm_prob\", 0.15, \"Masked LM probability.\")",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "create_pretraining_data.py",
+          "start_line": 342,
+          "end_line": 415,
+          "quote": "num_to_predict = min(max_predictions_per_seq,\n                       max(1, int(round(len(tokens) * masked_lm_prob))))",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "create_pretraining_data.py",
+          "start_line": 46,
+          "end_line": 47,
+          "quote": "\"do_whole_word_mask\", False,\n    \"Whether to use whole word masking rather than per-WordPiece masking.\")",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 954.7
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c2",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "create_pretraining_data.py",
+          "start_line": 342,
+          "end_line": 415,
+          "quote": "# 80% of the time, replace with [MASK]\n      if rng.random() < 0.8:\n        masked_token = \"[MASK]\"\n      else:\n        # 10% of the time, keep original\n        if rng.random() < 0.5:\n          masked_token = tokens[index]\n        # 10% of the time, replace with random word\n        else:\n          masked_token = vocab_words[rng.randint(0, len(vocab_words) - 1)]",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 86.2
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c3",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "create_pretraining_data.py",
+          "start_line": 223,
+          "end_line": 335,
+          "quote": "if len(current_chunk) == 1 or rng.random() < 0.5:\n          is_random_next = True",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 78.7
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c4",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 2,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "modeling.py",
+          "start_line": 34,
+          "end_line": 80,
+          "quote": "hidden_size=768,\n               num_hidden_layers=12,\n               num_attention_heads=12,",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "modeling.py",
+          "start_line": 754,
+          "end_line": 892,
+          "quote": "hidden_size=768,\n                      num_hidden_layers=12,\n                      num_attention_heads=12,",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 121.3
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c5",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "modeling.py",
+          "start_line": 428,
+          "end_line": 521,
+          "quote": "output = input_tensor\n\n  if use_token_type:\n    if token_type_ids is None:\n      raise ValueError(\"`token_type_ids` must be specified if\"\n                       \"`use_token_type` is True.\")\n    token_type_table = tf.get_variable(\n        name=token_type_embedding_name,\n        shape=[token_type_vocab_size, width],\n        initializer=create_initializer(initializer_range))\n    # This vocab will be small so we always do one-hot here, since it is always\n    # faster for a small vocabulary.\n    flat_token_type_ids = tf.reshape(token_type_ids, [-1])\n    one_hot_ids = tf.one_hot(flat_token_type_ids, depth=token_type_vocab_size)\n    token_type_embeddings = tf.matmul(one_hot_ids, token_type_table)\n    token_type_embeddings = tf.reshape(token_type_embeddings,\n                                       [batch_size, seq_length, width])\n    output += token_type_embeddings\n\n  if use_position_embeddings:\n    assert_op = tf.assert_less_equal(seq_length, max_position_embeddings)\n    with tf.control_dependencies([asse",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 107.7
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c6",
+      "expected": "VERIFIED",
+      "predicted": "UNVERIFIED",
+      "n_evidence": 0,
+      "n_grounded": 0,
+      "n_line_accurate": 0,
+      "evidence_hit": false,
+      "evidence": [],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 43.8
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c7",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 4,
+      "n_grounded": 4,
+      "n_line_accurate": 4,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "modeling.py",
+          "start_line": 34,
+          "end_line": 80,
+          "quote": "hidden_dropout_prob=0.1,\n               attention_probs_dropout_prob=0.1,",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "modeling.py",
+          "start_line": 754,
+          "end_line": 892,
+          "quote": "hidden_dropout_prob=0.1,\n                      attention_probs_dropout_prob=0.1,",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "modeling.py",
+          "start_line": 368,
+          "end_line": 372,
+          "quote": "output_tensor = dropout(output_tensor, dropout_prob)",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "modeling.py",
+          "start_line": 344,
+          "end_line": 359,
+          "quote": "output = tf.nn.dropout(input_tensor, 1.0 - dropout_prob)",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 98.7
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c8",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 6,
+      "n_grounded": 6,
+      "n_line_accurate": 5,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "optimization.py",
+          "start_line": 25,
+          "end_line": 84,
+          "quote": "optimizer = AdamWeightDecayOptimizer(\n      learning_rate=learning_rate,\n      weight_decay_rate=0.01,\n      beta_1=0.9,\n      beta_2=0.999,\n      epsilon=1e-6,\n      exclude_from_weight_decay=[\"LayerNorm\", \"layer_norm\", \"bias\"])",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "optimization.py",
+          "start_line": 30,
+          "end_line": 37,
+          "quote": "# Implements linear decay of the learning rate.\n  learning_rate = tf.train.polynomial_decay(\n      learning_rate,\n      global_step,\n      num_train_steps,\n      end_learning_rate=0.0,\n      power=1.0,\n      cycle=False)",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "optimization.py",
+          "start_line": 39,
+          "end_line": 52,
+          "quote": "# Implements linear warmup. I.e., if global_step < num_warmup_steps, the\n  # learning rate will be `global_step/num_warmup_steps * init_lr`.\n  if num_warmup_steps:\n    global_steps_int = tf.cast(global_step, tf.int32)\n    warmup_steps_int = tf.constant(num_warmup_steps, dtype=tf.int32)\n\n    global_steps_float = tf.cast(global_steps_int, tf.float32)\n    warmup_steps_float = tf.cast(warmup_steps_int, tf.float32)\n\n    warmup_percent_done = global_steps_float / warmup_steps_float\n    warmup_learning_rate = init_lr * warmup_percent_done",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "run_pretraining.py",
+          "start_line": 72,
+          "end_line": 72,
+          "quote": "flags.DEFINE_integer(\"num_warmup_steps\", 10000, \"Number of warmup steps.\")",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "optimization.py",
+          "start_line": 90,
+          "end_line": 106,
+          "quote": "def __init__(self,\n               learning_rate,\n               weight_decay_rate=0.0,\n               beta_1=0.9,\n               beta_2=0.999,",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "run_pretraining.py",
+          "start_line": 138,
+          "end_line": 139,
+          "quote": "train_op = optimization.create_optimizer(\n          total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)",
+          "grounded": true,
+          "line_accurate": false
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 152.2
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c9",
+      "expected": "PARTIALLY_VERIFIED",
+      "predicted": "CONTRADICTED",
+      "n_evidence": 4,
+      "n_grounded": 4,
+      "n_line_accurate": 4,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "run_pretraining.py",
+          "start_line": 68,
+          "end_line": 68,
+          "quote": "flags.DEFINE_float(\"learning_rate\", 5e-5, \"The initial learning rate for Adam.\")",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "run_pretraining.py",
+          "start_line": 70,
+          "end_line": 70,
+          "quote": "flags.DEFINE_integer(\"num_train_steps\", 100000, \"Number of training steps.\")",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "run_pretraining.py",
+          "start_line": 64,
+          "end_line": 64,
+          "quote": "flags.DEFINE_integer(\"train_batch_size\", 32, \"Total batch size for training.\")",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "run_pretraining.py",
+          "start_line": 109,
+          "end_line": 237,
+          "quote": "train_op = optimization.create_optimizer(\n          total_loss, learning_rate, num_train_steps, num_warmup_steps, use_tpu)",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [
+        {
+          "type": "HYPERPARAMETER_MISMATCH",
+          "severity": "HIGH",
+          "detail": "Claim states learning rate 1e-4, but run_pretraining.py default is 5e-05."
+        },
+        {
+          "type": "HYPERPARAMETER_MISMATCH",
+          "severity": "HIGH",
+          "detail": "Claim states batch size 256, but run_pretraining.py default train_batch_size is 32."
+        },
+        {
+          "type": "HYPERPARAMETER_MISMATCH",
+          "severity": "HIGH",
+          "detail": "Claim states 1,000,000 steps, but run_pretraining.py default num_train_steps is 100000."
+        }
+      ],
+      "error": null,
+      "seconds": 123.0
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c10",
+      "expected": "VERIFIED",
+      "predicted": "PARTIALLY_VERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 2,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "modeling.py",
+          "start_line": 237,
+          "end_line": 244,
+          "quote": "def get_sequence_output(self):\n    \"\"\"Gets final hidden layer of encoder.\n\n    Returns:\n      float Tensor of shape [batch_size, seq_length, hidden_size] corresponding\n      to the final hidden of the transformer encoder.\n    \"\"\"\n    return self.sequence_output",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "run_classifier.py",
+          "start_line": 377,
+          "end_line": 476,
+          "quote": "# For classification tasks, the first vector (corresponding to [CLS]) is\n  # used as the \"sentence vector\". Note that this only makes sense because\n  # the entire model is fine-tuned.\n  tokens = []\n  segment_ids = []\n  tokens.append(\"[CLS]\")",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [
+        {
+          "type": "CONFIGURATION_MISMATCH",
+          "severity": "MEDIUM",
+          "detail": "The candidates show the production of final hidden states and the placement of [CLS] at index 0, but do not explicitly show the extraction of the [CLS] vector (e.g., output[:, 0, :]) for classification. The mechanism is implied but not directly visible in the provided snippets."
+        }
+      ],
+      "error": null,
+      "seconds": 107.7
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c11",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 3,
+      "n_grounded": 3,
+      "n_line_accurate": 2,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "modeling.py",
+          "start_line": 428,
+          "end_line": 521,
+          "quote": "max_position_embeddings=512,",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "modeling.py",
+          "start_line": 450,
+          "end_line": 460,
+          "quote": "max_position_embeddings: int. Maximum sequence length that might ever be\n      used with this model.",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "modeling.py",
+          "start_line": 510,
+          "end_line": 521,
+          "quote": "assert_op = tf.assert_less_equal(seq_length, max_position_embeddings)",
+          "grounded": true,
+          "line_accurate": false
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 112.4
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c1",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 4,
+      "n_grounded": 4,
+      "n_line_accurate": 4,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "scripts/run_celebahq.py",
+          "start_line": 132,
+          "end_line": 162,
+          "quote": "num_diffusion_timesteps=1000, beta_start=0.0001, beta_end=0.02, beta_schedule='linear'",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "scripts/run_lsun.py",
+          "start_line": 116,
+          "end_line": 153,
+          "quote": "num_diffusion_timesteps=1000, beta_start=0.0001, beta_end=0.02, beta_schedule='linear'",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "scripts/run_cifar.py",
+          "start_line": 132,
+          "end_line": 164,
+          "quote": "num_diffusion_timesteps=1000, beta_start=0.0001, beta_end=0.02, beta_schedule='linear'",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "diffusion_tf/diffusion_utils.py",
+          "start_line": 22,
+          "end_line": 38,
+          "quote": "elif beta_schedule == 'linear':\n    betas = np.linspace(beta_start, beta_end, num_diffusion_timesteps, dtype=np.float64)",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 132.4
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c2",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "diffusion_tf/diffusion_utils_2.py",
+          "start_line": 274,
+          "end_line": 304,
+          "quote": "elif self.loss_type == 'mse':  # unweighted MSE\n      assert self.model_var_type != 'learned'\n      target = {\n        'xprev': self.q_posterior_mean_variance(x_start=x_start, x_t=x_t, t=t)[0],\n        'xstart': x_start,\n        'eps': noise\n      }[self.model_mean_type]\n      model_output = denoise_fn(x_t, t)\n      assert model_output.shape == target.shape == x_start.shape\n      losses = nn.meanflat(tf.squared_difference(target, model_output))",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "scripts/run_lsun.py",
+          "start_line": 64,
+          "end_line": 73,
+          "quote": "if self.loss_type == 'noisepred':\n      # predict the noise instead of x_start. seems to be weighted naturally like SNR\n      assert x_recon.shape == x_start.shape\n      losses = nn.meanflat(tf.squared_difference(noise, x_recon))",
+          "grounded": false,
+          "line_accurate": false
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 130.4
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c3",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 4,
+      "n_grounded": 4,
+      "n_line_accurate": 4,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "diffusion_tf/diffusion_utils.py",
+          "start_line": 179,
+          "end_line": 188,
+          "quote": "model_mean + nonzero_mask * tf.exp(0.5 * model_log_variance) * noise",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "diffusion_tf/diffusion_utils.py",
+          "start_line": 185,
+          "end_line": 186,
+          "quote": "# no noise when t == 0\n    nonzero_mask = tf.reshape(1 - tf.cast(tf.equal(t, 0), tf.float32), [x.shape[0]] + [1] * (len(x.shape) - 1))",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "diffusion_tf/diffusion_utils.py",
+          "start_line": 183,
+          "end_line": 184,
+          "quote": "noise = noise_like(x.shape, noise_fn, repeat_noise)\n    assert noise.shape == x.shape",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "diffusion_tf/diffusion_utils_2.py",
+          "start_line": 195,
+          "end_line": 197,
+          "quote": "# no noise when t == 0\n    nonzero_mask = tf.reshape(1 - tf.cast(tf.equal(t, 0), tf.float32), [x.shape[0]] + [1] * (len(x.shape) - 1))\n    sample = model_mean + nonzero_mask * tf.exp(0.5 * model_log_variance) * noise",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 167.6
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c4",
+      "expected": "PARTIALLY_VERIFIED",
+      "predicted": "PARTIALLY_VERIFIED",
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "diffusion_tf/diffusion_utils_2.py",
+          "start_line": 135,
+          "end_line": 147,
+          "quote": "elif self.model_var_type in ['fixedsmall', 'fixedlarge']:\n      # below: only log_variance is used in the KL computations\n      model_variance, model_log_variance = {\n        # for fixedlarge, we set the initial (log-)variance like so to get a better decoder log likelihood\n        'fixedlarge': (self.betas, np.log(np.append(self.posterior_variance[1], self.betas[1:]))),\n        'fixedsmall': (self.posterior_variance, self.posterior_log_variance_clipped),\n      }[self.model_var_type]",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [
+        {
+          "type": "CONFIGURATION_MISMATCH",
+          "severity": "MEDIUM",
+          "detail": "The claim states variances are set to sigma_t^2 = beta_t, but the code implements this only under the 'fixedlarge' model_var_type option. The code also supports 'fixedsmall' (posterior variance) and 'learned' options, meaning beta_t is not the sole or default choice. The specific formula sigma_t^2 = beta_t matches the 'fixedlarge' branch where model_variance is set to self.betas."
+        }
+      ],
+      "error": null,
+      "seconds": 163.4
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c5",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "start_line": 11,
+          "end_line": 12,
+          "quote": "def normalize(x, *, temb, name):\n  return tf_contrib.layers.group_norm(x, scope=name)",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 68.9
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c6",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 2,
+      "evidence_hit": false,
+      "evidence": [
+        {
+          "file_path": "scripts/run_celebahq.py",
+          "start_line": 30,
+          "end_line": 53,
+          "quote": "attn_resolutions=(16,)",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "start_line": 66,
+          "end_line": 84,
+          "quote": "def attn_block(x, *, name, temb):",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 96.7
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c7",
+      "expected": "VERIFIED",
+      "predicted": "UNVERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 2,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "diffusion_tf/nn.py",
+          "start_line": 90,
+          "end_line": 109,
+          "quote": "def get_timestep_embedding(timesteps, embedding_dim: int):",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "start_line": 66,
+          "end_line": 84,
+          "quote": "def attn_block(x, *, name, temb):",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 92.5
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c8",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 2,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "scripts/run_cifar.py",
+          "start_line": 20,
+          "end_line": 82,
+          "quote": "if self.model_name == 'unet2d16b2':  # 35.7M\n      return unet.model(\n        x, t=t, y=y, name='model', ch=128, ch_mult=(1, 2, 2, 2), num_res_blocks=2, attn_resolutions=(16,),\n        out_ch=out_ch, num_classes=self.num_classes, dropout=dropout\n      )",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "start_line": 87,
+          "end_line": 145,
+          "quote": "num_resolutions = len(ch_mult)\n\n  assert num_classes == 1 and y is None, 'not supported'\n  del y\n\n  with tf.variable_scope(name, reuse=reuse):\n    # Timestep embedding\n    with tf.variable_scope('temb'):\n      temb = nn.get_timestep_embedding(t, ch)\n      temb = nn.dense(temb, name='dense0', num_units=ch * 4)\n      temb = nn.dense(nonlinearity(temb), name='dense1', num_units=ch * 4)\n      assert temb.shape == [B, ch * 4]\n\n    # Downsampling\n    hs = [nn.conv2d(x, name='conv_in', num_units=ch)]\n    for i_level in range(num_resolutions):\n      with tf.variable_scope('down_{}'.format(i_level)):\n        # Residual blocks for this resolution\n        for i_block in range(num_res_blocks):\n          h = resnet_block(\n            hs[-1], name='block_{}'.format(i_block), temb=temb, out_ch=ch * ch_mult[i_level], dropout=dropout)\n          if h.shape[1] in attn_resolutions:\n            h = attn_block(h, name='attn_{}'.format(i_block), temb=temb)\n          hs.append(h)",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 148.5
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c9",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 3,
+      "n_grounded": 3,
+      "n_line_accurate": 3,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "scripts/run_cifar.py",
+          "start_line": 132,
+          "end_line": 164,
+          "quote": "dropout=0.1, randflip=1,",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "scripts/run_cifar.py",
+          "start_line": 44,
+          "end_line": 53,
+          "quote": "if self.randflip:\n      x = tf.image.random_flip_left_right(x)",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "scripts/run_cifar.py",
+          "start_line": 30,
+          "end_line": 42,
+          "quote": "out_ch=out_ch, num_classes=self.num_classes, dropout=dropout",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 113.3
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c10",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 2,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "scripts/run_cifar.py",
+          "start_line": 132,
+          "end_line": 164,
+          "quote": "def train(\n    exp_name, tpu_name, bucket_name_prefix, model_name='unet2d16b2', dataset='cifar10',\n    optimizer='adam', total_bs=128, grad_clip=1., lr=2e-4, warmup=5000,",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "diffusion_tf/tpu_utils/tpu_utils.py",
+          "start_line": 101,
+          "end_line": 203,
+          "quote": "def run_training(\n    *, model_constructor, train_input_fn, total_bs,\n    optimizer, lr, warmup, grad_clip, ema_decay=0.9999,",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 131.6
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c11",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 2,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "diffusion_tf/tpu_utils/tpu_utils.py",
+          "start_line": 101,
+          "end_line": 203,
+          "quote": "optimizer, lr, warmup, grad_clip, ema_decay=0.9999,",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "diffusion_tf/tpu_utils/tpu_utils.py",
+          "start_line": 89,
+          "end_line": 92,
+          "quote": "def make_ema(global_step, ema_decay, trainable_variables):\n  ema = tf.train.ExponentialMovingAverage(decay=tf.where(tf.less(global_step, 1), 1e-10, ema_decay))\n  ema_op = ema.apply(trainable_variables)\n  return ema, ema_op",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 117.7
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c12",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 4,
+      "n_grounded": 4,
+      "n_line_accurate": 4,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "scripts/run_lsun.py",
+          "start_line": 116,
+          "end_line": 153,
+          "quote": "optimizer='adam', total_bs=64, grad_clip=1., lr=2e-5, warmup=5000,\n    num_diffusion_timesteps=1000, beta_start=0.0001, beta_end=0.02, beta_schedule='linear', loss_type='noisepred',\n    dropout=0.0, randflip=1, block_size=1,",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "diffusion_tf/tpu_utils/datasets.py",
+          "start_line": 74,
+          "end_line": 93,
+          "quote": "resolution=256,      # Dataset resolution.",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "scripts/run_celebahq.py",
+          "start_line": 132,
+          "end_line": 162,
+          "quote": "optimizer='adam', total_bs=64, grad_clip=1., lr=0.00002, warmup=5000,\n    num_diffusion_timesteps=1000, beta_start=0.0001, beta_end=0.02, beta_schedule='linear', loss_type='noisepred',\n    dropout=0.0, randflip=1, block_size=1,",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "diffusion_tf/tpu_utils/datasets.py",
+          "start_line": 21,
+          "end_line": 38,
+          "quote": "self._img_size = {'cifar10': 32, 'celebahq256': 256}[name]",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 166.5
     }
   ]
 }

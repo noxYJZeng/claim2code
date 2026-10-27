@@ -25,37 +25,40 @@
 ## Measured results
 
 From [`evaluation/report.md`](evaluation/report.md), measured locally with
-`qwen3.8-27b-mlx` (LM Studio) and `nomic-embed-text-v1.5` embeddings on the
-5 annotated pairs whose repos are indexed (DDIM, DPO, LoRA, MAE, Reflexion;
-44 claims). Re-run with `make eval-all`.
+`qwen3.8-27b-mlx` (LM Studio) and `nomic-embed-text-v1.5` embeddings on 8
+annotated pairs (Attention Is All You Need, BERT, DDIM, DDPM, DPO, LoRA, MAE,
+Reflexion; 79 claims). Re-run with `make eval-all`.
 
 | Area | Metric | Claim2Code | Baseline |
 |---|---|---|---|
-| Retrieval (top 5) | Recall@5, macro avg | **0.70** | 0.61 embedding-only · 0.49 lexical-only |
-| | MRR, macro avg | **0.487** | 0.383 embedding-only · 0.315 lexical-only |
-| Verification | Status accuracy (4-way) | 77.3% | — |
-| | Support rate (claim judged VERIFIED / PARTIALLY_VERIFIED) | 84.1% | — |
-| | Discrepancy precision / recall (claim level) | 57.1% / 66.7% | — |
-| | Grounding rate (cited code exists in the cited file) | 100% of 111 citations | — |
-| | Line accuracy (cited code at the cited lines) | 91.0% | — |
+| Retrieval (top 5) | Recall@5, macro avg | **0.74** | 0.65 embedding-only · 0.52 lexical-only |
+| | MRR, macro avg | **0.529** | 0.462 embedding-only · 0.320 lexical-only |
+| Verification | Status accuracy (4-way) | 81.0% | — |
+| | Support rate (claim judged VERIFIED / PARTIALLY_VERIFIED) | 87.3% | — |
+| | Discrepancy precision / recall (claim level) | 58.3% / 77.8% | — |
+| | Grounding rate (cited code exists in the cited file) | 99.5% of 191 citations | — |
+| | Line accuracy (cited code at the cited lines) | 92.1% | — |
 | Safety | Secrets protected, covered / held-out forms | 10/10 · 2/8 | — |
 | | Injections detected, covered / held-out forms | 6/6 · 0/6 | — |
-| | Clean text falsely flagged | 3/12 | — |
+| | Clean text flagged | 3/12 | — |
 
-Caveats: 5 pairs / 44 claims is below the 8–12-pair target, and only 6 of the
-44 claims carry an annotated discrepancy, so the discrepancy rates rest on few
-cases. The annotations were written during development, not by an independent
-annotator, and five were corrected after a first measured run (2026-10-27,
-each with a note in its annotation): lora_c3/c5/c6 named the wrong symbol or
-misstated the code, and ddim_c1/mae_c5 were labelled PARTIALLY_VERIFIED with no
-paper/code mismatch. Scored against the corrected labels, the earlier pipeline
-reached 63.6% accuracy and 36.4% / 66.7% discrepancy precision / recall.
-The remaining misses are mostly retrieval (5 claims got no code evidence, 3 of
-them in LoRA, whose `examples/NLU` is a vendored transformers checkout) and
-3 PARTIALLY_VERIFIED verdicts on claims annotated VERIFIED. The safety
-`held_out` cases (GitHub fine-grained / Slack / Hugging Face tokens,
-paraphrased injections) are coverage gaps of the regex gate, which matches only
-the forms listed in Phase 8.
+Caveats: only 9 of the 79 claims carry an annotated discrepancy, so the
+discrepancy rates rest on few cases. The annotations were written during
+development, not by an independent annotator. Five were corrected after a first
+measured run (2026-10-27, each with a note in its annotation): lora_c3/c5/c6
+named the wrong symbol or misstated the code, and ddim_c1/mae_c5 were labelled
+PARTIALLY_VERIFIED with no paper/code mismatch. Scored against the corrected
+labels, the earlier pipeline reached 63.6% accuracy on the first 5 pairs. The
+Attention, BERT and DDPM pairs were annotated afterwards against
+harvardnlp/annotated-transformer, google-research/bert and
+hojonathanho/diffusion; BERT's pre-training hyperparameters are absl flags,
+which the parser now indexes as config symbols. Of the 15 misses, 6 got no
+code evidence (3 in LoRA, whose `examples/NLU` is a vendored transformers
+checkout), 2 more are UNVERIFIED despite evidence, 5 are PARTIALLY_VERIFIED verdicts on claims annotated VERIFIED, and
+2 are CONTRADICTED where a PARTIALLY_VERIFIED mismatch was expected (the
+mismatch was caught but over-graded). The safety `held_out` cases (GitHub
+fine-grained / Slack / Hugging Face tokens, paraphrased injections) are coverage
+gaps of the regex gate, which matches only the forms listed in Phase 8.
 
 ## Why
 
@@ -317,7 +320,7 @@ first (pairs without an indexed repo are skipped).
 ```bash
 make eval-safety                       # seconds, no services needed
 make eval-retrieval                    # ~1 min
-make eval-verification                 # one LLM call per claim (~1-2 h for 44 claims locally)
+make eval-verification                 # one LLM call per claim (~2-3 h for 79 claims locally)
 make eval-verification ARGS=--resume   # continue an interrupted run
 make eval-report                       # render evaluation/report.md
 ```
@@ -448,7 +451,7 @@ claim2code/
 | 7 | Related Work | scholarly API + 5 structured comparable papers | Selected claim → 6-field (problem/method/dataset/metric/difference/agreement) comparison per paper; Semantic Scholar primary + OpenAlex fallback. `POST /analyses/{id}/related-work` + `GET`; per-paper LLM isolation (failure → `comparison=None`, paper still ships with metadata + score). |
 | 8 | Responsible AI | trust boundary + secret redaction + no-exec | All adversarial fixtures blocked. `SafetyGate` wraps every LLM call at the SDK seam (`chat.completions.create`); `SecretRedactor` replaces credential spans (OpenAI / Anthropic / AWS / GCP / GitHub / PEM / Bearer / `.env`) with `[REDACTED:<label>]`; `PromptInjectionDetector` returns hits without mutating text. Violations are appended to `AnalysisState.errors` with `{stage, kind, pattern, span_count, ts}` — no content persisted. 8 credential patterns + 5 injection patterns; 57 adversarial tests (`pytest -m safety`); new CI job `backend-safety` gates Phase 8. |
 | 9 | Observability | OTel spans + per-step metrics + trace tree | One analysis → one trace tree. Each of the 3 workflows (`paper_workflow.run`, `verification_workflow.run`, `related_work_workflow.run`) opens a root span; per-claim / per-paper / per-LLM-call / per-retriever-leg open child spans (`verification.claim_verify`, `literature.paper_compare`, `llm.{extract_claims,verdict,compare}`, `retrieval.{semantic,lexical,structural}`). `safety.gate_wrap` auto-parents under each LLM span via OTel contextvars. Metrics: `llm_tokens_total` (counter, model+kind), `llm_request_duration_seconds` (histogram), `retriever_request_duration_seconds` (histogram, leg label), `safety_violations_total` (counter, pattern label). Console exporter default + OTLP-HTTP optional via `OTEL_EXPORTER_OTLP_ENDPOINT`; FastAPIInstrumentor wraps every HTTP request as a server span. 29 tests (`pytest -m observability`); new CI job `backend-observability` gates Phase 9. |
-| 10 | Evaluation | 8–12 papers, 40–60 claims, all metrics | `evaluation/results.json` + Markdown report. Shipped: retrieval, verification and safety evaluators + report (5 indexed pairs / 44 claims measured, see [Measured results](#measured-results)); more pairs still to annotate. |
+| 10 | Evaluation | 8–12 papers, 40–60 claims, all metrics | `evaluation/results.json` + Markdown report. Shipped: retrieval, verification and safety evaluators + report (8 pairs / 79 claims measured, see [Measured results](#measured-results)). |
 
 ## License
 

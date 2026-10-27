@@ -168,6 +168,41 @@ def test_extract_claims_renumbers_claim_ids(sample_paper: Paper) -> None:
     assert [c.claim_id for c in client.extract_claims(sample_paper)] == ["C1", "C2"]
 
 
+def _wrapped_claims_json() -> str:
+    """A schema-valid response whose one claim holds the real answer."""
+    payload = json.loads(_make_valid_claims_json())
+    payload["claims"] = payload["claims"][:1]
+    payload["claims"][0]["text"] = (
+        'Here are the claims:```json\n[\n  {\n    "claim": "LoRA freezes W0."\n  }\n]\n```'
+    )
+    return json.dumps(payload)
+
+
+def test_extract_claims_retries_wrapped_output(sample_paper: Paper) -> None:
+    fake = _client_with_response(None)
+    fake.chat.completions.create.side_effect = [
+        _make_response(_wrapped_claims_json()),
+        _make_response(_make_valid_claims_json()),
+    ]
+    client = _build_client(fake, pytest.MonkeyPatch())
+    claims = client.extract_claims(sample_paper)
+    assert fake.chat.completions.create.call_count == 2
+    assert claims[0].text == "The model uses β=0.1."
+
+
+def test_extract_claims_raises_when_retry_still_wrapped(sample_paper: Paper) -> None:
+    fake = _client_with_response(_wrapped_claims_json())
+    client = _build_client(fake, pytest.MonkeyPatch())
+    with pytest.raises(ClaimExtractionError, match="two attempts"):
+        client.extract_claims(sample_paper)
+
+
+def test_wrapped_output_detector_leaves_real_claims_alone() -> None:
+    assert not llm_client_mod._is_wrapped_output("LoRA scales ΔWx by α/r, with r ∈ {1, 2, 4, 8}.")
+    assert not llm_client_mod._is_wrapped_output('The config sets "beta": 0.1 for DPO.')
+    assert llm_client_mod._is_wrapped_output('[{"claim": "x"}]')
+
+
 def test_extract_claims_sends_system_and_user_messages(sample_paper: Paper) -> None:
     fake = _client_with_response(_make_valid_claims_json())
     client = _build_client(fake, pytest.MonkeyPatch())

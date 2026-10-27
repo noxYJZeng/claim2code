@@ -308,12 +308,30 @@ class LLMClient:
     # ------------------------------------------------------------------
 
     def extract_claims(self, paper: Paper) -> list[Claim]:
-        """Call OpenAI with the ``ClaimList`` JSON schema and parse the response.
+        """Extract claims, retrying once if the output is wrapped.
+
+        A schema-constrained local model sometimes satisfies the
+        schema by writing its whole answer — prose plus a JSON array
+        in some other shape — into one claim's ``text``. That is
+        schema-valid but useless, so it gets one fresh sample.
 
         :raises ClaimExtractionError: if the API call fails, the
-            response fails schema validation, or the parsed list is
-            empty.
+            response fails schema validation, the parsed list is
+            empty, or both attempts come back wrapped.
         """
+        claims = self._extract_claims_once(paper)
+        if not any(_is_wrapped_output(c.text) for c in claims):
+            return claims
+        logger.warning("extract_claims: wrapped output in claim text; retrying once")
+        claims = self._extract_claims_once(paper)
+        if any(_is_wrapped_output(c.text) for c in claims):
+            raise ClaimExtractionError(
+                "LLM wrapped its answer inside a claim's text on two attempts"
+            )
+        return claims
+
+    def _extract_claims_once(self, paper: Paper) -> list[Claim]:
+        """Call OpenAI with the ``ClaimList`` JSON schema and parse the response."""
         user_payload = _build_user_payload(paper)
         schema = ClaimList.model_json_schema()
 
@@ -794,6 +812,16 @@ def _build_user_payload(paper: Paper) -> str:
         f"Pages: {paper.n_pages}  Chars: {paper.n_chars}\n\n"
         + "\n".join(sections_md)
     )
+
+
+# A JSON object key or a Markdown code fence inside a claim's text: the
+# model nested its real answer in the field instead of filling the schema.
+_WRAPPED_OUTPUT = re.compile(r'```|[\[{]\s*"\w+"\s*:')
+
+
+def _is_wrapped_output(text: str) -> bool:
+    """True when a claim's ``text`` holds a nested answer, not a claim."""
+    return bool(_WRAPPED_OUTPUT.search(text))
 
 
 def _build_verify_payload(

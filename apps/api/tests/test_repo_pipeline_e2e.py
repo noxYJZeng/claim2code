@@ -345,3 +345,46 @@ def test_callee_context_resolves_nearest_definition(
     assert "helper" not in ctx  # already a candidate
 
     assert _callee_context(session, helper, files["alf/util.py"], tmp_path, exclude=set()) is None
+
+
+def test_callee_context_follows_registry_dispatch(
+    session, tmp_path: Path,
+) -> None:
+    """A call through a module-level registry dict resolves to the
+    function the registry names, ahead of the direct callees."""
+    import uuid
+
+    from claim2code_api.repos.storage import WalkedFile
+    from claim2code_api.repos.workflow import _extract_symbols
+    from claim2code_api.verification.workflow import _callee_context
+
+    files = {
+        "runner.py": (
+            "def train(config, x):\n"
+            "    data = load(x)\n"
+            "    return loss_registry[config.kind](data)\n"
+        ),
+        "losses.py": (
+            "def simple_loss(x):\n"
+            "    return (x - 1).square().sum()\n"
+            "\n"
+            "\n"
+            "loss_registry = {\n"
+            "    'simple': simple_loss,\n"
+            "}\n"
+        ),
+        "data.py": "def load(x):\n    return x\n",
+    }
+    repo_id = uuid.uuid4()
+    for rel, text in files.items():
+        path = tmp_path / rel
+        path.write_text(text)
+        wf = WalkedFile(absolute_path=path, relative_path=rel, size_bytes=path.stat().st_size)
+        _extract_symbols(session, repo_id, wf, {})
+    session.flush()
+
+    train = next(s for s in session.query(CodeSymbol).all() if s.name == "train")
+    ctx = _callee_context(session, train, files["runner.py"], tmp_path, exclude=set())
+    assert ctx is not None
+    assert "# simple_loss (losses.py:1-2)" in ctx and "square().sum()" in ctx
+    assert ctx.index("simple_loss") < ctx.index("# load")

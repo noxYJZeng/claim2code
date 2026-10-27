@@ -460,6 +460,10 @@ def _class_context(db: Session, sym: CodeSymbol, clone_path: Path) -> str | None
 # A call site: an identifier followed by ``(``. Language-agnostic
 # enough for the Python/JS/Go/Rust/Java the parser indexes.
 _CALL_RE = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
+# A dispatch through a registry: ``loss_registry[config.model.type](...)``.
+_DISPATCH_RE = re.compile(r"\b([A-Za-z_]\w*)\s*\[[^\]\n]*\]\s*\(")
+_IDENT_RE = re.compile(r"\b[A-Za-z_]\w*\b")
+_STRING_RE = re.compile(r"(\"[^\"\n]*\"|'[^'\n]*')")
 _MAX_CALLEES = 4
 
 
@@ -478,10 +482,16 @@ def _callee_context(
     ``alfworld_run`` -> ``check_is_exhausted``). A name defined more
     than once resolves to the definition nearest ``sym``'s file; a tie
     is skipped as ambiguous. Symbols already among the candidates
-    (``exclude``) are not repeated.
+    (``exclude``) are not repeated. A call through a module-level
+    registry (``loss_registry[key](...)``) resolves to the functions
+    the registry's literal names, listed before the direct callees.
     """
     body = source.split("\n", 1)[1] if "\n" in source else ""
-    names = list(dict.fromkeys(n for n in _CALL_RE.findall(body) if n != sym.name))
+    # Registry targets go first: a direct callee's name is at least
+    # visible in ``source``, a dispatched one is not.
+    calls = _registry_members(db, sym, _DISPATCH_RE.findall(body), clone_path)
+    calls += _CALL_RE.findall(body)
+    names = list(dict.fromkeys(n for n in calls if n != sym.name))
     if not names:
         return None
     defs = (
@@ -515,6 +525,43 @@ def _callee_context(
         if len(parts) == _MAX_CALLEES:
             break
     return "\n\n".join(parts) or None
+
+
+def _registry_members(
+    db: Session,
+    sym: CodeSymbol,
+    registries: list[str],
+    clone_path: Path,
+) -> list[str]:
+    """Identifiers named in the literal of each dispatched-through constant."""
+    if not registries:
+        return []
+    consts = (
+        db.query(CodeSymbol)
+        .filter(
+            CodeSymbol.repository_id == sym.repository_id,
+            CodeSymbol.kind == "constant",
+            CodeSymbol.name.in_(registries),
+        )
+        .all()
+    )
+    by_name: dict[str, list[CodeSymbol]] = {}
+    for c in consts:
+        by_name.setdefault(c.name, []).append(c)
+    members: list[str] = []
+    for name in dict.fromkeys(registries):
+        const = _nearest_definition(by_name.get(name, []), sym.file_path)
+        if const is None:
+            continue
+        text = _read_source_range(
+            clone_path=clone_path,
+            rel_path=const.file_path,
+            start_line=const.start_line,
+            end_line=const.end_line,
+        )
+        literal = text.split("=", 1)[1] if text and "=" in text else ""
+        members += _IDENT_RE.findall(_STRING_RE.sub("", literal))
+    return members
 
 
 def _nearest_definition(defs: list[CodeSymbol], file_path: str) -> CodeSymbol | None:

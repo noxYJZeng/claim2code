@@ -66,8 +66,8 @@ def seeded_session():
     # ``analysis_states``.
     session.execute(
         text(
-            "INSERT INTO analysis_states (repository_status, paper_status) "
-            "VALUES ('done', 'done')"
+            "INSERT INTO analysis_states (analysis_id, repository_status, paper_status) "
+            "VALUES (gen_random_uuid(), 'done', 'done')"
         )
     )
     session.execute(

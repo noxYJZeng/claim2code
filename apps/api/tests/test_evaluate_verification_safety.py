@@ -90,6 +90,24 @@ def test_quote_is_grounded_tolerates_whitespace_and_line_slack() -> None:
     assert not quote_is_grounded("z = 1", text, 1, 3)
 
 
+def test_quote_is_grounded_accepts_elisions_and_skipped_lines_but_not_edits() -> None:
+    text = (
+        "# training batch size\n"
+        "batch_size: 4\n"
+        "\n"
+        "# eval batch size\n"
+        "eval_batch_size: 16\n"
+        "python run.py --model roberta-base \\\n--task rte \\\n--apply_lora --lora_r 8\n"
+        "t = randint(low=0, size=(n // 2 + 1,))\n"
+    )
+    assert quote_is_grounded("batch_size: 4\n\neval_batch_size: 16", text)  # comment skipped
+    assert quote_is_grounded("--model roberta-base ... --apply_lora --lora_r 8", text)
+    assert quote_is_grounded("--model roberta-base --task rte", text)  # continuation dropped
+    assert quote_is_grounded("eval_batch_si", text)  # truncated mid-token
+    assert not quote_is_grounded("t = randint(low=0, size=(n // 2 + 1))", text)  # comma dropped
+    assert not quote_is_grounded("...", text)
+
+
 def test_claim_from_annotation_builds_a_valid_claim() -> None:
     claim = _claim_from_annotation({
         "claim_id": "x_c1",

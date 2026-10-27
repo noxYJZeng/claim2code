@@ -38,13 +38,14 @@ to ``evaluation/results/verification_claims.jsonl`` as they finish and
 
 Usage::
 
-    python evaluation/evaluate_verification.py [--pairs dpo,mae] [--resume]
+    python evaluation/evaluate_verification.py [--pairs dpo,mae] [--resume | --regrade]
 """
 from __future__ import annotations
 
 import argparse
 import json
 import logging
+import re
 import sys
 import time
 from collections import Counter
@@ -77,6 +78,7 @@ TOP_K = 8  # what the verification workflow uses in production
 STATUSES = ("VERIFIED", "PARTIALLY_VERIFIED", "CONTRADICTED", "UNVERIFIED")
 _SUPPORTED = {"VERIFIED", "PARTIALLY_VERIFIED"}
 _FLAGGED = {"PARTIALLY_VERIFIED", "CONTRADICTED"}
+_ELISION_RE = re.compile(r"\.{3,}|…")
 
 
 # ============================================================
@@ -136,19 +138,43 @@ def quote_is_grounded(
     start_line: int | None = None,
     end_line: int | None = None,
 ) -> bool:
-    """True when ``quote`` occurs in ``file_text``.
+    """True when every fragment of ``quote`` occurs verbatim in ``file_text``.
 
-    With ``start_line``/``end_line`` the quote must sit at those lines
-    (two lines of slack each side for off-by-one citations). Whitespace
-    is collapsed so re-indented quotes still match.
+    A quote is split into fragments at line breaks and at ``...``
+    elisions, so a citation that skips a comment line or elides the
+    middle of a long command still counts, while any altered code (a
+    dropped comma, a renamed variable) does not. Whitespace is
+    collapsed and shell/Python ``\\`` line continuations dropped on both
+    sides, so re-indented or re-wrapped quotes match.
+
+    With ``start_line``/``end_line`` the fragments must sit at those
+    lines (two lines of slack each side for off-by-one citations).
     """
-    if not quote.strip() or file_text is None:
+    fragments = [
+        _normalise(f)
+        for line in quote.splitlines()
+        for f in _ELISION_RE.split(line)
+    ]
+    fragments = [f for f in fragments if f]
+    if not fragments or file_text is None:
         return False
     lines = file_text.splitlines()
     if start_line is not None and end_line is not None:
         lines = lines[max(start_line - 3, 0):min(end_line + 2, len(lines))]
-    window = " ".join(" ".join(lines).split())
-    return " ".join(quote.split()) in window
+    window = _normalise(" ".join(lines))
+    return all(f in window for f in fragments)
+
+
+def _normalise(text: str) -> str:
+    return " ".join(t for t in text.split() if t != "\\")
+
+
+def grade_evidence(evidence: list[dict[str, Any]], read_file: Any) -> None:
+    """Set ``grounded`` / ``line_accurate`` on each stored citation in place."""
+    for e in evidence:
+        text = read_file(e["file_path"])
+        e["grounded"] = quote_is_grounded(e["quote"], text)
+        e["line_accurate"] = quote_is_grounded(e["quote"], text, e["start_line"], e["end_line"])
 
 
 # ============================================================
@@ -220,12 +246,13 @@ def verify_pair(
         )
         db.rollback()  # the eval never persists; drop anything the pipeline staged
         evidence = verification.code_evidence
-        grounded_flags = [quote_is_grounded(e.quote, _file(e.file_path)) for e in evidence]
-        located_flags = [
-            quote_is_grounded(e.quote, _file(e.file_path), e.start_line, e.end_line)
+        cited = [
+            {"file_path": e.file_path, "start_line": e.start_line, "end_line": e.end_line,
+             "quote": e.quote}
             for e in evidence
         ]
-        grounded = sum(grounded_flags)
+        grade_evidence(cited, _file)
+        grounded = sum(c["grounded"] for c in cited)
         hit = any(
             str(e.symbol_id) in relevant_ids
             or any(
@@ -241,13 +268,9 @@ def verify_pair(
             "predicted": verification.status.value,
             "n_evidence": len(evidence),
             "n_grounded": grounded,
-            "n_line_accurate": sum(located_flags),
+            "n_line_accurate": sum(c["line_accurate"] for c in cited),
             "evidence_hit": hit,
-            "evidence": [
-                {"file_path": e.file_path, "start_line": e.start_line, "end_line": e.end_line,
-                 "quote": e.quote, "grounded": g, "line_accurate": loc}
-                for e, g, loc in zip(evidence, grounded_flags, located_flags, strict=True)
-            ],
+            "evidence": cited,
             "discrepancies": [
                 {"type": d.type.value, "severity": d.severity.value, "detail": d.detail}
                 for d in verification.discrepancies
@@ -269,11 +292,69 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
     return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
 
 
+def _run(
+    SessionLocal: Any,
+    annotations: list[dict[str, Any]],
+    repo_ids: dict[str, str],
+    *,
+    resume: bool,
+) -> list[dict[str, Any]]:
+    """Verify every pending claim, streaming records to ``CLAIMS_JSONL``."""
+    records = _read_jsonl(CLAIMS_JSONL) if resume else []
+    if not resume:
+        CLAIMS_JSONL.write_text("")
+    finished = {(r["pair_id"], r["claim_id"]) for r in records}
+    for annotation in annotations:
+        pair_id = annotation["pair_id"]
+        if pair_id not in repo_ids:
+            continue
+        skip = {cid for pid, cid in finished if pid == pair_id}
+        with SessionLocal() as db, CLAIMS_JSONL.open("a") as sink:
+            for record in verify_pair(db, annotation, UUID(repo_ids[pair_id]), skip=skip):
+                sink.write(json.dumps(record) + "\n")
+                sink.flush()
+                records.append(record)
+    return records
+
+
+def _regrade(
+    SessionLocal: Any,
+    repo_ids: dict[str, str],
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Recompute citation grounding for stored records against the clones."""
+    from claim2code_api.db.models import Repository
+
+    with SessionLocal() as db:
+        clones = {
+            pid: Path(db.get(Repository, UUID(rid)).clone_path) for pid, rid in repo_ids.items()
+        }
+    for r in records:
+        clone = clones.get(r["pair_id"])
+        if clone is None:
+            continue
+
+        def _file(rel: str, clone: Path = clone) -> str | None:
+            try:
+                return (clone / rel).read_text(errors="replace")
+            except OSError:
+                return None
+
+        grade_evidence(r["evidence"], _file)
+        r["n_grounded"] = sum(e["grounded"] for e in r["evidence"])
+        r["n_line_accurate"] = sum(e["line_accurate"] for e in r["evidence"])
+    return records
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--pairs", help="comma-separated pair_ids (default: every indexed pair)")
     parser.add_argument("--resume", action="store_true", help="keep finished claims from the last run")
+    parser.add_argument(
+        "--regrade", action="store_true",
+        help="re-score the last run's stored citations without calling the LLM",
+    )
     args = parser.parse_args(argv)
 
     annotations = _load_annotations()
@@ -285,24 +366,14 @@ def main(argv: list[str] | None = None) -> int:
         repo_ids = resolve_repo_ids(db, annotations)
 
     RESULTS_DIR.mkdir(exist_ok=True)
-    done = _read_jsonl(CLAIMS_JSONL) if args.resume else []
-    if not args.resume:
-        CLAIMS_JSONL.write_text("")
-    finished = {(r["pair_id"], r["claim_id"]) for r in done}
-    records = list(done)
-    skipped_pairs = []
-    for annotation in annotations:
-        pair_id = annotation["pair_id"]
-        if pair_id not in repo_ids:
-            skipped_pairs.append(pair_id)
-            logger.warning("skipping pair_id=%s (repository not indexed)", pair_id)
-            continue
-        skip = {cid for pid, cid in finished if pid == pair_id}
-        with SessionLocal() as db, CLAIMS_JSONL.open("a") as sink:
-            for record in verify_pair(db, annotation, UUID(repo_ids[pair_id]), skip=skip):
-                sink.write(json.dumps(record) + "\n")
-                sink.flush()
-                records.append(record)
+    skipped_pairs = [a["pair_id"] for a in annotations if a["pair_id"] not in repo_ids]
+    for pair_id in skipped_pairs:
+        logger.warning("skipping pair_id=%s (repository not indexed)", pair_id)
+    if args.regrade:
+        records = _regrade(SessionLocal, repo_ids, _read_jsonl(CLAIMS_JSONL))
+        CLAIMS_JSONL.write_text("".join(json.dumps(r) + "\n" for r in records))
+    else:
+        records = _run(SessionLocal, annotations, repo_ids, resume=args.resume)
 
     if not records:
         logger.error("no annotated pair has an indexed repository")

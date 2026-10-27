@@ -2,69 +2,63 @@
   "top_k": 8,
   "aggregate": {
     "n_claims": 44,
-    "status_accuracy": 0.6363636363636364,
-    "support_rate": 0.7954545454545454,
-    "discrepancy_precision": 0.45454545454545453,
-    "discrepancy_recall": 0.7142857142857143,
-    "n_expected_discrepancy": 7,
-    "n_flagged": 11,
-    "grounding_rate": 0.9901960784313726,
-    "line_accuracy": 0.9215686274509803,
-    "n_code_evidence": 102,
-    "evidence_hit_rate": 0.9428571428571428,
+    "status_accuracy": 0.7727272727272727,
+    "support_rate": 0.8409090909090909,
+    "discrepancy_precision": 0.5714285714285714,
+    "discrepancy_recall": 0.6666666666666666,
+    "n_expected_discrepancy": 6,
+    "n_flagged": 7,
+    "grounding_rate": 1.0,
+    "line_accuracy": 0.9099099099099099,
+    "n_code_evidence": 111,
+    "evidence_hit_rate": 0.9459459459459459,
     "n_llm_errors": 0,
     "predicted_counts": {
-      "VERIFIED": 25,
-      "PARTIALLY_VERIFIED": 10,
-      "UNVERIFIED": 8,
+      "VERIFIED": 31,
+      "PARTIALLY_VERIFIED": 6,
+      "UNVERIFIED": 6,
       "CONTRADICTED": 1
     },
     "confusion": {
       "VERIFIED": {
-        "VERIFIED": 24,
-        "PARTIALLY_VERIFIED": 6,
+        "VERIFIED": 31,
+        "PARTIALLY_VERIFIED": 3,
         "CONTRADICTED": 0,
-        "UNVERIFIED": 7
+        "UNVERIFIED": 4
       },
       "PARTIALLY_VERIFIED": {
-        "VERIFIED": 1,
-        "PARTIALLY_VERIFIED": 4,
+        "VERIFIED": 0,
+        "PARTIALLY_VERIFIED": 3,
         "CONTRADICTED": 1,
-        "UNVERIFIED": 1
+        "UNVERIFIED": 2
       }
     }
   },
   "per_pair": {
     "ddim": {
       "n_claims": 8,
-      "status_accuracy": 0.5,
+      "status_accuracy": 0.75,
       "support_rate": 0.875,
       "discrepancy_precision": 0.0,
-      "discrepancy_recall": 0.0,
-      "n_expected_discrepancy": 1,
-      "n_flagged": 2,
-      "grounding_rate": 0.9565217391304348,
-      "line_accuracy": 0.8695652173913043,
-      "n_code_evidence": 23,
-      "evidence_hit_rate": 1.0,
+      "discrepancy_recall": null,
+      "n_expected_discrepancy": 0,
+      "n_flagged": 1,
+      "grounding_rate": 1.0,
+      "line_accuracy": 0.9090909090909091,
+      "n_code_evidence": 22,
+      "evidence_hit_rate": 0.8571428571428571,
       "n_llm_errors": 0,
       "predicted_counts": {
-        "VERIFIED": 5,
-        "PARTIALLY_VERIFIED": 2,
+        "VERIFIED": 6,
+        "PARTIALLY_VERIFIED": 1,
         "UNVERIFIED": 1
       },
       "confusion": {
         "VERIFIED": {
-          "VERIFIED": 4,
-          "PARTIALLY_VERIFIED": 2,
+          "VERIFIED": 6,
+          "PARTIALLY_VERIFIED": 1,
           "CONTRADICTED": 0,
           "UNVERIFIED": 1
-        },
-        "PARTIALLY_VERIFIED": {
-          "VERIFIED": 1,
-          "PARTIALLY_VERIFIED": 0,
-          "CONTRADICTED": 0,
-          "UNVERIFIED": 0
         }
       }
     },
@@ -77,8 +71,8 @@
       "n_expected_discrepancy": 1,
       "n_flagged": 1,
       "grounding_rate": 1.0,
-      "line_accuracy": 0.8947368421052632,
-      "n_code_evidence": 19,
+      "line_accuracy": 0.7727272727272727,
+      "n_code_evidence": 22,
       "evidence_hit_rate": 1.0,
       "n_llm_errors": 0,
       "predicted_counts": {
@@ -103,28 +97,33 @@
     },
     "lora": {
       "n_claims": 10,
-      "status_accuracy": 0.4,
-      "support_rate": 0.5,
-      "discrepancy_precision": 0.0,
-      "discrepancy_recall": null,
-      "n_expected_discrepancy": 0,
-      "n_flagged": 1,
+      "status_accuracy": 0.7,
+      "support_rate": 0.7,
+      "discrepancy_precision": null,
+      "discrepancy_recall": 0.0,
+      "n_expected_discrepancy": 1,
+      "n_flagged": 0,
       "grounding_rate": 1.0,
-      "line_accuracy": 0.8947368421052632,
-      "n_code_evidence": 19,
-      "evidence_hit_rate": 0.8,
+      "line_accuracy": 0.9166666666666666,
+      "n_code_evidence": 24,
+      "evidence_hit_rate": 1.0,
       "n_llm_errors": 0,
       "predicted_counts": {
-        "VERIFIED": 4,
-        "UNVERIFIED": 5,
-        "PARTIALLY_VERIFIED": 1
+        "VERIFIED": 7,
+        "UNVERIFIED": 3
       },
       "confusion": {
         "VERIFIED": {
-          "VERIFIED": 4,
-          "PARTIALLY_VERIFIED": 1,
+          "VERIFIED": 7,
+          "PARTIALLY_VERIFIED": 0,
           "CONTRADICTED": 0,
-          "UNVERIFIED": 5
+          "UNVERIFIED": 2
+        },
+        "PARTIALLY_VERIFIED": {
+          "VERIFIED": 0,
+          "PARTIALLY_VERIFIED": 0,
+          "CONTRADICTED": 0,
+          "UNVERIFIED": 1
         }
       }
     },
@@ -134,27 +133,27 @@
       "support_rate": 1.0,
       "discrepancy_precision": 1.0,
       "discrepancy_recall": 1.0,
-      "n_expected_discrepancy": 2,
-      "n_flagged": 2,
+      "n_expected_discrepancy": 1,
+      "n_flagged": 1,
       "grounding_rate": 1.0,
-      "line_accuracy": 0.9615384615384616,
-      "n_code_evidence": 26,
+      "line_accuracy": 1.0,
+      "n_code_evidence": 28,
       "evidence_hit_rate": 1.0,
       "n_llm_errors": 0,
       "predicted_counts": {
-        "VERIFIED": 7,
-        "PARTIALLY_VERIFIED": 2
+        "VERIFIED": 8,
+        "PARTIALLY_VERIFIED": 1
       },
       "confusion": {
         "VERIFIED": {
-          "VERIFIED": 7,
+          "VERIFIED": 8,
           "PARTIALLY_VERIFIED": 0,
           "CONTRADICTED": 0,
           "UNVERIFIED": 0
         },
         "PARTIALLY_VERIFIED": {
           "VERIFIED": 0,
-          "PARTIALLY_VERIFIED": 2,
+          "PARTIALLY_VERIFIED": 1,
           "CONTRADICTED": 0,
           "UNVERIFIED": 0
         }
@@ -162,26 +161,26 @@
     },
     "reflexion": {
       "n_claims": 8,
-      "status_accuracy": 0.5,
+      "status_accuracy": 0.625,
       "support_rate": 0.875,
-      "discrepancy_precision": 0.4,
+      "discrepancy_precision": 0.5,
       "discrepancy_recall": 0.6666666666666666,
       "n_expected_discrepancy": 3,
-      "n_flagged": 5,
+      "n_flagged": 4,
       "grounding_rate": 1.0,
-      "line_accuracy": 1.0,
+      "line_accuracy": 0.9333333333333333,
       "n_code_evidence": 15,
       "evidence_hit_rate": 0.8571428571428571,
       "n_llm_errors": 0,
       "predicted_counts": {
-        "VERIFIED": 2,
-        "PARTIALLY_VERIFIED": 5,
+        "VERIFIED": 3,
+        "PARTIALLY_VERIFIED": 4,
         "UNVERIFIED": 1
       },
       "confusion": {
         "VERIFIED": {
-          "VERIFIED": 2,
-          "PARTIALLY_VERIFIED": 3,
+          "VERIFIED": 3,
+          "PARTIALLY_VERIFIED": 2,
           "CONTRADICTED": 0,
           "UNVERIFIED": 0
         },
@@ -202,55 +201,47 @@
     {
       "pair_id": "ddim",
       "claim_id": "ddim_c1",
-      "expected": "PARTIALLY_VERIFIED",
+      "expected": "VERIFIED",
       "predicted": "VERIFIED",
-      "n_evidence": 4,
-      "n_grounded": 4,
-      "n_line_accurate": 4,
-      "evidence_hit": true,
+      "n_evidence": 3,
+      "n_grounded": 3,
+      "n_line_accurate": 3,
+      "evidence_hit": false,
       "evidence": [
-        {
-          "file_path": "runners/diffusion.py",
-          "start_line": 336,
-          "end_line": 381,
-          "quote": "if self.args.sample_type == \"generalized\":\n            if self.args.skip_type == \"uniform\":\n                skip = self.num_timesteps // self.args.timesteps\n                seq = range(0, self.num_timesteps, skip)\n            elif self.args.skip_type == \"quad\":\n                seq = (\n                    np.linspace(\n                        0, np.sqrt(self.num_timesteps * 0.8), self.args.timesteps\n                    )\n                    ** 2\n                )\n                seq = [int(s) for s in list(seq)]\n            else:\n                raise NotImplementedError\n            from functions.denoising import generalized_steps\n\n            xs = generalized_steps(x, seq, model, self.betas, eta=self.args.eta)\n            x = xs\n        elif self.args.sample_type == \"ddpm_noisy\":\n            if self.args.skip_type == \"uniform\":\n                skip = self.num_timesteps // self.args.timesteps\n                seq = range(0, self.num_timesteps, skip)\n            elif self.args.skip_type == \"quad\":\n                seq = (\n                    np.linspace(\n                        0, np.sqrt(self.num_timesteps * 0.8), self.args.timesteps\n                    )\n                    ** 2\n                )\n                seq = [int(s) for s in list(seq)]\n            else:\n                raise NotImplementedError\n            from functions.denoising import ddpm_steps\n\n            x = ddpm_steps(x, seq, model, self.betas)",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "functions/denoising.py",
-          "start_line": 10,
-          "end_line": 32,
-          "quote": "def generalized_steps(x, seq, model, b, **kwargs):\n    with torch.no_grad():\n        n = x.size(0)\n        seq_next = [-1] + list(seq[:-1])\n        x0_preds = []\n        xs = [x]\n        for i, j in zip(reversed(seq), reversed(seq_next)):\n            t = (torch.ones(n) * i).to(x.device)\n            next_t = (torch.ones(n) * j).to(x.device)\n            at = compute_alpha(b, t.long())\n            at_next = compute_alpha(b, next_t.long())\n            xt = xs[-1].to('cuda')\n            et = model(xt, t)\n            x0_t = (xt - et * (1 - at).sqrt()) / at.sqrt()\n            x0_preds.append(x0_t.to('cpu'))\n            c1 = (\n                kwargs.get(\"eta\", 0) * ((1 - at / at_next) * (1 - at_next) / (1 - at)).sqrt()\n            )\n            c2 = ((1 - at_next) - c1 ** 2).sqrt()\n            xt_next = at_next.sqrt() * x0_t + c1 * torch.randn_like(x) + c2 * et\n            xs.append(xt_next.to('cpu'))\n\n    return xs, x0_preds",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "runners/diffusion.py",
-          "start_line": 98,
-          "end_line": 190,
-          "quote": "loss = loss_registry[config.model.type](model, x, t, e, b)",
-          "grounded": true,
-          "line_accurate": true
-        },
         {
           "file_path": "main.py",
           "start_line": 68,
           "end_line": 72,
-          "quote": "\"--sample_type\",\n        type=str,\n        default=\"generalized\",\n        help=\"sampling approach (generalized or ddpm_noisy)\",",
+          "quote": "\"--sample_type\",\n        type=str,\n        default=\"generalized\",\n        help=\"sampling approach (generalized or ddpm_noisy)\",\n    )",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "runners/diffusion.py",
+          "start_line": 336,
+          "end_line": 381,
+          "quote": "if self.args.sample_type == \"generalized\":\n            if self.args.skip_type == \"uniform\":\n                skip = self.num_timesteps // self.args.timesteps\n                seq = range(0, self.num_timesteps, skip)\n            elif self.args.skip_type == \"quad\":\n                seq = (\n                    np.linspace(\n                        0, np.sqrt(self.num_timesteps * 0.8), self.args.timesteps\n                    )\n                    ** 2\n                )\n                seq = [int(s) for s in list(seq)]\n            else:\n                raise NotImplementedError\n            from functions.denoising import generalized_steps\n\n            xs = generalized_steps(x, seq, model, self.betas, eta=self.args.eta)\n            x = xs\n        elif self.args.sample_type == \"ddpm_noisy\":",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "runners/diffusion.py",
+          "start_line": 61,
+          "end_line": 384,
+          "quote": "loss = loss_registry[config.model.type](model, x, t, e, b)",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 128.2
+      "seconds": 145.3
     },
     {
       "pair_id": "ddim",
       "claim_id": "ddim_c2",
       "expected": "VERIFIED",
-      "predicted": "PARTIALLY_VERIFIED",
+      "predicted": "VERIFIED",
       "n_evidence": 2,
       "n_grounded": 2,
       "n_line_accurate": 2,
@@ -273,15 +264,9 @@
           "line_accurate": true
         }
       ],
-      "discrepancies": [
-        {
-          "type": "CONFIGURATION_MISMATCH",
-          "severity": "LOW",
-          "detail": "The code implements the DDIM sampling process via the 'eta' parameter in generalized_steps, where eta=0 corresponds to \u03c3t = 0. However, the code does not explicitly name this configuration 'DDIM' or set eta=0 as a default in the provided candidates. The claim's specific naming and default configuration are not directly visible in the code snippets."
-        }
-      ],
+      "discrepancies": [],
       "error": null,
-      "seconds": 62.6
+      "seconds": 135.9
     },
     {
       "pair_id": "ddim",
@@ -290,7 +275,7 @@
       "predicted": "VERIFIED",
       "n_evidence": 3,
       "n_grounded": 3,
-      "n_line_accurate": 2,
+      "n_line_accurate": 3,
       "evidence_hit": true,
       "evidence": [
         {
@@ -302,34 +287,34 @@
           "line_accurate": true
         },
         {
-          "file_path": "runners/diffusion.py",
-          "start_line": 360,
-          "end_line": 362,
-          "quote": "from functions.denoising import generalized_steps\n\n            xs = generalized_steps(x, seq, model, self.betas, eta=self.args.eta)",
-          "grounded": true,
-          "line_accurate": false
-        },
-        {
           "file_path": "functions/denoising.py",
           "start_line": 10,
           "end_line": 32,
-          "quote": "def generalized_steps(x, seq, model, b, **kwargs):\n    with torch.no_grad():\n        n = x.size(0)\n        seq_next = [-1] + list(seq[:-1])\n        x0_preds = []\n        xs = [x]\n        for i, j in zip(reversed(seq), reversed(seq_next)):\n            t = (torch.ones(n) * i).to(x.device)\n            next_t = (torch.ones(n) * j).to(x.device)\n            at = compute_alpha(b, t.long())\n            at_next = compute_alpha(b, next_t.long())\n            xt = xs[-1].to('cuda')\n            et = model(xt, t)\n            x0_t = (xt - et * (1 - at).sqrt()) / at.sqrt()\n            x0_preds.append(x0_t.to('cpu'))\n            c1 = (\n                kwargs.get(\"eta\", 0) * ((1 - at / at_next) * (1 - at_next) / (1 - at)).sqrt()\n            )\n            c2 = ((1 - at_next) - c1 ** 2).sqrt()\n            xt_next = at_next.sqrt() * x0_t + c1 * torch.randn_like(x) + c2 * et\n            xs.append(xt_next.to('cpu'))\n\n    return xs, x0_preds",
+          "quote": "def generalized_steps(x, seq, model, b, **kwargs):\n    with torch.no_grad():\n        n = x.size(0)\n        seq_next = [-1] + list(seq[:-1])\n        x0_preds = []\n        xs = [x]\n        for i, j in zip(reversed(seq), reversed(seq_next)):",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "main.py",
+          "start_line": 68,
+          "end_line": 72,
+          "quote": "\"--sample_type\",\n        type=str,\n        default=\"generalized\",\n        help=\"sampling approach (generalized or ddpm_noisy)\",",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 90.3
+      "seconds": 133.0
     },
     {
       "pair_id": "ddim",
       "claim_id": "ddim_c4",
       "expected": "VERIFIED",
       "predicted": "PARTIALLY_VERIFIED",
-      "n_evidence": 4,
-      "n_grounded": 3,
-      "n_line_accurate": 3,
+      "n_evidence": 5,
+      "n_grounded": 5,
+      "n_line_accurate": 5,
       "evidence_hit": true,
       "evidence": [
         {
@@ -341,18 +326,18 @@
           "line_accurate": true
         },
         {
-          "file_path": "runners/diffusion.py",
-          "start_line": 98,
-          "end_line": 190,
-          "quote": "t = torch.randint(\n                    low=0, high=self.num_timesteps, size=(n // 2 + 1)\n                ).to(self.device)",
-          "grounded": false,
-          "line_accurate": false
+          "file_path": "datasets/celeba.py",
+          "start_line": 8,
+          "end_line": 163,
+          "quote": "class CelebA(VisionDataset):",
+          "grounded": true,
+          "line_accurate": true
         },
         {
-          "file_path": "runners/diffusion.py",
-          "start_line": 336,
-          "end_line": 381,
-          "quote": "skip = self.num_timesteps // self.args.timesteps",
+          "file_path": "models/diffusion.py",
+          "start_line": 192,
+          "end_line": 341,
+          "quote": "class Model(nn.Module):",
           "grounded": true,
           "line_accurate": true
         },
@@ -363,86 +348,87 @@
           "quote": "num_diffusion_timesteps: 1000",
           "grounded": true,
           "line_accurate": true
+        },
+        {
+          "file_path": "runners/diffusion.py",
+          "start_line": 192,
+          "end_line": 242,
+          "quote": "model.load_state_dict(states[0], strict=True)",
+          "grounded": true,
+          "line_accurate": true
         }
       ],
       "discrepancies": [
         {
           "type": "CONFIGURATION_MISMATCH",
           "severity": "MEDIUM",
-          "detail": "The claim says 'the same trained model' is used for each dataset, implying a single shared checkpoint. The code instead trains per-dataset models via separate configs (e.g., CIFAR10 config) and loads dataset-specific checkpoints in sample(); no single shared model artifact across datasets is evident."
+          "detail": "The claim specifies objective L\u03b3 with \u03b3=1, but the code uses `noise_estimation_loss` which is the standard DDPM objective. While \u03b3=1 in L\u03b3 typically reduces to the standard noise prediction loss, the code does not explicitly parameterize \u03b3 or reference Eq. (5), making the linkage implicit."
         }
       ],
       "error": null,
-      "seconds": 85.0
+      "seconds": 255.0
     },
     {
       "pair_id": "ddim",
       "claim_id": "ddim_c5",
       "expected": "VERIFIED",
       "predicted": "UNVERIFIED",
-      "n_evidence": 0,
-      "n_grounded": 0,
-      "n_line_accurate": 0,
-      "evidence_hit": false,
-      "evidence": [],
-      "discrepancies": [],
-      "error": null,
-      "seconds": 31.3
-    },
-    {
-      "pair_id": "ddim",
-      "claim_id": "ddim_c6",
-      "expected": "VERIFIED",
-      "predicted": "VERIFIED",
-      "n_evidence": 5,
-      "n_grounded": 5,
-      "n_line_accurate": 5,
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
       "evidence_hit": true,
       "evidence": [
         {
-          "file_path": "functions/denoising.py",
-          "start_line": 35,
-          "end_line": 67,
-          "quote": "noise = torch.randn_like(x)",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "functions/denoising.py",
-          "start_line": 35,
-          "end_line": 67,
-          "quote": "sample = mean + mask * torch.exp(0.5 * logvar) * noise",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "functions/denoising.py",
-          "start_line": 35,
-          "end_line": 67,
-          "quote": "mask = 1 - (t == 0).float()",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
           "file_path": "runners/diffusion.py",
-          "start_line": 336,
-          "end_line": 381,
-          "quote": "elif self.args.sample_type == \"ddpm_noisy\":",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "runners/diffusion.py",
-          "start_line": 336,
-          "end_line": 381,
-          "quote": "x = ddpm_steps(x, seq, model, self.betas)",
+          "start_line": 296,
+          "end_line": 334,
+          "quote": "def sample_interpolation(self, model):",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 113.1
+      "seconds": 93.2
+    },
+    {
+      "pair_id": "ddim",
+      "claim_id": "ddim_c6",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 3,
+      "n_grounded": 3,
+      "n_line_accurate": 3,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "functions/denoising.py",
+          "start_line": 35,
+          "end_line": 67,
+          "quote": "noise = torch.randn_like(x)\n            mask = 1 - (t == 0).float()\n            mask = mask.view(-1, 1, 1, 1)\n            logvar = beta_t.log()\n            sample = mean + mask * torch.exp(0.5 * logvar) * noise",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "runners/diffusion.py",
+          "start_line": 336,
+          "end_line": 381,
+          "quote": "elif self.args.sample_type == \"ddpm_noisy\":\n            if self.args.skip_type == \"uniform\":\n                skip = self.num_timesteps // self.args.timesteps\n                seq = range(0, self.num_timesteps, skip)\n            elif self.args.skip_type == \"quad\":\n                seq = (\n                    np.linspace(\n                        0, np.sqrt(self.num_timesteps * 0.8), self.args.timesteps\n                    )\n                    ** 2\n                )\n                seq = [int(s) for s in list(seq)]\n            else:\n                raise NotImplementedError\n            from functions.denoising import ddpm_steps\n\n            x = ddpm_steps(x, seq, model, self.betas)",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "main.py",
+          "start_line": 68,
+          "end_line": 72,
+          "quote": "\"--sample_type\",\n        type=str,\n        default=\"generalized\",\n        help=\"sampling approach (generalized or ddpm_noisy)\",",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 112.1
     },
     {
       "pair_id": "ddim",
@@ -458,14 +444,14 @@
           "file_path": "main.py",
           "start_line": 74,
           "end_line": 78,
-          "quote": "\"--skip_type\",\n        type=str,\n        default=\"uniform\",\n        help=\"skip according to (uniform or quadratic)\",\n    )",
+          "quote": "--skip_type\",\n        type=str,\n        default=\"uniform\",\n        help=\"skip according to (uniform or quadratic)\",\n    )",
           "grounded": true,
           "line_accurate": true
         },
         {
           "file_path": "runners/diffusion.py",
-          "start_line": 341,
-          "end_line": 352,
+          "start_line": 336,
+          "end_line": 381,
           "quote": "if self.args.skip_type == \"uniform\":\n                skip = self.num_timesteps // self.args.timesteps\n                seq = range(0, self.num_timesteps, skip)\n            elif self.args.skip_type == \"quad\":\n                seq = (\n                    np.linspace(\n                        0, np.sqrt(self.num_timesteps * 0.8), self.args.timesteps\n                    )\n                    ** 2\n                )",
           "grounded": true,
           "line_accurate": true
@@ -473,7 +459,7 @@
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 111.2
+      "seconds": 87.2
     },
     {
       "pair_id": "ddim",
@@ -482,7 +468,7 @@
       "predicted": "VERIFIED",
       "n_evidence": 3,
       "n_grounded": 3,
-      "n_line_accurate": 2,
+      "n_line_accurate": 1,
       "evidence_hit": true,
       "evidence": [
         {
@@ -495,47 +481,63 @@
         },
         {
           "file_path": "configs/bedroom.yml",
-          "start_line": 1,
-          "end_line": 50,
-          "quote": "diffusion:\n    beta_schedule: linear\n    beta_start: 0.0001\n    beta_end: 0.02",
+          "start_line": 30,
+          "end_line": 34,
+          "quote": "diffusion:\n    beta_schedule: linear\n    beta_start: 0.0001\n    beta_end: 0.02\n    num_diffusion_timesteps: 1000",
           "grounded": true,
-          "line_accurate": true
+          "line_accurate": false
         },
         {
-          "file_path": "runners/diffusion.py",
-          "start_line": 273,
-          "end_line": 294,
-          "quote": "betas = get_beta_schedule(\n            beta_schedule=config.diffusion.beta_schedule,\n            beta_start=config.diffusion.beta_start,\n            beta_end=config.diffusion.beta_end,\n            num_diffusion_timesteps=config.diffusion.num_diffusion_timesteps,\n        )",
+          "file_path": "configs/cifar10.yml",
+          "start_line": 30,
+          "end_line": 34,
+          "quote": "diffusion:\n    beta_schedule: linear\n    beta_start: 0.0001\n    beta_end: 0.02\n    num_diffusion_timesteps: 1000",
           "grounded": true,
           "line_accurate": false
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 127.9
+      "seconds": 109.2
     },
     {
       "pair_id": "dpo",
       "claim_id": "dpo_c1",
       "expected": "VERIFIED",
       "predicted": "VERIFIED",
-      "n_evidence": 1,
-      "n_grounded": 1,
-      "n_line_accurate": 1,
+      "n_evidence": 3,
+      "n_grounded": 3,
+      "n_line_accurate": 3,
       "evidence_hit": true,
       "evidence": [
         {
           "file_path": "trainers.py",
           "start_line": 45,
           "end_line": 87,
-          "quote": "pi_logratios = policy_chosen_logps - policy_rejected_logps\n    ref_logratios = reference_chosen_logps - reference_rejected_logps\n\n    if reference_free:\n        ref_logratios = 0\n\n    logits = pi_logratios - ref_logratios  # also known as h_{\\pi_\\theta}^{y_w,y_l}\n\n    if ipo:\n        losses = (logits - 1/(2 * beta)) ** 2  # Eq. 17 of https://arxiv.org/pdf/2310.12036v2.pdf\n    else:\n        # Eq. 3 https://ericmitchell.ai/cdpo.pdf; label_smoothing=0 gives original DPO (Eq. 7 of https://arxiv.org/pdf/2305.18290.pdf)\n        losses = -F.logsigmoid(beta * logits) * (1 - label_smoothing) - F.logsigmoid(-beta * logits) * label_smoothing",
+          "quote": "losses = -F.logsigmoid(beta * logits) * (1 - label_smoothing) - F.logsigmoid(-beta * logits) * label_smoothing",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "trainers.py",
+          "start_line": 68,
+          "end_line": 72,
+          "quote": "pi_logratios = policy_chosen_logps - policy_rejected_logps\n    ref_logratios = reference_chosen_logps - reference_rejected_logps",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "trainers.py",
+          "start_line": 76,
+          "end_line": 76,
+          "quote": "logits = pi_logratios - ref_logratios",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 122.7
+      "seconds": 120.1
     },
     {
       "pair_id": "dpo",
@@ -558,7 +560,7 @@
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 72.0
+      "seconds": 67.0
     },
     {
       "pair_id": "dpo",
@@ -567,46 +569,46 @@
       "predicted": "CONTRADICTED",
       "n_evidence": 5,
       "n_grounded": 5,
-      "n_line_accurate": 5,
+      "n_line_accurate": 2,
       "evidence_hit": true,
       "evidence": [
         {
           "file_path": "config/config.yaml",
-          "start_line": 1,
-          "end_line": 97,
-          "quote": "batch_size: 4\n\neval_batch_size: 16",
+          "start_line": 9,
+          "end_line": 10,
+          "quote": "batch_size: 4",
           "grounded": true,
           "line_accurate": true
         },
         {
           "file_path": "config/config.yaml",
-          "start_line": 1,
-          "end_line": 97,
-          "quote": "# the learning rate\nlr: 5e-7",
+          "start_line": 46,
+          "end_line": 47,
+          "quote": "lr: 5e-7",
           "grounded": true,
-          "line_accurate": true
+          "line_accurate": false
+        },
+        {
+          "file_path": "config/config.yaml",
+          "start_line": 69,
+          "end_line": 70,
+          "quote": "optimizer: RMSprop",
+          "grounded": true,
+          "line_accurate": false
+        },
+        {
+          "file_path": "config/config.yaml",
+          "start_line": 72,
+          "end_line": 73,
+          "quote": "warmup_steps: 150",
+          "grounded": true,
+          "line_accurate": false
         },
         {
           "file_path": "config/loss/dpo.yaml",
-          "start_line": 1,
-          "end_line": 14,
-          "quote": "# the temperature parameter for DPO; lower values mean we care less about\n#   the reference model\nbeta: ???",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "config/config.yaml",
-          "start_line": 1,
-          "end_line": 97,
-          "quote": "# The optimizer to use; we use RMSprop because it works about as well as Adam and is more memory-efficient\noptimizer: RMSprop",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "config/config.yaml",
-          "start_line": 1,
-          "end_line": 97,
-          "quote": "# number of linear warmup steps for the learning rate\nwarmup_steps: 150",
+          "start_line": 6,
+          "end_line": 7,
+          "quote": "beta: ???",
           "grounded": true,
           "line_accurate": true
         }
@@ -615,21 +617,21 @@
         {
           "type": "HYPERPARAMETER_MISMATCH",
           "severity": "HIGH",
-          "detail": "The claim states a default batch size of 64, but the code's config/config.yaml sets 'batch_size: 4'."
+          "detail": "The paper claims a default batch size of 64, but the code's config.yaml sets batch_size to 4."
         },
         {
           "type": "HYPERPARAMETER_MISMATCH",
           "severity": "HIGH",
-          "detail": "The claim states a default learning rate of 1e-6, but the code's config/config.yaml sets 'lr: 5e-7'."
+          "detail": "The paper claims a default learning rate of 1e-6, but the code's config.yaml sets lr to 5e-7."
         },
         {
           "type": "CONFIGURATION_MISMATCH",
           "severity": "MEDIUM",
-          "detail": "The claim states a default beta of 0.1, but the code's config/loss/dpo.yaml sets 'beta: ???' (unspecified)."
+          "detail": "The paper claims a default beta of 0.1, but the code's dpo.yaml config sets beta to '???' (a required placeholder), meaning no default value of 0.1 is provided in the code."
         }
       ],
       "error": null,
-      "seconds": 170.7
+      "seconds": 153.4
     },
     {
       "pair_id": "dpo",
@@ -653,7 +655,7 @@
           "file_path": "preference_datasets.py",
           "start_line": 214,
           "end_line": 277,
-          "quote": "chosen_sequence_tokens['labels'][:len(prompt_tokens['input_ids'])] = [-100] * len(prompt_tokens['input_ids'])\n    rejected_sequence_tokens['labels'][:len(prompt_tokens['input_ids'])] = [-100] * len(prompt_tokens['input_i",
+          "quote": "chosen_sequence_tokens['labels'][:len(prompt_tokens['input_ids'])] = [-100] * len(prompt_tokens['input_ids'])",
           "grounded": true,
           "line_accurate": true
         },
@@ -668,23 +670,31 @@
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 111.1
+      "seconds": 101.2
     },
     {
       "pair_id": "dpo",
       "claim_id": "dpo_c5",
       "expected": "VERIFIED",
       "predicted": "VERIFIED",
-      "n_evidence": 3,
-      "n_grounded": 3,
-      "n_line_accurate": 3,
+      "n_evidence": 4,
+      "n_grounded": 4,
+      "n_line_accurate": 4,
       "evidence_hit": true,
       "evidence": [
         {
           "file_path": "trainers.py",
           "start_line": 210,
           "end_line": 220,
-          "quote": "concatenated_batch = concatenated_inputs(batch)\n        all_logits = model(concatenated_batch['concatenated_input_ids'], attention_mask=concatenated_batch['concatenated_attention_mask']).logits.to(torch.float32)",
+          "quote": "We do this to avoid doing two forward passes, because it's faster for FSDP.",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "trainers.py",
+          "start_line": 210,
+          "end_line": 220,
+          "quote": "all_logits = model(concatenated_batch['concatenated_input_ids'], attention_mask=concatenated_batch['concatenated_attention_mask']).logits.to(torch.float32)",
           "grounded": true,
           "line_accurate": true
         },
@@ -707,7 +717,7 @@
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 155.2
+      "seconds": 147.5
     },
     {
       "pair_id": "dpo",
@@ -739,14 +749,14 @@
           "file_path": "preference_datasets.py",
           "start_line": 163,
           "end_line": 170,
-          "quote": "elif name == 'hh':\n        data = get_hh(split, silent=silent, cache_dir=cache_dir)",
+          "quote": "\"\"\"Load the given dataset by name. Supported by default are 'shp', 'hh', and 'se'.\"\"\"\n    if name == 'shp':\n        data = get_shp(split, silent=silent, cache_dir=cache_dir)\n    elif name == 'hh':\n        data = get_hh(split, silent=silent, cache_dir=cache_dir)",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 103.6
+      "seconds": 99.5
     },
     {
       "pair_id": "dpo",
@@ -769,7 +779,7 @@
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 71.6
+      "seconds": 60.5
     },
     {
       "pair_id": "dpo",
@@ -783,7 +793,7 @@
       "evidence": [],
       "discrepancies": [],
       "error": null,
-      "seconds": 117.0
+      "seconds": 110.8
     },
     {
       "pair_id": "dpo",
@@ -807,38 +817,54 @@
           "file_path": "trainers.py",
           "start_line": 223,
           "end_line": 270,
-          "quote": "if loss_config.name in {'dpo', 'ipo'}:\n            policy_chosen_logps, policy_rejected_logps = self.concatenated_forward(self.policy, batch)\n            with torch.no_grad():\n                reference_chosen_logps, reference_rejected_logps = self.concatenated_forward(self.reference_model, batch)",
+          "quote": "with torch.no_grad():\n                reference_chosen_logps, reference_rejected_logps = self.concatenated_forward(self.reference_model, batch)",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 131.7
+      "seconds": 108.9
     },
     {
       "pair_id": "lora",
       "claim_id": "lora_c1",
       "expected": "VERIFIED",
       "predicted": "VERIFIED",
-      "n_evidence": 3,
-      "n_grounded": 3,
-      "n_line_accurate": 3,
+      "n_evidence": 5,
+      "n_grounded": 5,
+      "n_line_accurate": 5,
       "evidence_hit": true,
       "evidence": [
         {
           "file_path": "loralib/layers.py",
-          "start_line": 90,
-          "end_line": 152,
+          "start_line": 157,
+          "end_line": 194,
+          "quote": "self.lora_A = nn.Parameter(\n                self.weight.new_zeros((r * sum(enable_lora), in_features)))\n            self.lora_B = nn.Parameter(\n                self.weight.new_zeros((out_features // len(enable_lora) * sum(enable_lora), r))\n            ) # weights for Conv1D with groups=sum(enable_lora)\n            self.scaling = self.lora_alpha / self.r\n            # Freezing the pre-trained weight matrix\n            self.weight.requires_grad = False",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "loralib/layers.py",
+          "start_line": 34,
+          "end_line": 53,
+          "quote": "self.lora_A = nn.Parameter(self.weight.new_zeros((r, num_embeddings)))\n            self.lora_B = nn.Parameter(self.weight.new_zeros((embedding_dim, r)))\n            self.scaling = self.lora_alpha / self.r\n            # Freezing the pre-trained weight matrix\n            self.weight.requires_grad = False",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "loralib/layers.py",
+          "start_line": 92,
+          "end_line": 117,
           "quote": "self.lora_A = nn.Parameter(self.weight.new_zeros((r, in_features)))\n            self.lora_B = nn.Parameter(self.weight.new_zeros((out_features, r)))\n            self.scaling = self.lora_alpha / self.r\n            # Freezing the pre-trained weight matrix\n            self.weight.requires_grad = False",
           "grounded": true,
           "line_accurate": true
         },
         {
           "file_path": "loralib/layers.py",
-          "start_line": 32,
-          "end_line": 87,
-          "quote": "self.lora_A = nn.Parameter(self.weight.new_zeros((r, num_embeddings)))\n            self.lora_B = nn.Parameter(self.weight.new_zeros((embedding_dim, r)))\n            self.scaling = self.lora_alpha / self.r\n            # Freezing the pre-trained weight matrix\n            self.weight.requires_grad = False",
+          "start_line": 247,
+          "end_line": 266,
+          "quote": "self.lora_A = nn.Parameter(\n                self.conv.weight.new_zeros((r * kernel_size, in_channels * kernel_size))\n            )\n            self.lora_B = nn.Parameter(\n              self.conv.weight.new_zeros((out_channels//self.conv.groups*kernel_size, r*kernel_size))\n            )\n            self.scaling = self.lora_alpha / self.r\n            # Freezing the pre-trained weight matrix\n            self.conv.weight.requires_grad = False",
           "grounded": true,
           "line_accurate": true
         },
@@ -846,30 +872,30 @@
           "file_path": "loralib/utils.py",
           "start_line": 13,
           "end_line": 30,
-          "quote": "if 'lora_' not in n:\n        p.requires_grad = False",
+          "quote": "def mark_only_lora_as_trainable(model: nn.Module, bias: str = 'none') -> None:\n    for n, p in model.named_parameters():\n        if 'lora_' not in n:\n            p.requires_grad = False",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 139.1
+      "seconds": 118.5
     },
     {
       "pair_id": "lora",
       "claim_id": "lora_c2",
       "expected": "VERIFIED",
       "predicted": "VERIFIED",
-      "n_evidence": 2,
-      "n_grounded": 2,
-      "n_line_accurate": 1,
+      "n_evidence": 6,
+      "n_grounded": 6,
+      "n_line_accurate": 5,
       "evidence_hit": true,
       "evidence": [
         {
           "file_path": "loralib/layers.py",
           "start_line": 144,
           "end_line": 152,
-          "quote": "result = F.linear(x, T(self.weight), bias=self.bias)\n            result += (self.lora_dropout(x) @ self.lora_A.transpose(0, 1) @ self.lora_B.transpose(0, 1)) * self.scaling",
+          "quote": "result += (self.lora_dropout(x) @ self.lora_A.transpose(0, 1) @ self.lora_B.transpose(0, 1)) * self.scaling",
           "grounded": true,
           "line_accurate": true
         },
@@ -880,16 +906,48 @@
           "quote": "self.scaling = self.lora_alpha / self.r",
           "grounded": true,
           "line_accurate": false
+        },
+        {
+          "file_path": "loralib/layers.py",
+          "start_line": 290,
+          "end_line": 297,
+          "quote": "self.conv.weight + (self.lora_B @ self.lora_A).view(self.conv.weight.shape) * self.scaling",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "loralib/layers.py",
+          "start_line": 263,
+          "end_line": 264,
+          "quote": "self.scaling = self.lora_alpha / self.r",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "loralib/layers.py",
+          "start_line": 77,
+          "end_line": 87,
+          "quote": "result += (after_A @ self.lora_B.transpose(0, 1)) * self.scaling",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "loralib/layers.py",
+          "start_line": 49,
+          "end_line": 50,
+          "quote": "self.scaling = self.lora_alpha / self.r",
+          "grounded": true,
+          "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 123.3
+      "seconds": 107.7
     },
     {
       "pair_id": "lora",
       "claim_id": "lora_c3",
-      "expected": "VERIFIED",
+      "expected": "PARTIALLY_VERIFIED",
       "predicted": "UNVERIFIED",
       "n_evidence": 0,
       "n_grounded": 0,
@@ -898,21 +956,46 @@
       "evidence": [],
       "discrepancies": [],
       "error": null,
-      "seconds": 79.9
+      "seconds": 69.2
     },
     {
       "pair_id": "lora",
       "claim_id": "lora_c4",
       "expected": "VERIFIED",
-      "predicted": "UNVERIFIED",
-      "n_evidence": 0,
-      "n_grounded": 0,
-      "n_line_accurate": 0,
-      "evidence_hit": false,
-      "evidence": [],
+      "predicted": "VERIFIED",
+      "n_evidence": 3,
+      "n_grounded": 3,
+      "n_line_accurate": 2,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "loralib/layers.py",
+          "start_line": 155,
+          "end_line": 244,
+          "quote": "def merge_AB(self):\n        def T(w):\n            return w.transpose(0, 1) if self.fan_in_fan_out else w\n        delta_w = F.conv1d(\n            self.lora_A.unsqueeze(0), \n            self.lora_B.unsqueeze(-1), \n            groups=sum(self.enable_lora)\n        ).squeeze(0)\n        return T(self.zero_pad(delta_w))",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "loralib/layers.py",
+          "start_line": 230,
+          "end_line": 244,
+          "quote": "def train(self, mode: bool = True):\n        def T(w):\n            return w.transpose(0, 1) if self.fan_in_fan_out else w\n        nn.Linear.train(self, mode)\n        if mode:\n            if self.merge_weights and self.merged:\n                # Make sure that the weights are not merged\n                if self.r > 0 and any(self.enable_lora):\n                    self.weight.data -= self.merge_AB() * self.scaling\n                self.merged = False\n        else:",
+          "grounded": true,
+          "line_accurate": false
+        },
+        {
+          "file_path": "loralib/layers.py",
+          "start_line": 208,
+          "end_line": 216,
+          "quote": "def merge_AB(self):\n        def T(w):\n            return w.transpose(0, 1) if self.fan_in_fan_out else w\n        delta_w = F.conv1d(\n            self.lora_A.unsqueeze(0), \n            self.lora_B.unsqueeze(-1), \n            groups=sum(self.enable_lora)\n        ).squeeze(0)\n        return T(self.zero_pad(delta_w))",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
       "discrepancies": [],
       "error": null,
-      "seconds": 123.9
+      "seconds": 112.1
     },
     {
       "pair_id": "lora",
@@ -926,32 +1009,49 @@
       "evidence": [],
       "discrepancies": [],
       "error": null,
-      "seconds": 105.4
+      "seconds": 53.3
     },
     {
       "pair_id": "lora",
       "claim_id": "lora_c6",
       "expected": "VERIFIED",
-      "predicted": "UNVERIFIED",
-      "n_evidence": 0,
-      "n_grounded": 0,
-      "n_line_accurate": 0,
-      "evidence_hit": false,
-      "evidence": [],
+      "predicted": "VERIFIED",
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "loralib/utils.py",
+          "start_line": 13,
+          "end_line": 30,
+          "quote": "def mark_only_lora_as_trainable(model: nn.Module, bias: str = 'none') -> None:\n    for n, p in model.named_parameters():\n        if 'lora_' not in n:\n            p.requires_grad = False",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
       "discrepancies": [],
       "error": null,
-      "seconds": 97.8
+      "seconds": 69.2
     },
     {
       "pair_id": "lora",
       "claim_id": "lora_c7",
       "expected": "VERIFIED",
-      "predicted": "PARTIALLY_VERIFIED",
-      "n_evidence": 3,
-      "n_grounded": 3,
-      "n_line_accurate": 3,
+      "predicted": "VERIFIED",
+      "n_evidence": 5,
+      "n_grounded": 5,
+      "n_line_accurate": 5,
       "evidence_hit": true,
       "evidence": [
+        {
+          "file_path": "examples/NLG/src/model.py",
+          "start_line": 83,
+          "end_line": 182,
+          "quote": "self.c_attn = lora.MergedLinear(\n            nx, n_state * 3, \n            r=config.lora_attn_dim, \n            lora_alpha=config.lora_attn_alpha, \n            lora_dropout=config.lora_dropout, \n            enable_lora=[True, False, True], \n            fan_in_fan_out=True,\n            merge_weights=False\n        )",
+          "grounded": true,
+          "line_accurate": true
+        },
         {
           "file_path": "examples/NLG/src/gpt2_ft.py",
           "start_line": 80,
@@ -962,9 +1062,17 @@
         },
         {
           "file_path": "examples/NLG/src/gpt2_ft.py",
-          "start_line": 171,
-          "end_line": 258,
-          "quote": "torch.save({'model_state_dict': lora.lora_state_dict(model)}, model_path)",
+          "start_line": 73,
+          "end_line": 73,
+          "quote": "parser.add_argument('--lora_dim', type=int, default=0, help='lora attn dimension')",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "examples/NLG/src/gpt2_ft.py",
+          "start_line": 75,
+          "end_line": 75,
+          "quote": "parser.add_argument('--lora_alpha', type=int, default=128, help='lora attn alpha')",
           "grounded": true,
           "line_accurate": true
         },
@@ -977,90 +1085,13 @@
           "line_accurate": true
         }
       ],
-      "discrepancies": [
-        {
-          "type": "CONFIGURATION_MISMATCH",
-          "severity": "MEDIUM",
-          "detail": "The claim states the script trains on the E2E dataset, but no candidate references the E2E dataset. The --train_data argument is a generic path with no default pointing to E2E."
-        }
-      ],
+      "discrepancies": [],
       "error": null,
-      "seconds": 114.0
+      "seconds": 114.8
     },
     {
       "pair_id": "lora",
       "claim_id": "lora_c8",
-      "expected": "VERIFIED",
-      "predicted": "VERIFIED",
-      "n_evidence": 7,
-      "n_grounded": 7,
-      "n_line_accurate": 7,
-      "evidence_hit": false,
-      "evidence": [
-        {
-          "file_path": "examples/NLU/roberta_base_stsb.sh",
-          "start_line": 5,
-          "end_line": 27,
-          "quote": "--model_name_or_path roberta-base --lora_path ./roberta_base_mnli_lora.bin --task_name stsb ... --apply_lora --lora_r 8 --lora_alpha 16",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "examples/NLU/roberta_large_rte.sh",
-          "start_line": 5,
-          "end_line": 26,
-          "quote": "--model_name_or_path roberta-large --lora_path ./roberta_large_lora_mnli.bin --task_name rte ... --apply_lora --lora_r 8 --lora_alpha 16",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "examples/NLU/roberta_large_stsb.sh",
-          "start_line": 5,
-          "end_line": 26,
-          "quote": "--model_name_or_path roberta-large --lora_path ./roberta_large_lora_mnli.bin --task_name stsb ... --apply_lora --lora_r 8 --lora_alpha 16",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "examples/NLU/roberta_large_mrpc.sh",
-          "start_line": 5,
-          "end_line": 26,
-          "quote": "--model_name_or_path roberta-large --lora_path ./roberta_large_lora_mnli.bin --task_name mrpc ... --apply_lora --lora_r 8 --lora_alpha 16",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "examples/NLU/roberta_base_rte.sh",
-          "start_line": 5,
-          "end_line": 27,
-          "quote": "--model_name_or_path roberta-base --lora_path ./roberta_base_mnli_lora.bin --task_name rte ... --apply_lora --lora_r 8 --lora_alpha 16",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "examples/NLU/roberta_base_mrpc.sh",
-          "start_line": 5,
-          "end_line": 27,
-          "quote": "--model_name_or_path roberta-base --lora_path ./roberta_base_mnli_lora.bin --task_name mrpc ... --apply_lora --lora_r 8 --lora_alpha 16",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "examples/NLU/roberta_base_qqp.sh",
-          "start_line": 5,
-          "end_line": 26,
-          "quote": "--model_name_or_path roberta-base --task_name qqp ... --apply_lora --lora_r 8 --lora_alpha 16",
-          "grounded": true,
-          "line_accurate": true
-        }
-      ],
-      "discrepancies": [],
-      "error": null,
-      "seconds": 154.2
-    },
-    {
-      "pair_id": "lora",
-      "claim_id": "lora_c9",
       "expected": "VERIFIED",
       "predicted": "UNVERIFIED",
       "n_evidence": 0,
@@ -1070,18 +1101,49 @@
       "evidence": [],
       "discrepancies": [],
       "error": null,
-      "seconds": 82.6
+      "seconds": 47.2
+    },
+    {
+      "pair_id": "lora",
+      "claim_id": "lora_c9",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
+      "n_evidence": 1,
+      "n_grounded": 1,
+      "n_line_accurate": 1,
+      "evidence_hit": true,
+      "evidence": [
+        {
+          "file_path": "loralib/utils.py",
+          "start_line": 33,
+          "end_line": 49,
+          "quote": "def lora_state_dict(model: nn.Module, bias: str = 'none') -> Dict[str, torch.Tensor]:\n    my_state_dict = model.state_dict()\n    if bias == 'none':\n        return {k: my_state_dict[k] for k in my_state_dict if 'lora_' in k}",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [],
+      "error": null,
+      "seconds": 69.0
     },
     {
       "pair_id": "lora",
       "claim_id": "lora_c10",
       "expected": "VERIFIED",
       "predicted": "VERIFIED",
-      "n_evidence": 4,
-      "n_grounded": 4,
+      "n_evidence": 3,
+      "n_grounded": 3,
       "n_line_accurate": 3,
       "evidence_hit": true,
       "evidence": [
+        {
+          "file_path": "loralib/layers.py",
+          "start_line": 13,
+          "end_line": 29,
+          "quote": "self.r = r\n        self.lora_alpha = lora_alpha",
+          "grounded": true,
+          "line_accurate": true
+        },
         {
           "file_path": "loralib/layers.py",
           "start_line": 92,
@@ -1091,33 +1153,17 @@
           "line_accurate": true
         },
         {
-          "file_path": "loralib/layers.py",
-          "start_line": 108,
-          "end_line": 109,
-          "quote": "self.scaling = self.lora_alpha / self.r",
-          "grounded": true,
-          "line_accurate": false
-        },
-        {
-          "file_path": "examples/NLG/src/gpt2_ft.py",
-          "start_line": 75,
-          "end_line": 75,
+          "file_path": "examples/NLG/src/gpt2_beam.py",
+          "start_line": 64,
+          "end_line": 64,
           "quote": "parser.add_argument('--lora_alpha', type=int, default=128, help='lora attn alpha')",
-          "grounded": true,
-          "line_accurate": true
-        },
-        {
-          "file_path": "examples/NLG/src/model.py",
-          "start_line": 310,
-          "end_line": 311,
-          "quote": "lora_attn_dim=0,\n        lora_attn_alpha=128,",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 132.8
+      "seconds": 89.1
     },
     {
       "pair_id": "mae",
@@ -1156,16 +1202,16 @@
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 126.4
+      "seconds": 119.5
     },
     {
       "pair_id": "mae",
       "claim_id": "mae_c2",
       "expected": "VERIFIED",
       "predicted": "VERIFIED",
-      "n_evidence": 3,
-      "n_grounded": 3,
-      "n_line_accurate": 3,
+      "n_evidence": 4,
+      "n_grounded": 4,
+      "n_line_accurate": 4,
       "evidence_hit": true,
       "evidence": [
         {
@@ -1188,14 +1234,22 @@
           "file_path": "models_mae.py",
           "start_line": 123,
           "end_line": 148,
-          "quote": "len_keep = int(L * (1 - mask_ratio))",
+          "quote": "def random_masking(self, x, mask_ratio):",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "models_mae.py",
+          "start_line": 198,
+          "end_line": 214,
+          "quote": "loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 948.9
+      "seconds": 113.6
     },
     {
       "pair_id": "mae",
@@ -1204,7 +1258,7 @@
       "predicted": "VERIFIED",
       "n_evidence": 6,
       "n_grounded": 6,
-      "n_line_accurate": 5,
+      "n_line_accurate": 6,
       "evidence_hit": true,
       "evidence": [
         {
@@ -1217,11 +1271,11 @@
         },
         {
           "file_path": "models_mae.py",
-          "start_line": 50,
-          "end_line": 52,
+          "start_line": 52,
+          "end_line": 54,
           "quote": "self.decoder_blocks = nn.ModuleList([\n            Block(decoder_embed_dim, decoder_num_heads, mlp_ratio, qkv_bias=True, qk_scale=None, norm_layer=norm_layer)\n            for i in range(decoder_depth)])",
           "grounded": true,
-          "line_accurate": false
+          "line_accurate": true
         },
         {
           "file_path": "models_mae.py",
@@ -1249,45 +1303,53 @@
         },
         {
           "file_path": "models_mae.py",
-          "start_line": 248,
-          "end_line": 248,
-          "quote": "# decoder: 512 dim, 8 blocks",
+          "start_line": 172,
+          "end_line": 196,
+          "quote": "for blk in self.decoder_blocks:\n            x = blk(x)",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 104.1
+      "seconds": 109.0
     },
     {
       "pair_id": "mae",
       "claim_id": "mae_c4",
       "expected": "VERIFIED",
       "predicted": "VERIFIED",
-      "n_evidence": 1,
-      "n_grounded": 1,
-      "n_line_accurate": 1,
+      "n_evidence": 2,
+      "n_grounded": 2,
+      "n_line_accurate": 2,
       "evidence_hit": true,
       "evidence": [
         {
           "file_path": "models_mae.py",
           "start_line": 198,
           "end_line": 214,
-          "quote": "target = self.patchify(imgs)\n        if self.norm_pix_loss:\n            mean = target.mean(dim=-1, keepdim=True)\n            var = target.var(dim=-1, keepdim=True)\n            target = (target - mean) / (var + 1.e-6)**.5\n\n        loss = (pred - target) ** 2\n        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch\n\n        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches\n        return loss",
+          "quote": "target = self.patchify(imgs)\n        if self.norm_pix_loss:\n            mean = target.mean(dim=-1, keepdim=True)\n            var = target.var(dim=-1, keepdim=True)\n            target = (target - mean) / (var + 1.e-6)**.5\n\n        loss = (pred - target) ** 2\n        loss = loss.mean(dim=-1)  # [N, L], mean loss per patch\n\n        loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "models_mae.py",
+          "start_line": 25,
+          "end_line": 63,
+          "quote": "norm_pix_loss=False",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 72.9
+      "seconds": 79.6
     },
     {
       "pair_id": "mae",
       "claim_id": "mae_c5",
-      "expected": "PARTIALLY_VERIFIED",
-      "predicted": "PARTIALLY_VERIFIED",
+      "expected": "VERIFIED",
+      "predicted": "VERIFIED",
       "n_evidence": 2,
       "n_grounded": 2,
       "n_line_accurate": 2,
@@ -1305,14 +1367,14 @@
           "file_path": "models_mae.py",
           "start_line": 25,
           "end_line": 63,
-          "quote": "self.norm_pix_loss = norm_pix_loss",
+          "quote": "def __init__(self, img_size=224, patch_size=16, in_chans=3,\n                 embed_dim=1024, depth=24, num_heads=16,\n                 decoder_embed_dim=512, decoder_depth=8, decoder_num_heads=16,\n                 mlp_ratio=4., norm_layer=nn.LayerNorm, norm_pix_loss=False):",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 136.9
+      "seconds": 84.4
     },
     {
       "pair_id": "mae",
@@ -1351,7 +1413,7 @@
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 334.5
+      "seconds": 86.4
     },
     {
       "pair_id": "mae",
@@ -1400,16 +1462,16 @@
         {
           "type": "HYPERPARAMETER_MISMATCH",
           "severity": "MEDIUM",
-          "detail": "The default base learning rate in the code is 1e-3, whereas the claim states a base learning rate of 1.5e-4."
+          "detail": "Base learning rate default is 1e-3 in code, but paper claims 1.5e-4. The help text shows absolute_lr = base_lr * total_batch_size / 256, so the effective LR calculation differs from the paper's stated value."
         },
         {
           "type": "HYPERPARAMETER_MISMATCH",
           "severity": "MEDIUM",
-          "detail": "The default batch size in the code is 64 per GPU, whereas the claim states a global batch size of 4096. While 64 * 64 GPUs = 4096, the code does not hard-code the global batch size."
+          "detail": "Batch size default is 64 per GPU in code, but paper claims batch size 4096. The effective batch size depends on accum_iter and number of GPUs, but the default per-GPU value is 64."
         }
       ],
       "error": null,
-      "seconds": 989.6
+      "seconds": 123.1
     },
     {
       "pair_id": "mae",
@@ -1448,7 +1510,7 @@
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 67.4
+      "seconds": 75.7
     },
     {
       "pair_id": "mae",
@@ -1471,7 +1533,7 @@
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 60.0
+      "seconds": 56.3
     },
     {
       "pair_id": "reflexion",
@@ -1487,14 +1549,14 @@
           "file_path": "alfworld_runs/alfworld_trial.py",
           "start_line": 46,
           "end_line": 50,
-          "quote": "if len(memory) > 3:\n        env_history = EnvironmentHistory(base_prompt, ob, memory[-3:], [])\n    else:\n        env_history = EnvironmentHistory(base_prompt, ob, memory, [])",
+          "quote": "def alfworld_run(env, base_prompt, memory: List[str], to_print=True, ob='', model: Model = \"text-davinci-003\") -> Tuple[EnvironmentHistory, bool]:\n    if len(memory) > 3:\n        env_history = EnvironmentHistory(base_prompt, ob, memory[-3:], [])\n    else:\n        env_history = EnvironmentHistory(base_prompt, ob, memory, [])",
           "grounded": true,
           "line_accurate": true
         }
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 100.5
+      "seconds": 92.5
     },
     {
       "pair_id": "reflexion",
@@ -1503,7 +1565,7 @@
       "predicted": "PARTIALLY_VERIFIED",
       "n_evidence": 2,
       "n_grounded": 2,
-      "n_line_accurate": 2,
+      "n_line_accurate": 1,
       "evidence_hit": true,
       "evidence": [
         {
@@ -1516,27 +1578,27 @@
         },
         {
           "file_path": "alfworld_runs/alfworld_trial.py",
-          "start_line": 46,
-          "end_line": 72,
-          "quote": "elif env_history.check_is_exhausted():",
+          "start_line": 65,
+          "end_line": 66,
+          "quote": "elif env_history.check_is_exhausted():\n            return env_history, False",
           "grounded": true,
-          "line_accurate": true
+          "line_accurate": false
         }
       ],
       "discrepancies": [
         {
           "type": "HYPERPARAMETER_MISMATCH",
           "severity": "MEDIUM",
-          "detail": "The claim states the heuristic triggers if actions exceed 30, but the code uses a loop bound of `while cur_step < 49`."
+          "detail": "The claim states the heuristic triggers if the number of actions taken exceeds 30, but the code implements a loop bound of `while cur_step < 49`."
         },
         {
-          "type": "HYPERPARAMETER_MISMATCH",
+          "type": "CONFIGURATION_MISMATCH",
           "severity": "MEDIUM",
-          "detail": "The claim states the heuristic triggers after more than 3 cycles of the same action/response, but the code's `add` method triggers exhaustion on a single repeated action (`value == self._last_action`)."
+          "detail": "The claim states the heuristic triggers if the agent executes the same action and receives the same response for more than 3 cycles. The code's `add` method sets `_is_exhausted = True` if the current action equals `self._last_action`, which triggers on the second occurrence (1 cycle of repetition) and does not check for repeated responses."
         }
       ],
       "error": null,
-      "seconds": 171.3
+      "seconds": 169.0
     },
     {
       "pair_id": "reflexion",
@@ -1569,11 +1631,11 @@
         {
           "type": "HYPERPARAMETER_MISMATCH",
           "severity": "MEDIUM",
-          "detail": "The claim states a maximum of 6 unit tests are sampled, but the visible call in run_reflexion passes max_num_tests=1 to gen.internal_tests. The sampling mechanism (sample_n_random) is implemented, but the specific value 6 is not confirmed in any candidate."
+          "detail": "The claim states a maximum of 6 unit tests are sampled, but run_reflexion calls gen.internal_tests with max_num_tests=1, sampling at most 1 test."
         }
       ],
       "error": null,
-      "seconds": 87.6
+      "seconds": 78.8
     },
     {
       "pair_id": "reflexion",
@@ -1604,7 +1666,7 @@
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 70.8
+      "seconds": 72.2
     },
     {
       "pair_id": "reflexion",
@@ -1625,7 +1687,7 @@
           "line_accurate": true
         },
         {
-          "file_path": "programming_runs/run_reflexion_starchat_multi.sh",
+          "file_path": "programming_runs/run_reflexion.sh",
           "start_line": 1,
           "end_line": 10,
           "quote": "--max_iters \"2\"",
@@ -1633,10 +1695,10 @@
           "line_accurate": true
         },
         {
-          "file_path": "programming_runs/run_reflexion.sh",
-          "start_line": 1,
-          "end_line": 10,
-          "quote": "--max_iters \"2\"",
+          "file_path": "programming_runs/main.py",
+          "start_line": 27,
+          "end_line": 28,
+          "quote": "parser.add_argument(\"--max_iters\", type=int,\n                        help=\"The maximum number of self-improvement iterations\", default=10)",
           "grounded": true,
           "line_accurate": true
         },
@@ -1651,13 +1713,13 @@
       ],
       "discrepancies": [
         {
-          "type": "CONFIGURATION_MISMATCH",
+          "type": "HYPERPARAMETER_MISMATCH",
           "severity": "MEDIUM",
-          "detail": "The code uses max_iters=2 for programming tasks, which implies 1 reflection experience (initial attempt + 1 reflection). The paper claims a max memory limit of 1 experience. While these are functionally equivalent, the code does not explicitly enforce a 'memory limit' of 1 experience; it enforces a max iteration count. The relationship is implicit."
+          "detail": "Claim states a max memory limit of 1 experience for programming tasks. The code expresses the bound as --max_iters (default=10 in main.py; scripts set 2). No explicit 'max memory limit' parameter exists, and the default of 10 would permit up to 9 reflections/experiences if invoked without the scripts."
         }
       ],
       "error": null,
-      "seconds": 162.6
+      "seconds": 131.2
     },
     {
       "pair_id": "reflexion",
@@ -1671,7 +1733,7 @@
       "evidence": [],
       "discrepancies": [],
       "error": null,
-      "seconds": 93.5
+      "seconds": 94.6
     },
     {
       "pair_id": "reflexion",
@@ -1704,17 +1766,17 @@
         {
           "type": "CONFIGURATION_MISMATCH",
           "severity": "MEDIUM",
-          "detail": "The candidates show the reflection query generation (taking memory as input and producing a 'New plan') but do not include the code that explicitly appends the generated reflection to the memory list for the next trial. The append-to-memory logic is not present in any provided candidate, so the full loop described in the claim cannot be fully verified from the given code."
+          "detail": "The provided code snippets for _generate_reflection_query construct the prompt to generate a reflection (verbal feedback) but do not show the code that appends this generated reflection to the agent's memory list. The claim specifically mentions appending to memory for the next trial, which is not explicitly implemented in the provided candidates."
         }
       ],
       "error": null,
-      "seconds": 136.3
+      "seconds": 142.8
     },
     {
       "pair_id": "reflexion",
       "claim_id": "refl_c8",
       "expected": "VERIFIED",
-      "predicted": "PARTIALLY_VERIFIED",
+      "predicted": "VERIFIED",
       "n_evidence": 2,
       "n_grounded": 2,
       "n_line_accurate": 2,
@@ -1739,7 +1801,7 @@
       ],
       "discrepancies": [],
       "error": null,
-      "seconds": 91.0
+      "seconds": 100.5
     }
   ]
 }

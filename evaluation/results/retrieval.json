@@ -59,8 +59,8 @@
       "baseline": "embedding_only",
       "n_claims": 10,
       "recall_at_1": 0.0,
-      "recall_at_5": 0.4,
-      "mrr": 0.175,
+      "recall_at_5": 0.5,
+      "mrr": 0.225,
       "error": null
     },
     {
@@ -76,9 +76,9 @@
       "dataset": "lora",
       "baseline": "hybrid_claim2code",
       "n_claims": 10,
-      "recall_at_1": 0.0,
-      "recall_at_5": 0.6,
-      "mrr": 0.25833333333333336,
+      "recall_at_1": 0.2,
+      "recall_at_5": 0.7,
+      "mrr": 0.4083333333333333,
       "error": null
     },
     {
@@ -139,8 +139,8 @@
   "aggregate_by_baseline": {
     "embedding_only": {
       "avg_recall_at_1": 0.22777777777777777,
-      "avg_recall_at_5": 0.5883333333333333,
-      "avg_mrr": 0.37277777777777776
+      "avg_recall_at_5": 0.6083333333333333,
+      "avg_mrr": 0.3827777777777778
     },
     "lexical_only": {
       "avg_recall_at_1": 0.2333333333333333,
@@ -148,9 +148,9 @@
       "avg_mrr": 0.3149537037037037
     },
     "hybrid_claim2code": {
-      "avg_recall_at_1": 0.32222222222222224,
-      "avg_recall_at_5": 0.6783333333333333,
-      "avg_mrr": 0.4565277777777778
+      "avg_recall_at_1": 0.3622222222222222,
+      "avg_recall_at_5": 0.6983333333333334,
+      "avg_mrr": 0.4865277777777778
     }
   }
 }

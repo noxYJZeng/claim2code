@@ -31,26 +31,31 @@ From [`evaluation/report.md`](evaluation/report.md), measured locally with
 
 | Area | Metric | Claim2Code | Baseline |
 |---|---|---|---|
-| Retrieval (top 5) | Recall@5, macro avg | **0.68** | 0.59 embedding-only · 0.49 lexical-only |
-| | MRR, macro avg | **0.457** | 0.373 embedding-only · 0.315 lexical-only |
-| Verification | Status accuracy (4-way) | 63.6% | — |
-| | Support rate (claim judged VERIFIED / PARTIALLY_VERIFIED) | 79.5% | — |
-| | Discrepancy precision / recall (claim level) | 45.5% / 71.4% | — |
-| | Grounding rate (cited code exists in the cited file) | 99.0% of 102 citations | — |
-| | Line accuracy (cited code at the cited lines) | 92.2% | — |
+| Retrieval (top 5) | Recall@5, macro avg | **0.70** | 0.61 embedding-only · 0.49 lexical-only |
+| | MRR, macro avg | **0.487** | 0.383 embedding-only · 0.315 lexical-only |
+| Verification | Status accuracy (4-way) | 77.3% | — |
+| | Support rate (claim judged VERIFIED / PARTIALLY_VERIFIED) | 84.1% | — |
+| | Discrepancy precision / recall (claim level) | 57.1% / 66.7% | — |
+| | Grounding rate (cited code exists in the cited file) | 100% of 111 citations | — |
+| | Line accuracy (cited code at the cited lines) | 91.0% | — |
 | Safety | Secrets protected, covered / held-out forms | 10/10 · 2/8 | — |
 | | Injections detected, covered / held-out forms | 6/6 · 0/6 | — |
 | | Clean text falsely flagged | 3/12 | — |
 
-Caveats: 5 pairs / 44 claims is below the 8–12-pair target, and only 7 of the
+Caveats: 5 pairs / 44 claims is below the 8–12-pair target, and only 6 of the
 44 claims carry an annotated discrepancy, so the discrepancy rates rest on few
 cases. The annotations were written during development, not by an independent
-annotator. Most verification misses are retrieval misses (7 claims got no
-code evidence, 4 of them in LoRA's 23k-symbol repo) or a PARTIALLY_VERIFIED
-for a detail the code is silent on. The safety `held_out` cases (GitHub
-fine-grained / Slack / Hugging Face tokens, paraphrased injections) are
-coverage gaps of the regex gate, which matches only the forms listed in
-Phase 8.
+annotator, and five were corrected after a first measured run (2026-10-27,
+each with a note in its annotation): lora_c3/c5/c6 named the wrong symbol or
+misstated the code, and ddim_c1/mae_c5 were labelled PARTIALLY_VERIFIED with no
+paper/code mismatch. Scored against the corrected labels, the earlier pipeline
+reached 63.6% accuracy and 36.4% / 66.7% discrepancy precision / recall.
+The remaining misses are mostly retrieval (5 claims got no code evidence, 3 of
+them in LoRA, whose `examples/NLU` is a vendored transformers checkout) and
+3 PARTIALLY_VERIFIED verdicts on claims annotated VERIFIED. The safety
+`held_out` cases (GitHub fine-grained / Slack / Hugging Face tokens,
+paraphrased injections) are coverage gaps of the regex gate, which matches only
+the forms listed in Phase 8.
 
 ## Why
 

@@ -1,6 +1,6 @@
 # Claim2Code — Evaluation Report
 
-Generated 2026-10-27T16:51:19+00:00 at commit `26c6e51` with chat model `qwen3.8-27b-mlx` and embeddings `text-embedding-nomic-embed-text-v1.5`.
+Generated 2026-10-27T20:46:33+00:00 at commit `be1e5a5` with chat model `qwen3.8-27b-mlx` and embeddings `text-embedding-nomic-embed-text-v1.5`.
 
 ## Retrieval
 
@@ -24,9 +24,9 @@ Generated 2026-10-27T16:51:19+00:00 at commit `26c6e51` with chat model `qwen3.8
 
 | Baseline          | Recall@1 | Recall@5 | MRR     |
 |-------------------|----------|----------|---------|
-| embedding_only    | 0.00     | 0.40     | 0.175   |
+| embedding_only    | 0.00     | 0.50     | 0.225   |
 | lexical_only      | 0.00     | 0.00     | 0.000   |
-| hybrid_claim2code | 0.00     | 0.60     | 0.258   |
+| hybrid_claim2code | 0.20     | 0.70     | 0.408   |
 
 ### mae
 
@@ -48,9 +48,9 @@ Generated 2026-10-27T16:51:19+00:00 at commit `26c6e51` with chat model `qwen3.8
 
 | Baseline          | Avg R@1  | Avg R@5  | Avg MRR  |
 |-------------------|----------|----------|----------|
-| embedding_only    | 0.23     | 0.59     | 0.373    |
+| embedding_only    | 0.23     | 0.61     | 0.383    |
 | lexical_only      | 0.23     | 0.49     | 0.315    |
-| hybrid_claim2code | 0.32     | 0.68     | 0.457    |
+| hybrid_claim2code | 0.36     | 0.70     | 0.487    |
 
 Aggregates are macro averages over datasets. Baselines: embedding_only, lexical_only, hybrid_claim2code.
 
@@ -60,31 +60,31 @@ Aggregates are macro averages over datasets. Baselines: embedding_only, lexical_
 
 | Metric | Value |
 |---|---|
-| Status accuracy (exact, 4-way) | 63.6% |
-| Support rate (VERIFIED or PARTIALLY_VERIFIED) | 79.5% |
-| Discrepancy precision | 45.5% (11 flagged) |
-| Discrepancy recall | 71.4% (7 annotated) |
-| Grounding rate (cited code exists in the cited file) | 99.0% (102 citations) |
-| Line accuracy (cited code at the cited lines) | 92.2% |
-| Evidence hit rate (supported verdicts citing an annotated symbol) | 94.3% |
+| Status accuracy (exact, 4-way) | 77.3% |
+| Support rate (VERIFIED or PARTIALLY_VERIFIED) | 84.1% |
+| Discrepancy precision | 57.1% (7 flagged) |
+| Discrepancy recall | 66.7% (6 annotated) |
+| Grounding rate (cited code exists in the cited file) | 100.0% (111 citations) |
+| Line accuracy (cited code at the cited lines) | 91.0% |
+| Evidence hit rate (supported verdicts citing an annotated symbol) | 94.6% |
 | LLM errors | 0 |
 
 ### Per pair
 
 | Pair | Claims | Accuracy | Support | Disc. P | Disc. R | Grounding |
 |---|---|---|---|---|---|---|
-| ddim | 8 | 50.0% | 87.5% | 0.0% | 0.0% | 95.7% |
+| ddim | 8 | 75.0% | 87.5% | 0.0% | n/a | 100.0% |
 | dpo | 9 | 77.8% | 77.8% | 100.0% | 100.0% | 100.0% |
-| lora | 10 | 40.0% | 50.0% | 0.0% | n/a | 100.0% |
+| lora | 10 | 70.0% | 70.0% | n/a | 0.0% | 100.0% |
 | mae | 9 | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
-| reflexion | 8 | 50.0% | 87.5% | 40.0% | 66.7% | 100.0% |
+| reflexion | 8 | 62.5% | 87.5% | 50.0% | 66.7% | 100.0% |
 
 ### Confusion (rows = annotated, columns = predicted)
 
 | | VERIFIED | PARTIALLY_VERIFIED | CONTRADICTED | UNVERIFIED |
 |---|---|---|---|---|
-| VERIFIED | 24 | 6 | 0 | 7 |
-| PARTIALLY_VERIFIED | 1 | 4 | 1 | 1 |
+| VERIFIED | 31 | 3 | 0 | 4 |
+| PARTIALLY_VERIFIED | 0 | 3 | 1 | 2 |
 
 Skipped (repository not indexed): attention_is_all_you_need, bert.
 

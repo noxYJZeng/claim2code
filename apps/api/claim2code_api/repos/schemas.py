@@ -340,6 +340,9 @@ class RetrieveMatch(BaseModel):
     # (``__init__``, ``reset_parameters``, ...), where initialisation
     # and scaling usually live. Also verification-only.
     class_context: str | None = None
+    # The source of repo functions/methods this symbol calls, where a
+    # claimed detail often lives one call away. Also verification-only.
+    callee_context: str | None = None
 
 
 class ScoreBreakdown(BaseModel):

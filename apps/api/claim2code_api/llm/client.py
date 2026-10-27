@@ -72,6 +72,9 @@ logger = logging.getLogger(__name__)
 # chars (~750 tokens) x top-8 keeps the verify prompt well inside an
 # 8k-32k context while covering most functions/methods in full.
 _VERIFY_SOURCE_CHAR_CAP = 3000
+# Cap on a candidate's callee_context: smaller than the body cap so
+# eight candidates with callees still fit a 32k context.
+_VERIFY_CALLEE_CHAR_CAP = 2000
 
 # System prompt for claim extraction. Phrased as a rubric so the model
 # knows the granularity boundary between METHOD vs IMPLEMENTATION, and
@@ -114,8 +117,8 @@ RULES (non-negotiable):
      must be a verbatim substring of the paper_evidence.quote
      provided. Every piece of code evidence you cite must reference
      a specific candidate from the list provided (its symbol_id,
-     file_path, line numbers, signature, docstring, source, or
-     class_context). You MAY NOT
+     file_path, line numbers, signature, docstring, source,
+     class_context, or callee_context). You MAY NOT
      use knowledge of the paper, the library, or the algorithm
      beyond what is explicitly given in the inputs.
 
@@ -140,8 +143,8 @@ RULES (non-negotiable):
 
   4. **Cite deterministically.** Each ``code_evidence`` entry must
      include ``symbol_id`` (UUID string), ``quote`` (verbatim from
-     candidate.signature, candidate.docstring, candidate.source, or
-     candidate.class_context), and
+     candidate.signature, candidate.docstring, candidate.source,
+     candidate.class_context, or candidate.callee_context), and
      ``file_path`` + line numbers that match the candidate.
 
   5. The deterministic checker has already produced the following
@@ -170,6 +173,11 @@ RULES (non-negotiable):
      an empirical result, return PARTIALLY_VERIFIED with an EMPTY
      discrepancies list; if the claim is purely a theorem, a dataset
      statistic, or a measured result, return UNVERIFIED.
+     The converse also holds: when a relevant candidate for the
+     same setting hard-codes a different value for a quantity the
+     claim states (a loop bound ``while step < 50`` where the claim
+     says 30 steps, a default of 5 where it says 6), that IS a
+     concrete mismatch — emit it, do not fall back to UNVERIFIED.
 
   8. **Calibrate severity and type.** HIGH only when the mismatch
      falsifies the claim's central statement (a different formula,
@@ -856,6 +864,11 @@ def _build_verify_payload(
                 if len(ctx) > _VERIFY_SOURCE_CHAR_CAP:
                     ctx = ctx[:_VERIFY_SOURCE_CHAR_CAP] + "\n[... truncated ...]"
                 parts.append(f"class_context (setup methods of its class):\n```\n{ctx}\n```\n")
+            if c.callee_context:
+                ctx = c.callee_context
+                if len(ctx) > _VERIFY_CALLEE_CHAR_CAP:
+                    ctx = ctx[:_VERIFY_CALLEE_CHAR_CAP] + "\n[... truncated ...]"
+                parts.append(f"callee_context (repo functions it calls):\n```\n{ctx}\n```\n")
             parts.append("")
     else:
         parts.append("# Candidates\n\n(none — top-K retrieval returned empty)\n")

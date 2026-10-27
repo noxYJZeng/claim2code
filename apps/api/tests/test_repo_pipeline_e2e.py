@@ -298,3 +298,50 @@ def test_methods_link_to_enclosing_class_and_feed_class_context(
     assert "# reset_parameters (lines 5-6)" in ctx and "init_zeros(self.B)" in ctx
     assert "return x * self.scaling" not in ctx  # not the candidate itself
     assert _class_context(session, rows[("forward", 13)], tmp_path) is None
+
+
+def test_callee_context_resolves_nearest_definition(
+    session, tmp_path: Path,
+) -> None:
+    """The verifier attaches the source of repo functions a candidate
+    calls, picking the definition nearest the caller's file and
+    skipping callees that are already candidates."""
+    import uuid
+
+    from claim2code_api.repos.storage import WalkedFile
+    from claim2code_api.repos.workflow import _extract_symbols
+    from claim2code_api.verification.workflow import _callee_context
+
+    files = {
+        "alf/run.py": (
+            "def run(env):\n"
+            "    step = 0\n"
+            "    while step < 49:\n"
+            "        if exhausted(env):\n"
+            "            return helper(step)\n"
+            "        step += 1\n"
+        ),
+        "alf/hist.py": "def exhausted(env):\n    return env.repeats > 1\n",
+        "web/hist.py": "def exhausted(env):\n    return False\n",
+        "alf/util.py": "def helper(x):\n    return x\n",
+    }
+    repo_id = uuid.uuid4()
+    for rel, text in files.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        wf = WalkedFile(absolute_path=path, relative_path=rel, size_bytes=path.stat().st_size)
+        _extract_symbols(session, repo_id, wf, {})
+    session.flush()
+
+    rows = {(s.file_path, s.name): s for s in session.query(CodeSymbol).all()}
+    run = rows[("alf/run.py", "run")]
+    helper = rows[("alf/util.py", "helper")]
+
+    ctx = _callee_context(session, run, files["alf/run.py"], tmp_path, exclude={helper.symbol_id})
+    assert ctx is not None
+    assert "# exhausted (alf/hist.py:1-2)" in ctx and "env.repeats > 1" in ctx
+    assert "web/hist.py" not in ctx  # farther definition of the same name
+    assert "helper" not in ctx  # already a candidate
+
+    assert _callee_context(session, helper, files["alf/util.py"], tmp_path, exclude=set()) is None

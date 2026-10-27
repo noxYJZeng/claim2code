@@ -518,3 +518,16 @@ def test_verify_payload_includes_class_context() -> None:
         candidates=[cand], deterministic_discrepancies=[],
     )
     assert "class_context (setup methods of its class):\n```\n# reset_parameters" in payload
+
+
+def test_verify_payload_includes_callee_context() -> None:
+    from claim2code_api.llm.client import _build_verify_payload
+
+    cand = _candidate().model_copy(
+        update={"callee_context": "# check_is_exhausted (env_history.py:23-24)\nreturn self._is_exhausted"},
+    )
+    payload = _build_verify_payload(
+        claim=_claim(), paper_evidence=_paper_evidence(),
+        candidates=[cand], deterministic_discrepancies=[],
+    )
+    assert "callee_context (repo functions it calls):\n```\n# check_is_exhausted" in payload

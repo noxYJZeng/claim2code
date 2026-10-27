@@ -44,6 +44,7 @@ drillable per claim in the trace UI.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -375,6 +376,17 @@ def _hybrid_to_retrieve_matches(
         sym = by_id.get(m.symbol_id)
         if sym is None:
             continue
+        source = (
+            _read_source_range(
+                clone_path=clone_path,
+                rel_path=sym.file_path,
+                start_line=sym.start_line,
+                end_line=sym.end_line,
+            )
+            or None
+            if clone_path is not None
+            else None
+        )
         out.append(
             RetrieveMatch(
                 symbol_id=sym.symbol_id,
@@ -389,20 +401,15 @@ def _hybrid_to_retrieve_matches(
                 signature=sym.signature or "",
                 docstring=sym.docstring,
                 similarity=m.final_score,
-                source=(
-                    _read_source_range(
-                        clone_path=clone_path,
-                        rel_path=sym.file_path,
-                        start_line=sym.start_line,
-                        end_line=sym.end_line,
-                    )
-                    or None
-                    if clone_path is not None
-                    else None
-                ),
+                source=source,
                 class_context=(
                     _class_context(db, sym, clone_path)
                     if clone_path is not None
+                    else None
+                ),
+                callee_context=(
+                    _callee_context(db, sym, source, clone_path, exclude=set(by_id))
+                    if clone_path is not None and source
                     else None
                 ),
             )
@@ -448,6 +455,86 @@ def _class_context(db: Session, sym: CodeSymbol, clone_path: Path) -> str | None
         if body:
             parts.append(f"# {sib.name} (lines {sib.start_line}-{sib.end_line})\n{body}")
     return "\n\n".join(parts) or None
+
+
+# A call site: an identifier followed by ``(``. Language-agnostic
+# enough for the Python/JS/Go/Rust/Java the parser indexes.
+_CALL_RE = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
+_MAX_CALLEES = 4
+
+
+def _callee_context(
+    db: Session,
+    sym: CodeSymbol,
+    source: str,
+    clone_path: Path,
+    *,
+    exclude: set[UUID],
+) -> str | None:
+    """Return the source of repo functions/methods that ``sym`` calls.
+
+    The detail a claim names often sits one call away from the
+    retrieved symbol (``sample_image`` -> ``generalized_steps``,
+    ``alfworld_run`` -> ``check_is_exhausted``). A name defined more
+    than once resolves to the definition nearest ``sym``'s file; a tie
+    is skipped as ambiguous. Symbols already among the candidates
+    (``exclude``) are not repeated.
+    """
+    body = source.split("\n", 1)[1] if "\n" in source else ""
+    names = list(dict.fromkeys(n for n in _CALL_RE.findall(body) if n != sym.name))
+    if not names:
+        return None
+    defs = (
+        db.query(CodeSymbol)
+        .filter(
+            CodeSymbol.repository_id == sym.repository_id,
+            CodeSymbol.kind.in_(("function", "method")),
+            CodeSymbol.name.in_(names),
+            CodeSymbol.symbol_id != sym.symbol_id,
+        )
+        .all()
+    )
+    by_name: dict[str, list[CodeSymbol]] = {}
+    for d in defs:
+        by_name.setdefault(d.name, []).append(d)
+    parts: list[str] = []
+    for name in names:
+        callee = _nearest_definition(by_name.get(name, []), sym.file_path)
+        if callee is None or callee.symbol_id in exclude:
+            continue
+        text = _read_source_range(
+            clone_path=clone_path,
+            rel_path=callee.file_path,
+            start_line=callee.start_line,
+            end_line=callee.end_line,
+        )
+        if text:
+            parts.append(
+                f"# {callee.name} ({callee.file_path}:{callee.start_line}-{callee.end_line})\n{text}"
+            )
+        if len(parts) == _MAX_CALLEES:
+            break
+    return "\n\n".join(parts) or None
+
+
+def _nearest_definition(defs: list[CodeSymbol], file_path: str) -> CodeSymbol | None:
+    """Pick the definition sharing the longest path prefix with ``file_path``."""
+    if not defs:
+        return None
+    target = file_path.split("/")
+
+    def shared(d: CodeSymbol) -> int:
+        n = 0
+        for a, b in zip(d.file_path.split("/"), target, strict=False):
+            if a != b:
+                break
+            n += 1
+        return n
+
+    ranked = sorted(defs, key=shared, reverse=True)
+    if len(ranked) > 1 and shared(ranked[0]) == shared(ranked[1]):
+        return None
+    return ranked[0]
 
 
 def _error_verification(claim: Claim, exc: Exception) -> Verification:

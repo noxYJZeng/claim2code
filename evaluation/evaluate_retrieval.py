@@ -186,14 +186,19 @@ def _resolve_symbol_ids(
     A claim is considered "retrieved" if ANY of its relevant
     symbols appears in the top-k. If multiple relevant symbols
     are listed for a claim, the union is used.
+
+    A class also stands for its methods: an annotation naming
+    ``Linear`` is satisfied by retrieving ``Linear.forward``, since
+    the class body lives in its methods.
     """
+    table = Base.metadata.tables["code_symbols"]
     ids: set[str] = set()
     for rs in relevant_symbols:
         # ``file_path`` may be relative or absolute; the
         # stored ``code_symbols.file_path`` is whatever the
         # parser emitted, so we don't normalise.
         rows = (
-            db.query(Base.metadata.tables["code_symbols"])
+            db.query(table)
             .filter_by(
                 repository_id=str(repository_id),
                 file_path=rs["file_path"],
@@ -204,6 +209,11 @@ def _resolve_symbol_ids(
         )
         for row in rows:
             ids.add(str(row.symbol_id))
+            if rs["kind"] == "class":
+                children = db.query(table.c.symbol_id).filter(
+                    table.c.parent_symbol_id == row.symbol_id,
+                )
+                ids.update(str(child.symbol_id) for child in children)
     return ids
 
 

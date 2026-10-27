@@ -1,0 +1,103 @@
+{
+  "pair_id": "dpo",
+  "paper": {
+    "title": "Direct Preference Optimization: Your Language Model is Secretly a Reward Model",
+    "authors": ["Rafailov", "Sharma", "Mitchell", "Ermon", "Manning", "Finn"],
+    "year": 2023,
+    "venue": "NeurIPS",
+    "arxiv_id": "2305.18290",
+    "sha256": "Rafailov2023-placeholder"
+  },
+  "repo": {
+    "url": "https://github.com/eric-mitchell/direct-preference-optimization",
+    "commit": "main",
+    "description": "Reference DPO implementation (SFT + DPO trainers, Hydra configs)."
+  },
+  "claims": [
+    {
+      "claim_id": "dpo_c1",
+      "text": "The DPO loss is the negative log-sigmoid of beta times the difference between the policy-to-reference log-ratios of the preferred and dispreferred completions.",
+      "evidence_span": {"section": "4", "page": 5, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "trainers.py", "name": "preference_loss", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "dpo_c2",
+      "text": "The implicit reward of a completion is beta times the log-ratio of the policy and reference model probabilities.",
+      "evidence_span": {"section": "5", "page": 5, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "trainers.py", "name": "preference_loss", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "dpo_c3",
+      "text": "The default hyperparameters for DPO training are a beta of 0.1, a batch size of 64, and the RMSprop optimizer with a learning rate of 1e-6, which is linearly warmed up from 0 over 150 steps.",
+      "evidence_span": {"section": "B", "page": 19, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "config/config.yaml", "name": "config/config.yaml", "kind": "config_schema"},
+        {"file_path": "config/loss/dpo.yaml", "name": "config/loss/dpo.yaml", "kind": "config_schema"}
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "config.yaml: RMSprop and warmup_steps 150 match; lr 5e-7 vs 1e-6; batch_size 4 (README passes 64); beta is ??? (required on the CLI)."
+    },
+    {
+      "claim_id": "dpo_c4",
+      "text": "Sequence log-probabilities are the sum of per-token log-probabilities over the completion tokens, ignoring prompt and padding tokens.",
+      "evidence_span": {"section": "B", "page": 19, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "trainers.py", "name": "_get_batch_logps", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "dpo_c5",
+      "text": "The chosen and rejected completions are concatenated into one batch so the policy runs a single forward pass for both.",
+      "evidence_span": {"section": "B", "page": 19, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "trainers.py", "name": "concatenated_inputs", "kind": "function"},
+        {"file_path": "trainers.py", "name": "concatenated_forward", "kind": "method"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "dpo_c6",
+      "text": "The single-turn dialogue experiment uses the Anthropic Helpful and Harmless dataset.",
+      "evidence_span": {"section": "6.1", "page": 7, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "preference_datasets.py", "name": "get_hh", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "dpo_c7",
+      "text": "The dialogue experiments use a Pythia-2.8B model.",
+      "evidence_span": {"section": "6.1", "page": 7, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "config/model/pythia28.yaml", "name": "config/model/pythia28.yaml", "kind": "config_schema"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "dpo_c8",
+      "text": "The reference policy is initialised from the SFT model: DPO training loads the SFT checkpoint into both the policy and the reference model.",
+      "evidence_span": {"section": "4", "page": 5, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "train.py", "name": "main", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "dpo_c9",
+      "text": "The reference model is kept frozen and evaluated without gradients during DPO training.",
+      "evidence_span": {"section": "4", "page": 5, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "trainers.py", "name": "concatenated_forward", "kind": "method"},
+        {"file_path": "trainers.py", "name": "get_batch_metrics", "kind": "method"}
+      ],
+      "expected_verification": "VERIFIED"
+    }
+  ]
+}

@@ -20,6 +20,7 @@ for p in (str(_REPO_ROOT), str(_REPO_ROOT / "apps" / "api")):
 from evaluation import evaluate_safety, report  # noqa: E402
 from evaluation.evaluate_verification import (  # noqa: E402
     _claim_from_annotation,
+    _regrade,
     quote_is_grounded,
     score,
 )
@@ -117,6 +118,23 @@ def test_claim_from_annotation_builds_a_valid_claim() -> None:
     assert claim.claim_id == "x_c1"
     assert claim.paper_evidence.quote == "The loss is MSE."
     assert claim.paper_evidence.char_end > claim.paper_evidence.char_start
+
+
+def test_regrade_uses_the_current_labels_and_regrounds_citations(tmp_path) -> None:
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+    from uuid import uuid4
+
+    (tmp_path / "m.py").write_text("x = 1\n")
+    db = SimpleNamespace(get=lambda _model, _id: SimpleNamespace(clone_path=str(tmp_path)))
+    record = {
+        **_record("PARTIALLY_VERIFIED", "VERIFIED"), "pair_id": "p", "claim_id": "c",
+        "evidence": [{"file_path": "m.py", "start_line": 1, "end_line": 1, "quote": "x = 1"}],
+    }
+    annotations = [{"pair_id": "p", "claims": [{"claim_id": "c", "expected_verification": "VERIFIED"}]}]
+    [out] = _regrade(lambda: nullcontext(db), {"p": str(uuid4())}, [record], annotations)
+    assert out["expected"] == "VERIFIED"
+    assert out["n_grounded"] == 1 and out["n_line_accurate"] == 1
 
 
 # ============================================================

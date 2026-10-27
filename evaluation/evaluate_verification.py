@@ -321,9 +321,14 @@ def _regrade(
     SessionLocal: Any,
     repo_ids: dict[str, str],
     records: list[dict[str, Any]],
+    annotations: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Recompute citation grounding for stored records against the clones."""
+    """Re-score stored records: current annotated labels, citation grounding."""
     from claim2code_api.db.models import Repository
+
+    expected = {
+        c["claim_id"]: c["expected_verification"] for a in annotations for c in a["claims"]
+    }
 
     with SessionLocal() as db:
         clones = {
@@ -340,6 +345,7 @@ def _regrade(
             except OSError:
                 return None
 
+        r["expected"] = expected.get(r["claim_id"], r["expected"])
         grade_evidence(r["evidence"], _file)
         r["n_grounded"] = sum(e["grounded"] for e in r["evidence"])
         r["n_line_accurate"] = sum(e["line_accurate"] for e in r["evidence"])
@@ -353,7 +359,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--resume", action="store_true", help="keep finished claims from the last run")
     parser.add_argument(
         "--regrade", action="store_true",
-        help="re-score the last run's stored citations without calling the LLM",
+        help="re-score the last run's stored verdicts and citations without calling the LLM",
     )
     args = parser.parse_args(argv)
 
@@ -370,7 +376,7 @@ def main(argv: list[str] | None = None) -> int:
     for pair_id in skipped_pairs:
         logger.warning("skipping pair_id=%s (repository not indexed)", pair_id)
     if args.regrade:
-        records = _regrade(SessionLocal, repo_ids, _read_jsonl(CLAIMS_JSONL))
+        records = _regrade(SessionLocal, repo_ids, _read_jsonl(CLAIMS_JSONL), annotations)
         CLAIMS_JSONL.write_text("".join(json.dumps(r) + "\n" for r in records))
     else:
         records = _run(SessionLocal, annotations, repo_ids, resume=args.resume)

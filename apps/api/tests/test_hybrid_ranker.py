@@ -28,6 +28,7 @@ from uuid import uuid4
 
 import pytest
 
+from claim2code_api.db.models import RepositoryDependency
 from claim2code_api.indexing.exceptions import EmbeddingError
 from claim2code_api.retrieval.hybrid_ranker import (
     HybridWeights,
@@ -50,18 +51,24 @@ def _lex_result(score: float, symbol_id):
     return (symbol_id, score)
 
 
-def _build_session(*, code_symbols: list[SimpleNamespace]) -> MagicMock:
-    """Build a MagicMock session that mimics the bulk-fetch query.
+def _build_session(
+    *, code_symbols: list[SimpleNamespace], dependencies: list[str] | None = None,
+) -> MagicMock:
+    """Build a MagicMock session that mimics the ranker's two queries.
 
-    The hybrid_ranker runs one query after RRF: a CodeSymbol
-    bulk-fetch by id. We return ``code_symbols`` for that.
+    After RRF the hybrid_ranker bulk-fetches CodeSymbol rows by id
+    (we return ``code_symbols``) and reads the repo's dependency
+    names (``dependencies``, default none).
     """
     session = MagicMock(name="session")
     queue = [code_symbols]
 
-    def _query(_model):
+    def _query(model):
         q = MagicMock()
-        q.filter.return_value.all.return_value = queue.pop(0)
+        if model is RepositoryDependency.name:
+            q.filter.return_value.all.return_value = [(n,) for n in dependencies or []]
+        else:
+            q.filter.return_value.all.return_value = queue.pop(0)
         return q
 
     session.query.side_effect = _query
@@ -407,6 +414,62 @@ def test_hybrid_ranker_drops_import_symbols() -> None:
         out = hybrid_ranker(_build_session(code_symbols=syms), uuid4(), "x", top_k=1)
 
     assert [m.symbol_id for m in out] == [sid_func]
+
+
+def test_hybrid_ranker_reserves_a_slot_for_each_legs_top_hit() -> None:
+    """A lexical rank-1 hit the semantic leg missed outranks nothing
+    under RRF, but still gets a top-k slot."""
+    both = [uuid4() for _ in range(3)]
+    lex_only = uuid4()
+    syms = [SimpleNamespace(symbol_id=s, kind="function") for s in [*both, lex_only]]
+
+    with (
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.retrieve_semantic",
+            return_value=[_sem_result(0.9, s) for s in both],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.lexical_search",
+            return_value=[_lex_result(1.0, lex_only)] + [_lex_result(0.5, s) for s in both],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.structural_boost",
+            return_value={s: 1.0 for s in [*both, lex_only]},
+        ),
+    ):
+        out = hybrid_ranker(_build_session(code_symbols=syms), uuid4(), "x", top_k=2)
+
+    assert [m.symbol_id for m in out] == [both[0], lex_only]
+
+
+def test_hybrid_ranker_down_weights_vendored_dependency_dirs() -> None:
+    """A symbol under a directory named after a declared dependency
+    (a vendored copy of that library) is scored at half weight."""
+    own, vendored = uuid4(), uuid4()
+    syms = [
+        SimpleNamespace(symbol_id=vendored, kind="function", file_path="src/transformers/models/bert.py"),
+        SimpleNamespace(symbol_id=own, kind="function", file_path="loralib/layers.py"),
+    ]
+
+    with (
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.retrieve_semantic",
+            return_value=[_sem_result(0.9, vendored), _sem_result(0.8, own)],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.lexical_search",
+            return_value=[],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.structural_boost",
+            return_value={vendored: 1.0, own: 1.0},
+        ),
+    ):
+        db = _build_session(code_symbols=syms, dependencies=["Transformers", "torch"])
+        out = hybrid_ranker(db, uuid4(), "x")
+
+    assert [m.symbol_id for m in out] == [own, vendored]
+    assert out[1].final_score == pytest.approx(0.40 / 61 * 61 * 0.5)
 
 
 # ============================================================

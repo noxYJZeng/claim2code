@@ -74,13 +74,14 @@ is the Elasticsearch ``function_score`` / Vespa pattern.)
 from __future__ import annotations
 
 import logging
+import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from claim2code_api.db.models import CodeSymbol
+from claim2code_api.db.models import CodeSymbol, RepositoryDependency
 from claim2code_api.indexing.embedding_client import EmbeddingClient
 from claim2code_api.indexing.lexical import lexical_search
 from claim2code_api.indexing.retriever import retrieve_semantic
@@ -94,6 +95,13 @@ logger = logging.getLogger(__name__)
 # OpenSearch, Vespa. Lower k → rank differences amplified;
 # higher k → RRF approaches simple weighted sum.
 _RRF_K = 60
+
+# Score multiplier for symbols under a directory named after one of
+# the repo's own dependencies (``examples/NLU/src/transformers`` in
+# microsoft/LoRA): a vendored copy of a library, whose thousands of
+# symbols otherwise drown the paper's code. Down-weighted rather than
+# dropped, since authors do patch vendored files.
+_VENDORED_FACTOR = 0.5
 
 
 @dataclass(frozen=True)
@@ -299,9 +307,6 @@ def hybrid_ranker(
                 )
             )
 
-        # Sort by final_score desc, then by symbol_id (stable tie-break).
-        matches.sort(key=lambda m: (-m.final_score, str(m.symbol_id)))
-
         # Bulk-fetch the pool's CodeSymbol rows (at most
         # ``2 * leg_top_k``) so imports can be dropped before the
         # top_k cut.
@@ -312,15 +317,82 @@ def hybrid_ranker(
         )
         by_id = {s.symbol_id: s for s in symbols}
 
+        vendored = _vendored_dir_names(db, repository_id)
+        if vendored:
+            matches = [
+                replace(m, final_score=m.final_score * _VENDORED_FACTOR)
+                if m.symbol_id in by_id
+                and _is_vendored(getattr(by_id[m.symbol_id], "file_path", ""), vendored)
+                else m
+                for m in matches
+            ]
+
+        # Sort by final_score desc, then by symbol_id (stable tie-break).
+        matches.sort(key=lambda m: (-m.final_score, str(m.symbol_id)))
+
         # Filter out imports and any matches whose symbol row
         # vanished (orphan).
-        survivors = [
+        eligible = [
             m
             for m in matches
             if m.symbol_id in by_id and getattr(by_id[m.symbol_id], "kind", None) != "import"
-        ][:top_k]
+        ]
+        survivors = _reserve_leg_tops(eligible, top_k)
         root_span.set_attribute("retrieval.result_count", len(survivors))
         return survivors
+
+
+def _reserve_leg_tops(eligible: list[HybridMatch], top_k: int) -> list[HybridMatch]:
+    """Cut ``eligible`` (score-sorted) to ``top_k``, keeping each leg's best.
+
+    RRF favours symbols both legs found: in a small repo, where most
+    symbols appear in both legs, a leg's rank-1 hit seen by that leg
+    alone (``config/config.yaml`` for a claim listing the training
+    hyperparameters) scores below a dozen mid-ranked ones. Each leg's
+    top eligible symbol therefore displaces the lowest unreserved one.
+    """
+    top = eligible[:top_k]
+    if len(eligible) <= top_k:
+        return top
+    reserved: list[HybridMatch] = []
+    for leg_rank in ("rank_semantic", "rank_lexical"):
+        ranked = [m for m in eligible if getattr(m, leg_rank) is not None]
+        if ranked:
+            best = min(ranked, key=lambda m: getattr(m, leg_rank))
+            if best not in reserved:
+                reserved.append(best)
+    for best in reserved:
+        if best in top:
+            continue
+        drop = next((m for m in reversed(top) if m not in reserved), None)
+        if drop is None:
+            break
+        top.remove(drop)
+        top.append(best)
+    top.sort(key=lambda m: (-m.final_score, str(m.symbol_id)))
+    return top
+
+
+def _vendored_dir_names(db: Session, repository_id: UUID) -> set[str]:
+    """Normalised names of the repo's declared dependencies."""
+    rows = (
+        db.query(RepositoryDependency.name)
+        .filter(RepositoryDependency.repository_id == repository_id)
+        .all()
+    )
+    return {_normalise_package(row[0]) for row in rows if row[0]}
+
+
+def _is_vendored(file_path: str, dependency_names: set[str]) -> bool:
+    """True when a directory on ``file_path`` is named after a dependency."""
+    return any(
+        _normalise_package(part) in dependency_names for part in file_path.split("/")[:-1]
+    )
+
+
+def _normalise_package(name: str) -> str:
+    """PEP 503-style: ``Py-YAML`` and ``py_yaml`` compare equal."""
+    return re.sub(r"[-_.]+", "_", name).lower()
 
 
 __all__ = ["hybrid_ranker", "HybridMatch", "HybridWeights"]

@@ -74,21 +74,28 @@ migration-new: ## Create a new migration (usage: make migration-new NAME=...).
 
 # ---------------------------- Eval ----------------------------
 
+# Each evaluator writes evaluation/results/<name>.json; `make eval-report`
+# folds them into evaluation/results.json + evaluation/report.md.
+
 .PHONY: eval-retrieval
 eval-retrieval: ## Run retrieval evaluation (Recall@1/5, MRR).
-	@cd evaluation && python evaluate_retrieval.py
+	@python evaluation/evaluate_retrieval.py
 
 .PHONY: eval-verification
-eval-verification: ## Run verification evaluation (accuracy, grounding rate).
-	@cd evaluation && python evaluate_verification.py
+eval-verification: ## Run verification evaluation (accuracy, discrepancy P/R, grounding). Slow: one LLM call per claim; ARGS=--resume continues.
+	@python evaluation/evaluate_verification.py $(ARGS)
 
 .PHONY: eval-safety
-eval-safety: ## Run responsible-AI adversarial tests.
-	@cd apps/api && python -m pytest tests/safety/
+eval-safety: ## Run the safety evaluator (secret / injection corpus through SafetyGate).
+	@python evaluation/evaluate_safety.py
+
+.PHONY: eval-report
+eval-report: ## Render evaluation/results.json + report.md from the last runs.
+	@python evaluation/report.py
 
 .PHONY: eval-all
-eval-all: ## Run full evaluation suite + render report.
-	@cd evaluation && python evaluate_all.py
+eval-all: ## Run every evaluator + render the report.
+	@python evaluation/evaluate_all.py
 
 # ---------------------------- Logs ----------------------------
 

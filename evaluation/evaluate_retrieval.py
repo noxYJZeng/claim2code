@@ -6,10 +6,9 @@ Run with ``make eval-retrieval`` from the repo root. Loads
 pairs), runs each baseline (embedding_only, lexical_only,
 hybrid_claim2code) per dataset, and emits:
 
-  - ``evaluation/results.json`` — structured per-(dataset, baseline)
-    metrics for downstream consumers.
-  - ``evaluation/report.md`` — a human-readable Markdown table
-    mirroring the JSON.
+  - ``evaluation/results/retrieval.json`` — structured
+    per-(dataset, baseline) metrics. ``evaluation/report.py``
+    folds it into ``evaluation/results.json`` + ``report.md``.
 
 The acceptance criterion for Phase 5 (per the design doc §5)
 is ``hybrid.R@5 > embedding.R@5``; the report's *Aggregate*
@@ -36,11 +35,11 @@ Run requirements
   - The OpenAI embedding client configured (so the semantic
     leg doesn't fail). Lexical-only doesn't need OpenAI but
     lives in the same comparison.
-  - The 3 paper/repo pairs must already be cloned and
-    indexed under their respective ``repository_id``s. The
-    ``repository_id`` per pair is passed via the
-    ``CLAIM2CODE_EVAL_REPO_IDS`` env var as a JSON dict (see
-    :func:`_load_repo_ids`).
+  - The paper/repo pairs must already be cloned and indexed.
+    Each pair's ``repository_id`` is looked up by its annotated
+    repo URL; ``CLAIM2CODE_EVAL_REPO_IDS`` (a JSON dict) overrides
+    the lookup (see :func:`resolve_repo_ids`). Pairs whose repo is
+    not indexed are skipped.
 """
 from __future__ import annotations
 
@@ -56,9 +55,10 @@ from uuid import UUID
 # Ensure ``apps/api`` is on sys.path before ``claim2code_api``
 # resolves. Must happen before we import the baselines below.
 _THIS = Path(__file__).resolve()
-_APPS_API = _THIS.parents[1] / "apps" / "api"
-if str(_APPS_API) not in sys.path:
-    sys.path.insert(0, str(_APPS_API))
+_REPO_ROOT = _THIS.parents[1]
+for _p in (_REPO_ROOT, _REPO_ROOT / "apps" / "api"):
+    if str(_p) not in sys.path:
+        sys.path.insert(0, str(_p))
 
 from claim2code_api.db.models import Base
 from sqlalchemy import create_engine
@@ -76,8 +76,8 @@ logger = logging.getLogger("claim2code.eval.retrieval")
 # Path constants. ``__file__`` is ``evaluation/evaluate_retrieval.py``.
 EVAL_DIR = _THIS.parent
 ANNOTATIONS_DIR = EVAL_DIR / "annotations"
-RESULTS_JSON = EVAL_DIR / "results.json"
-REPORT_MD = EVAL_DIR / "report.md"
+RESULTS_DIR = EVAL_DIR / "results"
+RESULTS_JSON = RESULTS_DIR / "retrieval.json"
 
 BASELINES = [
     embedding_only,
@@ -136,19 +136,19 @@ class BaselineMetrics:
 
 
 def _build_session_factory() -> sessionmaker[Session]:
-    """Build a SQLAlchemy session factory from ``DATABASE_URL``.
+    """Build a SQLAlchemy session factory.
 
-    Falls back to ``sqlite:///./data.db`` so the script can
-    at least import + run sanity checks in environments where
-    Postgres isn't available — but real evaluation requires
-    the live database (the eval is opt-in via
-    ``make eval-retrieval``).
+    ``DATABASE_URL`` in the environment wins; otherwise the app's own
+    settings (``apps/api/.env``) pick the database, as for the API.
     """
     import os
 
-    url = os.environ.get("DATABASE_URL", "sqlite:///./data.db")
+    url = os.environ.get("DATABASE_URL")
+    if url is None:
+        from claim2code_api.db.session import get_session_local
+
+        return get_session_local()
     engine = create_engine(url, future=True)
-    Base.metadata.create_all(engine)
     return sessionmaker(bind=engine, expire_on_commit=False)
 
 
@@ -164,16 +164,44 @@ def _load_annotations() -> list[dict[str, Any]]:
 
 
 def _load_repo_ids() -> dict[str, str]:
-    """Return ``{pair_id: repository_id}`` from env.
+    """Return the ``{pair_id: repository_id}`` override from env.
 
     Set via ``CLAIM2CODE_EVAL_REPO_IDS='{"attention_is_all_you_need": "uuid", ...}'``.
-    Missing pairs raise at runtime (not at import) so the
-    script can be inspected without a DB.
     """
     import os
 
     raw = os.environ.get("CLAIM2CODE_EVAL_REPO_IDS", "{}")
     return json.loads(raw)
+
+
+def resolve_repo_ids(
+    db: Session,
+    annotations: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Map each pair to an indexed ``repository_id``.
+
+    The env override wins; otherwise the pair's ``repo.url`` is matched
+    against ``repositories.url`` (ignoring a trailing ``/`` or ``.git``).
+    Pairs with no indexed repository are left out.
+    """
+    overrides = _load_repo_ids()
+    table = Base.metadata.tables["repositories"]
+    indexed = {
+        _normalise_url(row.url): str(row.repository_id)
+        for row in db.query(table.c.url, table.c.repository_id)
+    }
+    out: dict[str, str] = {}
+    for a in annotations:
+        pair_id = a["pair_id"]
+        repo_id = overrides.get(pair_id) or indexed.get(_normalise_url(a["repo"]["url"]))
+        if repo_id:
+            out[pair_id] = repo_id
+    return out
+
+
+def _normalise_url(url: str) -> str:
+    url = url.strip().rstrip("/")
+    return url.removesuffix(".git").lower()
 
 
 def _resolve_symbol_ids(
@@ -299,19 +327,22 @@ def evaluate_baseline_on_dataset(
 
 def evaluate_all(
     *,
-    repo_ids: dict[str, str],
+    repo_ids: dict[str, str] | None = None,
     top_k: int = 5,
 ) -> list[BaselineMetrics]:
     """Run all baselines × all annotations, return flat list of metrics."""
     annotations = _load_annotations()
     SessionLocal = _build_session_factory()
+    if repo_ids is None:
+        with SessionLocal() as db:
+            repo_ids = resolve_repo_ids(db, annotations)
     out: list[BaselineMetrics] = []
 
     for annotation in annotations:
         pair_id = annotation["pair_id"]
         repo_id_str = repo_ids.get(pair_id)
         if not repo_id_str:
-            logger.warning("skipping pair_id=%s (no repo id in CLAIM2CODE_EVAL_REPO_IDS)", pair_id)
+            logger.warning("skipping pair_id=%s (repository not indexed)", pair_id)
             continue
         repo_id = UUID(repo_id_str)
         with SessionLocal() as db:
@@ -416,19 +447,13 @@ def _render_report_md(metrics: list[BaselineMetrics]) -> str:
 def main() -> int:
     """Entry point. Returns process exit code (0 success)."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    repo_ids = _load_repo_ids()
-    if not repo_ids:
-        logger.error(
-            "CLAIM2CODE_EVAL_REPO_IDS is empty; set it to a JSON dict "
-            "mapping pair_id → repository_id, e.g. "
-            "'{\"attention_is_all_you_need\": \"<uuid>\", ...}'",
-        )
+    metrics = evaluate_all()
+    if not metrics:
+        logger.error("no annotated pair has an indexed repository")
         return 2
-
-    metrics = evaluate_all(repo_ids=repo_ids)
+    RESULTS_DIR.mkdir(exist_ok=True)
     RESULTS_JSON.write_text(json.dumps(_render_results_json(metrics), indent=2))
-    REPORT_MD.write_text(_render_report_md(metrics))
-    logger.info("wrote %s and %s", RESULTS_JSON, REPORT_MD)
+    logger.info("wrote %s", RESULTS_JSON)
     return 0
 
 

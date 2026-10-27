@@ -96,3 +96,5 @@ api/generated/
 
 # ---- Local-only scripts that may run with secrets ----
 scripts/_local/
+# Per-claim progress log of evaluate_verification.py (the summary lands in results/verification.json)
+evaluation/results/*.jsonl

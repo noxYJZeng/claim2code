@@ -348,7 +348,7 @@ def test_annotation_files_load_with_labelled_claims() -> None:
     annotations = _load_annotations()
     by_id = {a["pair_id"]: a for a in annotations}
     assert set(by_id) == {
-        "attention_is_all_you_need", "bert", "lora", "mae", "ddim", "reflexion", "dpo",
+        "attention_is_all_you_need", "bert", "lora", "mae", "ddim", "ddpm", "reflexion", "dpo",
     }
     for ann in annotations:
         assert len(ann["claims"]) >= 8, f"{ann['pair_id']} should have >= 8 claims"

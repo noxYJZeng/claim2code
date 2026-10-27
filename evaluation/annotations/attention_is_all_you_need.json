@@ -5,12 +5,11 @@
     "authors": ["Vaswani", "Shazeer", "Parmar", "Uszkoreit", "Jones", "Gomez", "Kaiser", "Polosukhin"],
     "year": 2017,
     "venue": "NeurIPS",
-    "arxiv_id": "1706.03762",
-    "sha256": "Vasarwi2017-placeholder"
+    "arxiv_id": "1706.03762"
   },
   "repo": {
     "url": "https://github.com/harvardnlp/annotated-transformer",
-    "commit": "main",
+    "commit": "debc9fd",
     "description": "Harvard NLP's annotated 'Attention Is All You Need' implementation."
   },
   "claims": [
@@ -19,91 +18,110 @@
       "text": "The transformer computes scaled dot-product attention as softmax(QK^T / sqrt(d_k)) V.",
       "evidence_span": {"section": "3.2.1", "page": 4, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "annotated_transformer.py", "name": "attention", "kind": "function"}
+        {"file_path": "the_annotated_transformer.py", "name": "attention", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "aiayn_c2",
-      "text": "Multi-head attention projects queries, keys, and values h times with different learned linear projections.",
-      "evidence_span": {"section": "3.2.2", "page": 5, "char_start": 0, "char_end": 100},
+      "text": "Multi-head attention linearly projects the queries, keys and values h times with different, learned linear projections.",
+      "evidence_span": {"section": "3.2.2", "page": 4, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "annotated_transformer.py", "name": "MultiHeadAttention", "kind": "class"}
+        {"file_path": "the_annotated_transformer.py", "name": "MultiHeadedAttention", "kind": "class"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "aiayn_c3",
-      "text": "The positional encoding uses sin and cos functions of different frequencies.",
+      "text": "The positional encodings use sine and cosine functions of different frequencies.",
       "evidence_span": {"section": "3.5", "page": 6, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "annotated_transformer.py", "name": "PositionalEncoding", "kind": "class"}
+        {"file_path": "the_annotated_transformer.py", "name": "PositionalEncoding", "kind": "class"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "aiayn_c4",
-      "text": "The position-wise feed-forward network applies two linear transformations with a ReLU activation in between.",
+      "text": "The position-wise feed-forward network consists of two linear transformations with a ReLU activation in between.",
       "evidence_span": {"section": "3.3", "page": 5, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "annotated_transformer.py", "name": "PositionwiseFeedForward", "kind": "class"}
+        {"file_path": "the_annotated_transformer.py", "name": "PositionwiseFeedForward", "kind": "class"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "aiayn_c5",
-      "text": "The encoder is composed of a stack of N=6 identical layers each with two sub-layers.",
+      "text": "The encoder is composed of a stack of N = 6 identical layers, each with two sub-layers.",
       "evidence_span": {"section": "3.1", "page": 3, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "annotated_transformer.py", "name": "EncoderLayer", "kind": "class"},
-        {"file_path": "annotated_transformer.py", "name": "Encoder", "kind": "class"}
+        {"file_path": "the_annotated_transformer.py", "name": "EncoderLayer", "kind": "class"},
+        {"file_path": "the_annotated_transformer.py", "name": "Encoder", "kind": "class"},
+        {"file_path": "the_annotated_transformer.py", "name": "make_model", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "aiayn_c6",
-      "text": "Each sub-layer employs a residual connection followed by layer normalization.",
-      "evidence_span": {"section": "5.4", "page": 7, "char_start": 0, "char_end": 100},
+      "text": "The output of each sub-layer is LayerNorm(x + Sublayer(x)): a residual connection followed by layer normalization.",
+      "evidence_span": {"section": "3.1", "page": 3, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "annotated_transformer.py", "name": "LayerNorm", "kind": "class"},
-        {"file_path": "annotated_transformer.py", "name": "sublayer", "kind": "function"}
+        {"file_path": "the_annotated_transformer.py", "name": "SublayerConnection", "kind": "class"}
       ],
-      "expected_verification": "VERIFIED"
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "SublayerConnection computes x + dropout(sublayer(norm(x))) (pre-norm); its docstring notes the norm is applied first for code simplicity."
     },
     {
       "claim_id": "aiayn_c7",
-      "text": "The decoder inserts a third sub-layer which performs multi-head attention over the encoder output.",
+      "text": "The decoder inserts a third sub-layer, which performs multi-head attention over the output of the encoder stack.",
       "evidence_span": {"section": "3.1", "page": 3, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "annotated_transformer.py", "name": "DecoderLayer", "kind": "class"},
-        {"file_path": "annotated_transformer.py", "name": "Decoder", "kind": "class"}
+        {"file_path": "the_annotated_transformer.py", "name": "DecoderLayer", "kind": "class"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "aiayn_c8",
-      "text": "The embedding layers multiply their output by sqrt(d_model).",
-      "evidence_span": {"section": "3.4", "page": 6, "char_start": 0, "char_end": 100},
+      "text": "In the embedding layers, the weights are multiplied by sqrt(d_model).",
+      "evidence_span": {"section": "3.4", "page": 5, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "annotated_transformer.py", "name": "Embeddings", "kind": "class"}
+        {"file_path": "the_annotated_transformer.py", "name": "Embeddings", "kind": "class"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "aiayn_c9",
-      "text": "Label smoothing of value epsilon_ls=0.1 is applied during training.",
-      "evidence_span": {"section": "5.4", "page": 7, "char_start": 0, "char_end": 100},
+      "text": "During training, label smoothing of value epsilon_ls = 0.1 is employed.",
+      "evidence_span": {"section": "5.4", "page": 8, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "annotated_transformer.py", "name": "LabelSmoothing", "kind": "class"}
+        {"file_path": "the_annotated_transformer.py", "name": "LabelSmoothing", "kind": "class"},
+        {"file_path": "the_annotated_transformer.py", "name": "train_worker", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "aiayn_c10",
-      "text": "The model uses the Adam optimizer with beta_1=0.9, beta_2=0.98 and epsilon=1e-9.",
+      "text": "The model is trained with the Adam optimizer with beta_1 = 0.9, beta_2 = 0.98 and epsilon = 1e-9.",
       "evidence_span": {"section": "5.3", "page": 7, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "annotated_transformer.py", "name": "NoamOpt", "kind": "class"}
+        {"file_path": "the_annotated_transformer.py", "name": "train_worker", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "aiayn_c11",
+      "text": "The learning rate increases linearly for the first warmup_steps training steps and decreases thereafter proportionally to the inverse square root of the step number.",
+      "evidence_span": {"section": "5.3", "page": 7, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "the_annotated_transformer.py", "name": "rate", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "aiayn_c12",
+      "text": "The base model uses h = 8 attention heads, d_model = 512, an inner feed-forward dimensionality d_ff = 2048 and dropout P_drop = 0.1.",
+      "evidence_span": {"section": "3.2.2", "page": 5, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "the_annotated_transformer.py", "name": "make_model", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     }

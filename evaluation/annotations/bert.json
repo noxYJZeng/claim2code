@@ -3,109 +3,120 @@
   "paper": {
     "title": "BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
     "authors": ["Devlin", "Chang", "Lee", "Toutanova"],
-    "year": 2018,
+    "year": 2019,
     "venue": "NAACL",
-    "arxiv_id": "1810.04805",
-    "sha256": "Devlin2018-placeholder"
+    "arxiv_id": "1810.04805"
   },
   "repo": {
-    "url": "https://github.com/huggingface/transformers",
-    "commit": "main",
-    "description": "HuggingFace Transformers (BERT model implementation in src/transformers/models/bert/)."
+    "url": "https://github.com/google-research/bert",
+    "commit": "eedf571",
+    "description": "Official TensorFlow BERT code (pre-training data, model, optimizer, fine-tuning)."
   },
   "claims": [
     {
       "claim_id": "bert_c1",
-      "text": "BERT pre-training uses two objectives: masked language modeling and next sentence prediction.",
-      "evidence_span": {"section": "3.3.1", "page": 4, "char_start": 0, "char_end": 100},
+      "text": "BERT masks 15% of all WordPiece tokens in each sequence at random for the masked LM objective.",
+      "evidence_span": {"section": "3.1", "page": 4, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "BertForPreTraining", "kind": "class"},
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "BertLMHeadModel", "kind": "class"}
+        {"file_path": "create_pretraining_data.py", "name": "create_masked_lm_predictions", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "bert_c2",
-      "text": "The model constructs token, segment, and position embeddings and sums them as the input representation.",
-      "evidence_span": {"section": "3", "page": 4, "char_start": 0, "char_end": 100},
+      "text": "A chosen token is replaced with the [MASK] token 80% of the time, a random token 10% of the time, and left unchanged 10% of the time.",
+      "evidence_span": {"section": "3.1", "page": 12, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "BertEmbeddings", "kind": "class"}
+        {"file_path": "create_pretraining_data.py", "name": "create_masked_lm_predictions", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "bert_c3",
-      "text": "The encoder uses bidirectional self-attention so each token can attend to all other tokens in the sequence.",
-      "evidence_span": {"section": "3", "page": 3, "char_start": 0, "char_end": 100},
+      "text": "For next sentence prediction, 50% of the time sentence B is the actual next sentence (IsNext) and 50% of the time it is a random sentence from the corpus (NotNext).",
+      "evidence_span": {"section": "3.1", "page": 4, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "BertSelfAttention", "kind": "class"},
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "BertModel", "kind": "class"}
+        {"file_path": "create_pretraining_data.py", "name": "create_instances_from_document", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "bert_c4",
-      "text": "The masked language modeling head projects the encoder output to vocabulary size and applies a softmax over the masked positions.",
-      "evidence_span": {"section": "3.3.1", "page": 4, "char_start": 0, "char_end": 100},
+      "text": "BERT_BASE has L = 12 layers, hidden size H = 768 and A = 12 self-attention heads.",
+      "evidence_span": {"section": "3", "page": 3, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "BertOnlyMLMHead", "kind": "class"},
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "BertPredictionHeadTransform", "kind": "class"}
+        {"file_path": "modeling.py", "name": "BertConfig", "kind": "class"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "bert_c5",
-      "text": "The next sentence prediction head is a binary classifier over the [CLS] token.",
-      "evidence_span": {"section": "3.3.1", "page": 4, "char_start": 0, "char_end": 100},
+      "text": "The input embeddings are the sum of the token embeddings, the segment embeddings and the position embeddings.",
+      "evidence_span": {"section": "3", "page": 5, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "BertOnlyNSPHead", "kind": "class"}
+        {"file_path": "modeling.py", "name": "embedding_postprocessor", "kind": "function"},
+        {"file_path": "modeling.py", "name": "embedding_lookup", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "bert_c6",
-      "text": "The attention mask combines a padding mask with optionally a causal mask for next-sentence prediction.",
-      "evidence_span": {"section": "3", "page": 4, "char_start": 0, "char_end": 100},
+      "text": "Pre-training uses a gelu activation rather than the standard relu.",
+      "evidence_span": {"section": "A.2", "page": 13, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "_prepare_4d_attention_mask", "kind": "function"},
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "_get_extended_attention_mask", "kind": "function"}
+        {"file_path": "modeling.py", "name": "gelu", "kind": "function"},
+        {"file_path": "modeling.py", "name": "BertConfig", "kind": "class"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "bert_c7",
-      "text": "Layer normalization and a residual connection wrap each transformer sub-layer.",
-      "evidence_span": {"section": "3", "page": 3, "char_start": 0, "char_end": 100},
+      "text": "A dropout probability of 0.1 is used on all layers.",
+      "evidence_span": {"section": "A.2", "page": 13, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "BertLayer", "kind": "class"}
+        {"file_path": "modeling.py", "name": "BertConfig", "kind": "class"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "bert_c8",
-      "text": "The pooler applies a tanh activation over the [CLS] hidden state to produce a sentence-level representation.",
-      "evidence_span": {"section": "3", "page": 4, "char_start": 0, "char_end": 100},
+      "text": "Pre-training uses Adam with beta_1 = 0.9, beta_2 = 0.999, L2 weight decay of 0.01, learning rate warmup over the first 10,000 steps, and linear decay of the learning rate.",
+      "evidence_span": {"section": "A.2", "page": 13, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "src/transformers/models/bert/modeling_bert.py", "name": "BertPooler", "kind": "class"}
+        {"file_path": "optimization.py", "name": "create_optimizer", "kind": "function"},
+        {"file_path": "run_pretraining.py", "name": "num_warmup_steps", "kind": "config_schema"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "bert_c9",
-      "text": "WordPiece tokenization splits unknown words into frequent subword units prefixed by ##.",
-      "evidence_span": {"section": "3", "page": 3, "char_start": 0, "char_end": 100},
+      "text": "Pre-training uses a learning rate of 1e-4 with a batch size of 256 sequences for 1,000,000 steps.",
+      "evidence_span": {"section": "A.2", "page": 13, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "src/transformers/models/bert/tokenization_bert.py", "name": "BertTokenizer", "kind": "class"},
-        {"file_path": "src/transformers/models/bert/tokenization_bert.py", "name": "WordpieceTokenizer", "kind": "class"}
+        {"file_path": "run_pretraining.py", "name": "learning_rate", "kind": "config_schema"},
+        {"file_path": "run_pretraining.py", "name": "train_batch_size", "kind": "config_schema"},
+        {"file_path": "run_pretraining.py", "name": "num_train_steps", "kind": "config_schema"}
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "run_pretraining.py flags default to learning_rate 5e-5, train_batch_size 32 and num_train_steps 100000."
+    },
+    {
+      "claim_id": "bert_c10",
+      "text": "The final hidden vector of the special [CLS] token is used as the aggregate sequence representation for classification tasks.",
+      "evidence_span": {"section": "3", "page": 4, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "modeling.py", "name": "BertModel", "kind": "class"},
+        {"file_path": "run_classifier.py", "name": "create_model", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     },
     {
-      "claim_id": "bert_c10",
-      "text": "The configuration class stores hyperparameters like hidden size, num attention heads, and intermediate size.",
-      "evidence_span": {"section": "3", "page": 4, "char_start": 0, "char_end": 100},
+      "claim_id": "bert_c11",
+      "text": "The model handles sequences of up to 512 tokens.",
+      "evidence_span": {"section": "A.2", "page": 13, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "src/transformers/models/bert/configuration_bert.py", "name": "BertConfig", "kind": "class"}
+        {"file_path": "modeling.py", "name": "BertConfig", "kind": "class"},
+        {"file_path": "modeling.py", "name": "embedding_postprocessor", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     }

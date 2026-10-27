@@ -341,18 +341,17 @@ def test_render_results_json_is_json_serialisable() -> None:
 # ============================================================
 
 
-def test_three_annotation_files_load_with_ten_claims_each() -> None:
-    """All 3 annotation files have exactly 10 claims each."""
+def test_annotation_files_load_with_labelled_claims() -> None:
+    """Every annotation file loads, with at least 8 labelled claims."""
     from evaluation.evaluate_retrieval import _load_annotations
 
     annotations = _load_annotations()
-    assert len(annotations) == 3
     by_id = {a["pair_id"]: a for a in annotations}
-    assert "attention_is_all_you_need" in by_id
-    assert "bert" in by_id
-    assert "lora" in by_id
+    assert set(by_id) == {
+        "attention_is_all_you_need", "bert", "lora", "mae", "ddim", "reflexion",
+    }
     for ann in annotations:
-        assert len(ann["claims"]) == 10, f"{ann['pair_id']} should have 10 claims"
+        assert len(ann["claims"]) >= 8, f"{ann['pair_id']} should have >= 8 claims"
         # Every claim has text + relevant_symbols.
         for c in ann["claims"]:
             assert "text" in c

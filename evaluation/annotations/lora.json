@@ -74,7 +74,8 @@
       "text": "The example training script applies LoRA to GPT-2 attention layers and trains on the E2E dataset.",
       "evidence_span": {"section": "5", "page": 6, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "examples/NLG/src/train_e2e.py", "name": "main", "kind": "function"}
+        {"file_path": "examples/NLG/src/model.py", "name": "Attention", "kind": "class"},
+        {"file_path": "examples/NLG/src/gpt2_ft.py", "name": "train_validate", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     },
@@ -83,7 +84,8 @@
       "text": "The GLUE benchmark evaluation fine-tunes RoBERTa with LoRA adapters on each task.",
       "evidence_span": {"section": "5", "page": 7, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "examples/NLU/src/transformers/modeling_roberta.py", "name": "RobertaForSequenceClassification", "kind": "class"}
+        {"file_path": "examples/NLU/src/transformers/models/roberta/modeling_roberta.py", "name": "RobertaSelfAttention", "kind": "class"},
+        {"file_path": "examples/NLU/src/transformers/models/roberta/modeling_roberta.py", "name": "RobertaForSequenceClassification", "kind": "class"}
       ],
       "expected_verification": "VERIFIED"
     },

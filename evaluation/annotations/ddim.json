@@ -1,0 +1,97 @@
+{
+  "pair_id": "ddim",
+  "paper": {
+    "title": "Denoising Diffusion Implicit Models",
+    "authors": ["Song", "Meng", "Ermon"],
+    "year": 2021,
+    "venue": "ICLR",
+    "arxiv_id": "2010.02502",
+    "sha256": "Song2021-placeholder"
+  },
+  "repo": {
+    "url": "https://github.com/ermongroup/ddim",
+    "commit": "main",
+    "description": "Official DDIM training and sampling code."
+  },
+  "claims": [
+    {
+      "claim_id": "ddim_c1",
+      "text": "DDIMs generalize DDPMs via a class of non-Markovian diffusion processes that lead to the same training objective.",
+      "evidence_span": {"section": "1", "page": 2, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "functions/denoising.py", "name": "generalized_steps", "kind": "function"},
+        {"file_path": "functions/losses.py", "name": "noise_estimation_loss", "kind": "function"}
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "Sampler and shared loss are code; the non-Markovian derivation is theory."
+    },
+    {
+      "claim_id": "ddim_c2",
+      "text": "The resulting model with σt = 0 for all t becomes an implicit probabilistic model, named the denoising diffusion implicit model (DDIM).",
+      "evidence_span": {"section": "4.1", "page": 5, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "functions/denoising.py", "name": "generalized_steps", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "ddim_c3",
+      "text": "DDIMs allow for a trade-off between computation and sample quality by sampling on a sub-sequence of timesteps.",
+      "evidence_span": {"section": "4.2", "page": 5, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "runners/diffusion.py", "name": "sample_image", "kind": "method"},
+        {"file_path": "functions/denoising.py", "name": "generalized_steps", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "ddim_c4",
+      "text": "For each dataset, the same trained model with T = 1000 and the objective being Lγ from Eq. (5) with γ = 1 is used.",
+      "evidence_span": {"section": "5", "page": 6, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "configs/cifar10.yml", "name": "configs/cifar10.yml", "kind": "config_schema"},
+        {"file_path": "configs/celeba.yml", "name": "configs/celeba.yml", "kind": "config_schema"},
+        {"file_path": "functions/losses.py", "name": "noise_estimation_loss", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "num_diffusion_timesteps: 1000; noise_estimation_loss is the unweighted (gamma=1) epsilon loss."
+    },
+    {
+      "claim_id": "ddim_c5",
+      "text": "Simple interpolations in xT can lead to semantically meaningful interpolations between two samples.",
+      "evidence_span": {"section": "5.3", "page": 8, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "runners/diffusion.py", "name": "sample_interpolation", "kind": "method"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "ddim_c6",
+      "text": "The DDPM sampler adds fresh Gaussian noise at every reverse step, simulating the Markov chain.",
+      "evidence_span": {"section": "2", "page": 2, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "functions/denoising.py", "name": "ddpm_steps", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "ddim_c7",
+      "text": "The sub-sequence τ of timesteps is chosen either uniformly or quadratically spaced.",
+      "evidence_span": {"section": "D.2", "page": 17, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "runners/diffusion.py", "name": "sample_image", "kind": "method"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "ddim_c8",
+      "text": "The noise schedule βt is linear from 0.0001 to 0.02.",
+      "evidence_span": {"section": "D", "page": 16, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "runners/diffusion.py", "name": "get_beta_schedule", "kind": "function"},
+        {"file_path": "configs/cifar10.yml", "name": "configs/cifar10.yml", "kind": "config_schema"}
+      ],
+      "expected_verification": "VERIFIED"
+    }
+  ]
+}

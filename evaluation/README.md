@@ -28,8 +28,8 @@ evaluation/
 
 Phase 0: empty layout.
 Phase 1+: wire annotation schema.
-Phase 5: ✅ retrieval evaluator — 3 hand-labelled (paper, repo) pairs
-  in `annotations/` + `baselines/{embedding_only,lexical_only,
+Phase 5: ✅ retrieval evaluator — 6 hand-labelled (paper, repo) pairs
+  in `annotations/` (attention, BERT, LoRA, MAE, DDIM, Reflexion) + `baselines/{embedding_only,lexical_only,
   hybrid_claim2code}.py` + `evaluate_retrieval.py`. Run via
   `make eval-retrieval` (requires live Postgres + OpenAI).
 Phase 6: ✅ verifier implemented — 4-status output

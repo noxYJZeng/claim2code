@@ -144,6 +144,26 @@ def parse_args():
     assert "--batch-size" in names
 
 
+def test_python_absl_flags(tmp_path: Path) -> None:
+    src = """\
+from absl import flags
+import tensorflow as tf
+
+flags.DEFINE_float("learning_rate", 5e-5, "The initial learning rate for Adam.")
+tf.flags.DEFINE_integer("train_batch_size", 32, "Total batch size for training.")
+FLAGS = flags.FLAGS
+"""
+    p = tmp_path / "run.py"
+    p.write_text(src)
+    symbols = parse_file(p)
+
+    config_schema = {s.name: s for s in symbols if s.kind == CodeSymbolKind.CONFIG_SCHEMA}
+    assert set(config_schema) == {"learning_rate", "train_batch_size"}
+    assert config_schema["learning_rate"].signature == (
+        "DEFINE_float('learning_rate', 5e-05, 'The initial learning rate for Adam.')"
+    )
+
+
 def test_python_survives_malformed_source(tmp_path: Path) -> None:
     """tree-sitter must not raise on incomplete Python."""
     src = "def broken(\n"

@@ -499,9 +499,10 @@ def _python_argparse_dataclass(tree: _ast.AST, path: Path, out: list[CodeSymbol]
     Walks the module-level AST. For each ``ast.ClassDef`` with one or
     more ``@dataclasses.dataclass`` (or ``@dataclass``) decorators,
     emits one :class:`CodeSymbol` of kind ``CONFIG_SCHEMA``. For each
-    ``ast.Call`` whose function ends in ``add_argument``, emits one
-    :class:`CodeSymbol` of kind ``CONFIG_SCHEMA`` with the argument
-    name and any default.
+    ``ast.Call`` whose function ends in ``add_argument`` — or is an
+    absl flag definition, ``flags.DEFINE_integer("train_batch_size",
+    32, ...)`` — emits one :class:`CodeSymbol` of kind
+    ``CONFIG_SCHEMA`` with the argument name and any default.
     """
     for node in _ast.walk(tree):
         if isinstance(node, _ast.ClassDef):
@@ -542,7 +543,9 @@ def _python_argparse_dataclass(tree: _ast.AST, path: Path, out: list[CodeSymbol]
                 if isinstance(func, _ast.Name)
                 else None
             )
-            if func_name != "add_argument":
+            if func_name != "add_argument" and not (
+                func_name is not None and func_name.startswith("DEFINE_")
+            ):
                 continue
             if not node.args:
                 continue
@@ -558,13 +561,13 @@ def _python_argparse_dataclass(tree: _ast.AST, path: Path, out: list[CodeSymbol]
                         end_line=getattr(node, "end_lineno", first.lineno) or first.lineno,
                         end_col=(getattr(node, "end_col_offset", 0) or 0),
                         name=first.value,
-                        signature=_format_call_sig(node),
+                        signature=_format_call_sig(node, func_name),
                     )
                 )
 
 
-def _format_call_sig(node: _ast.Call) -> str:
-    """Best-effort textual signature for an ``add_argument`` call."""
+def _format_call_sig(node: _ast.Call, func_name: str = "add_argument") -> str:
+    """Best-effort textual signature for an ``add_argument`` / ``DEFINE_*`` call."""
     parts: list[str] = []
     for a in node.args:
         try:
@@ -576,7 +579,7 @@ def _format_call_sig(node: _ast.Call) -> str:
             parts.append(f"{kw.arg}={_ast.unparse(kw.value)}")
         except Exception:  # noqa: BLE001
             parts.append(f"{kw.arg}=<expr>")
-    return f"add_argument({', '.join(parts)})"
+    return f"{func_name}({', '.join(parts)})"
 
 
 # ============================================================

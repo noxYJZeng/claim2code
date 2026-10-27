@@ -168,10 +168,14 @@ RULES (non-negotiable):
      discrepancy. A comment in the code stating it deviates from the
      paper IS a discrepancy. Never emit discrepancies like "the code
      does not explicitly compute the gradient", "no dataset count is
-     present in the code", or "the theorem is not implemented": if
-     the code implements part of the claim and the rest is theory or
-     an empirical result, return PARTIALLY_VERIFIED with an EMPTY
-     discrepancies list; if the claim is purely a theorem, a dataset
+     present in the code", "the candidates do not reference the
+     dataset", or "the theorem is not implemented" — a detail the
+     candidates do not show is silence, even when you can quote
+     neighbouring code. If the code implements the claim's mechanism
+     and the rest is theory, an empirical result, or a detail the
+     candidates are silent on, return VERIFIED with an EMPTY
+     discrepancies list and name the unchecked part in the
+     explanation; if the claim is purely a theorem, a dataset
      statistic, or a measured result, return UNVERIFIED.
      The converse also holds: when a relevant candidate for the
      same setting hard-codes a different value for a quantity the

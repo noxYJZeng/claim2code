@@ -150,15 +150,17 @@ def test_determine_status_no_discrepancy_and_verified_is_verified() -> None:
     )
 
 
-def test_determine_status_no_discrepancy_and_partially_verified_is_partial() -> None:
-    """LLM says PARTIALLY_VERIFIED, no discrepancies, code_evidence present → PARTIALLY_VERIFIED."""
+def test_determine_status_partial_without_discrepancies_is_verified() -> None:
+    """LLM says PARTIALLY_VERIFIED but no discrepancy backs it, code_evidence
+    present → VERIFIED: PARTIALLY_VERIFIED needs >=1 LOW/MEDIUM discrepancy
+    (phase-6-design.md §2.5)."""
     assert (
         determine_status(
             has_code_evidence=True,
             discrepancies=[],
             llm_status=VerificationStatus.PARTIALLY_VERIFIED,
         )
-        == VerificationStatus.PARTIALLY_VERIFIED
+        == VerificationStatus.VERIFIED
     )
 
 

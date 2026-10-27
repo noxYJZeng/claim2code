@@ -91,16 +91,16 @@ def determine_status(
     if discrepancies:
         return VerificationStatus.PARTIALLY_VERIFIED
 
-    # No discrepancies and we have code evidence. Trust the LLM
-    # when present; default VERIFIED when the deterministic
-    # checkers didn't run (rare — e.g. the LLM verdict was None
-    # because of a HIGH deterministic mismatch, but we already
-    # returned CONTRADICTED above for that case).
+    # No discrepancies and we have code evidence. PARTIALLY_VERIFIED
+    # needs >=1 LOW/MEDIUM discrepancy (phase-6-design.md §2.5), so an
+    # LLM "partial" with nothing left to show for it — the code is
+    # merely silent on part of the claim, or its discrepancies were
+    # dropped as unquoted — is VERIFIED.
     if llm_status in (
         VerificationStatus.VERIFIED,
         VerificationStatus.PARTIALLY_VERIFIED,
     ):
-        return llm_status
+        return VerificationStatus.VERIFIED
 
     # Default: LLM said UNVERIFIED, or no LLM and no discrepancies.
     return VerificationStatus.UNVERIFIED

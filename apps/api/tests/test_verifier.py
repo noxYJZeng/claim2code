@@ -220,7 +220,8 @@ def test_compose_drops_llm_discrepancies_without_a_candidate_quote() -> None:
     assert out.status == VerificationStatus.PARTIALLY_VERIFIED
 
 
-def test_compose_partial_with_no_discrepancies_once_unquoted_ones_drop() -> None:
+def test_compose_verified_once_unquoted_discrepancies_drop() -> None:
+    """PARTIALLY_VERIFIED needs a surviving discrepancy (phase-6-design §2.5)."""
     ce = [CodeEvidence(
         symbol_id=_sym_id(), file_path="m.py", start_line=1, end_line=10, quote="x",
     )]
@@ -239,7 +240,7 @@ def test_compose_partial_with_no_discrepancies_once_unquoted_ones_drop() -> None
         llm_verdict=verdict,
     )
     assert out.discrepancies == []
-    assert out.status == VerificationStatus.PARTIALLY_VERIFIED
+    assert out.status == VerificationStatus.VERIFIED
 
 
 def test_verdict_schema_requires_code_quote_on_discrepancies() -> None:

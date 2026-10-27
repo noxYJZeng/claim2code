@@ -117,6 +117,12 @@ class Discrepancy(BaseModel):
     lr=1e-3"``). Discrepancies are emitted by both the
     deterministic checkers (with a fixed ``type`` /
     ``severity`` pair) and the LLM (with the LLM's own choice).
+
+    ``code_quote`` is the verbatim candidate code that conflicts
+    with the claim. The LLM must supply it; an LLM discrepancy
+    whose quote is not found in any candidate is dropped at
+    composition time (it is "the code doesn't show X" restated).
+    Deterministic checkers leave it ``None``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -124,6 +130,7 @@ class Discrepancy(BaseModel):
     type: DiscrepancyType
     severity: DiscrepancySeverity
     detail: str = Field(min_length=1)
+    code_quote: str | None = None
 
 
 class HyperparameterEvidence(BaseModel):

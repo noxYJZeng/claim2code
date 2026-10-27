@@ -184,6 +184,78 @@ def test_compose_partial_when_medium_severity_and_code_evidence() -> None:
     assert out.status == VerificationStatus.PARTIALLY_VERIFIED
 
 
+def test_compose_drops_llm_discrepancies_without_a_candidate_quote() -> None:
+    """An LLM discrepancy must quote conflicting candidate code to count."""
+    ce = [CodeEvidence(
+        symbol_id=_sym_id(), file_path="m.py", start_line=1, end_line=10, quote="x",
+    )]
+    quoted = Discrepancy(
+        type=DiscrepancyType.HYPERPARAMETER_MISMATCH,
+        severity=DiscrepancySeverity.MEDIUM,
+        detail="paper says lr 1e-4, code defaults to 5e-5",
+        code_quote="def train(learning_rate=5e-5):",
+    )
+    silent = Discrepancy(
+        type=DiscrepancyType.CONFIGURATION_MISMATCH,
+        severity=DiscrepancySeverity.MEDIUM,
+        detail="the loss definition is not visible in the candidates",
+        code_quote="",
+    )
+    invented = Discrepancy(
+        type=DiscrepancyType.CONFIGURATION_MISMATCH,
+        severity=DiscrepancySeverity.HIGH,
+        detail="optimizer differs",
+        code_quote="optimizer = SGD(lr=0.1)",
+    )
+    verdict = _llm_verdict(
+        status=VerificationStatus.PARTIALLY_VERIFIED, code_evidence=ce,
+    ).model_copy(update={"discrepancies": [quoted, silent, invented]})
+    out = compose_verification(
+        claim=_claim(),
+        candidates=[_candidate()],
+        deterministic_discrepancies=[],
+        llm_verdict=verdict,
+    )
+    assert out.discrepancies == [quoted]
+    assert out.status == VerificationStatus.PARTIALLY_VERIFIED
+
+
+def test_compose_partial_with_no_discrepancies_once_unquoted_ones_drop() -> None:
+    ce = [CodeEvidence(
+        symbol_id=_sym_id(), file_path="m.py", start_line=1, end_line=10, quote="x",
+    )]
+    silent = Discrepancy(
+        type=DiscrepancyType.CONFIGURATION_MISMATCH,
+        severity=DiscrepancySeverity.MEDIUM,
+        detail="no dataset count in the code",
+    )
+    verdict = _llm_verdict(
+        status=VerificationStatus.PARTIALLY_VERIFIED, code_evidence=ce,
+    ).model_copy(update={"discrepancies": [silent]})
+    out = compose_verification(
+        claim=_claim(),
+        candidates=[_candidate()],
+        deterministic_discrepancies=[],
+        llm_verdict=verdict,
+    )
+    assert out.discrepancies == []
+    assert out.status == VerificationStatus.PARTIALLY_VERIFIED
+
+
+def test_verdict_schema_requires_code_quote_on_discrepancies() -> None:
+    fake = _fake_openai(_make_valid_verification_json())
+    _build_client(fake).verdict_for_claim(
+        claim=_claim(),
+        paper_evidence=_paper_evidence(),
+        candidates=[_candidate()],
+        deterministic_discrepancies=[],
+    )
+    schema = fake.chat.completions.create.call_args.kwargs["response_format"]["json_schema"]["schema"]
+    assert "code_quote" in schema["$defs"]["Discrepancy"]["required"]
+    # The shared model's own schema stays unchanged.
+    assert "code_quote" not in Discrepancy.model_json_schema()["required"]
+
+
 def test_compose_unverified_when_no_llm_and_no_code_evidence() -> None:
     """LLM skipped (None) + no code_evidence → UNVERIFIED (default)."""
     out = compose_verification(

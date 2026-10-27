@@ -104,6 +104,7 @@ def compose_verification(
         # code found" restated (often as HIGH), which reads as a real
         # mismatch in the report. Keep only the deterministic ones.
         llm_emitted = []
+    llm_emitted = [d for d in llm_emitted if _quote_in_candidates(d.code_quote, candidates)]
     all_discrepancies = merge_discrepancies(
         deterministic=deterministic_discrepancies,
         llm_emitted=llm_emitted,
@@ -169,6 +170,27 @@ def run_deterministic_checkers(
         claim_text=claim.text, candidates=candidates,
     )
     return [*hp, *model, *dataset, *metric]
+
+
+def _quote_in_candidates(quote: str | None, candidates: list[RetrieveMatch]) -> bool:
+    """True when ``quote`` occurs (whitespace-insensitively) in a candidate.
+
+    An LLM discrepancy must point at code that conflicts with the
+    claim; one without such a quote only says the code is silent,
+    which rule 7 of the verify prompt says is not a discrepancy.
+    """
+    needle = _squash(quote or "")
+    if not needle:
+        return False
+    for c in candidates:
+        fields = (c.signature, c.docstring, c.source, c.class_context, c.callee_context)
+        if any(needle in _squash(f) for f in fields if f):
+            return True
+    return False
+
+
+def _squash(text: str) -> str:
+    return " ".join(text.split())
 
 
 def _synthesise_explanation(

@@ -178,6 +178,12 @@ RULES (non-negotiable):
      claim states (a loop bound ``while step < 50`` where the claim
      says 30 steps, a default of 5 where it says 6), that IS a
      concrete mismatch — emit it, do not fall back to UNVERIFIED.
+     Every discrepancy you emit must set ``code_quote`` to the
+     verbatim candidate code that conflicts with the claim (e.g.
+     ``lr: 5e-7``). If you cannot quote such code, the code is
+     silent on the point and you must not emit the discrepancy;
+     discrepancies whose quote is not found in a candidate are
+     discarded.
 
   8. **Calibrate severity and type.** HIGH only when the mismatch
      falsifies the claim's central statement (a different formula,
@@ -476,6 +482,9 @@ class LLMClient:
             deterministic_discrepancies=deterministic_discrepancies,
         )
         schema = Verification.model_json_schema()
+        # ``code_quote`` is optional for deterministic checkers but
+        # mandatory for the LLM (see rule 7).
+        schema["$defs"]["Discrepancy"]["required"].append("code_quote")
 
         # Phase 8: redact secrets + detect injections in the
         # claim text, paper evidence quote, candidate signatures,

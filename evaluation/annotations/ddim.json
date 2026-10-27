@@ -22,8 +22,8 @@
         {"file_path": "functions/denoising.py", "name": "generalized_steps", "kind": "function"},
         {"file_path": "functions/losses.py", "name": "noise_estimation_loss", "kind": "function"}
       ],
-      "expected_verification": "PARTIALLY_VERIFIED",
-      "notes": "Sampler and shared loss are code; the non-Markovian derivation is theory."
+      "expected_verification": "VERIFIED",
+      "notes": "Sampler and shared loss are code; the non-Markovian derivation is theory. Relabelled 2026-10-27 from PARTIALLY_VERIFIED: no paper/code mismatch, and PARTIALLY_VERIFIED requires one (phase-6-design.md §2.5)."
     },
     {
       "claim_id": "ddim_c2",

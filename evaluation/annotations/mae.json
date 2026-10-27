@@ -62,8 +62,8 @@
         {"file_path": "models_mae.py", "name": "forward_loss", "kind": "method"},
         {"file_path": "main_pretrain.py", "name": "--norm_pix_loss", "kind": "config_schema"}
       ],
-      "expected_verification": "PARTIALLY_VERIFIED",
-      "notes": "Normalisation is implemented; the quality gain is an empirical result."
+      "expected_verification": "VERIFIED",
+      "notes": "Normalisation is implemented; the quality gain is an empirical result. Relabelled 2026-10-27 from PARTIALLY_VERIFIED: no paper/code mismatch, and PARTIALLY_VERIFIED requires one (phase-6-design.md §2.5)."
     },
     {
       "claim_id": "mae_c6",

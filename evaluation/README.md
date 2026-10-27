@@ -7,22 +7,51 @@ visible from the project layout and runnable via `make eval-*`.
 
 ```
 evaluation/
-├── datasets/             # paper + repo pairs, raw + curated
-├── annotations/          # hand-annotated claim-to-code mappings
-│                         #   paper.json
-│                         #   repo.json
-│                         #   claims.json         ← list of Claim objects
-│                         #   mappings.json       ← relevant_symbols + expected_verification
+├── annotations/              # one JSON per (paper, repo) pair: claims with
+│                             #   relevant_symbols + expected_verification (+ notes)
+├── datasets/
+│   └── safety_corpus.json    # fabricated secrets, injections and clean text
 ├── baselines/
 │   ├── embedding_only.py     # Baseline A: cosine similarity only
-│   ├── lexical_only.py       # Baseline B: BM25 / token overlap only
-│   └── hybrid_claim2code.py  # Our system: S = 0.55·sem + 0.25·lex + 0.20·struct
+│   ├── lexical_only.py       # Baseline B: Postgres full-text rank only
+│   └── hybrid_claim2code.py  # Our system: RRF(semantic, lexical) × structural boost
 ├── evaluate_retrieval.py     # Recall@1, Recall@5, MRR vs annotations
-├── evaluate_verification.py  # Verification accuracy, discrepancy precision, grounding rate
-├── evaluate_safety.py        # Prompt-injection / secret-leak tests
-├── evaluate_all.py           # Runs all evaluators + renders results.json + report.md
-└── README.md
+├── evaluate_verification.py  # status accuracy, discrepancy P/R, grounding, line accuracy
+├── evaluate_safety.py        # secret protection, injection detection, false positives
+├── report.py                 # results/*.json → results.json + report.md
+├── evaluate_all.py           # runs every evaluator, then report.py
+├── results/                  # per-evaluator output (retrieval/verification/safety.json)
+├── results.json              # combined, with commit + model names
+└── report.md                 # the rendered report
 ```
+
+Annotation pairs are matched to indexed repositories by `repo.url`
+(`CLAIM2CODE_EVAL_REPO_IDS='{"pair_id": "<uuid>"}'` overrides). A pair
+whose repository is not indexed is skipped and listed in the report.
+
+### What the verification metrics mean
+
+- **Status accuracy** — exact match with `expected_verification`.
+- **Support rate** — every annotated claim is implemented in its repo, so
+  VERIFIED or PARTIALLY_VERIFIED counts as supported.
+- **Discrepancy precision / recall** — claim level: annotated positive when
+  `expected_verification` is PARTIALLY_VERIFIED (the mismatch is recorded in
+  `notes`), predicted positive when the verdict is PARTIALLY_VERIFIED or
+  CONTRADICTED.
+- **Grounding rate** — the cited code exists in the cited file. A quote is
+  split at line breaks and `...` elisions and every fragment must occur
+  verbatim (whitespace and `\` line continuations ignored), so skipped or
+  elided lines pass while edited code does not.
+- **Line accuracy** — the cited code also sits at the cited lines (±2).
+- **Evidence hit rate** — supported verdicts citing an annotated symbol.
+
+### Safety corpus subsets
+
+`covered` cases use the forms the Phase 8 patterns target, so they act as a
+regression check. `held_out` cases are common real-world forms written
+without looking at the patterns, so their rates measure coverage gaps. A
+secret counts as leaked when any 12-character window of it survives the
+gate, which catches partial redactions.
 
 ## Status
 
@@ -81,4 +110,8 @@ Phase 9: ✅ OpenTelemetry spans + per-step metrics. Every workflow
   observability`); new CI job `backend-observability` gates
   Phase 9. Wiring `evaluate_observability.py` (per-leg latency
   distribution + token cost + violation rate) is Phase 10's job.
-Phase 10: full eval suite + measured numbers back into README.
+Phase 10: ✅ evaluators shipped — `evaluate_verification.py`,
+  `evaluate_safety.py`, `report.py`, `evaluate_all.py`; measured on the 5
+  indexed pairs (DDIM, DPO, LoRA, MAE, Reflexion; 44 claims), numbers in
+  `report.md` and the top-level README. Still open: annotate more pairs
+  (target 8–12) and index the attention / BERT repos.

@@ -7,7 +7,7 @@
 > an explicit `VERIFIED / PARTIALLY_VERIFIED / CONTRADICTED / UNVERIFIED`
 > verdict and detected discrepancies.
 
-[![status](https://img.shields.io/badge/status-Phase%202%20(paper%20intelligence)-blue)]()
+[![status](https://img.shields.io/badge/status-Phase%2010%20(evaluation)-blue)]()
 [![stack](https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20Postgres-blue)]()
 
 ## What's in v1
@@ -20,7 +20,37 @@
 - 📚 **Related Work** — selected claim → 5 structured comparable papers
 - 🛡️ **Responsible-AI Guardrails** — secret redaction, prompt-injection defense, no code execution
 - 📊 **Observability** — OpenTelemetry traces + per-step latency/token/retrieval metrics
-- 🧪 **Evaluation Harness** — 8–12 paper/repo pairs, Recall@5 + verification accuracy + grounding rate
+- 🧪 **Evaluation Harness** — hand-annotated paper/repo pairs; retrieval Recall@1/5 + MRR, verification accuracy + discrepancy precision/recall + grounding rate, safety redaction/detection rates ([measured results](#measured-results))
+
+## Measured results
+
+From [`evaluation/report.md`](evaluation/report.md), measured locally with
+`qwen3.8-27b-mlx` (LM Studio) and `nomic-embed-text-v1.5` embeddings on the
+5 annotated pairs whose repos are indexed (DDIM, DPO, LoRA, MAE, Reflexion;
+44 claims). Re-run with `make eval-all`.
+
+| Area | Metric | Claim2Code | Baseline |
+|---|---|---|---|
+| Retrieval (top 5) | Recall@5, macro avg | **0.68** | 0.59 embedding-only · 0.49 lexical-only |
+| | MRR, macro avg | **0.457** | 0.373 embedding-only · 0.315 lexical-only |
+| Verification | Status accuracy (4-way) | 63.6% | — |
+| | Support rate (claim judged VERIFIED / PARTIALLY_VERIFIED) | 79.5% | — |
+| | Discrepancy precision / recall (claim level) | 45.5% / 71.4% | — |
+| | Grounding rate (cited code exists in the cited file) | 99.0% of 102 citations | — |
+| | Line accuracy (cited code at the cited lines) | 92.2% | — |
+| Safety | Secrets protected, covered / held-out forms | 10/10 · 2/8 | — |
+| | Injections detected, covered / held-out forms | 6/6 · 0/6 | — |
+| | Clean text falsely flagged | 3/12 | — |
+
+Caveats: 5 pairs / 44 claims is below the 8–12-pair target, and only 7 of the
+44 claims carry an annotated discrepancy, so the discrepancy rates rest on few
+cases. The annotations were written during development, not by an independent
+annotator. Most verification misses are retrieval misses (7 claims got no
+code evidence, 4 of them in LoRA's 23k-symbol repo) or a PARTIALLY_VERIFIED
+for a detail the code is silent on. The safety `held_out` cases (GitHub
+fine-grained / Slack / Hugging Face tokens, paraphrased injections) are
+coverage gaps of the regex gate, which matches only the forms listed in
+Phase 8.
 
 ## Why
 
@@ -266,26 +296,29 @@ cd apps/web && pnpm test           # vitest + @testing-library/react, no backend
 
 ### 8. Run the evaluators
 
-The `evaluation/` directory ships the retrieval evaluator today; the
-others land with Phase 10.
+Each evaluator writes `evaluation/results/<name>.json`; `make eval-report`
+folds them into `evaluation/results.json` + `evaluation/report.md`.
+Repositories are matched to annotation pairs by URL, so index a pair's repo
+first (pairs without an indexed repo are skipped).
 
-| Script | Make target | Status |
-|---|---|---|
-| `evaluation/evaluate_retrieval.py` | `make eval-retrieval` | ✅ shipped (Phase 5) — Recall@1/5 + MRR vs 3 hand-annotated paper/repo pairs |
-| `evaluation/evaluate_verification.py` | `make eval-verification` | TODO (Phase 10) |
-| `evaluation/evaluate_safety.py` | `make eval-safety` (currently aliases `pytest -m safety`) | TODO (Phase 10) |
-| `evaluation/evaluate_observability.py` | (part of `eval-all`) | TODO (Phase 10) |
-| `evaluation/evaluate_all.py` | `make eval-all` | TODO (Phase 10) — orchestrator + renders `results.json` + `report.md` |
+| Script | Make target | Needs | Measures |
+|---|---|---|---|
+| `evaluation/evaluate_retrieval.py` | `make eval-retrieval` | DB + embeddings | Recall@1/5 + MRR for embedding-only, lexical-only and hybrid |
+| `evaluation/evaluate_verification.py` | `make eval-verification` | DB + embeddings + chat model | status accuracy, support rate, discrepancy P/R, grounding, line accuracy |
+| `evaluation/evaluate_safety.py` | `make eval-safety` | nothing | secret protection, injection detection, false positives on `datasets/safety_corpus.json` |
+| `evaluation/report.py` | `make eval-report` | the results above | `results.json` + `report.md` |
+| `evaluation/evaluate_all.py` | `make eval-all` | all of the above | runs every evaluator, then the report |
 
 ```bash
-# Phase 5 retrieval evaluator — works end-to-end today
-make eval-retrieval
-# Reads evaluation/annotations/*.json, connects to claim2code_dev + OpenAI,
-# writes evaluation/results.json + evaluation/report.md.
-
-# Phase 10 full suite — placeholder until Phase 10 lands
-make eval-all
+make eval-safety                       # seconds, no services needed
+make eval-retrieval                    # ~1 min
+make eval-verification                 # one LLM call per claim (~1-2 h for 44 claims locally)
+make eval-verification ARGS=--resume   # continue an interrupted run
+make eval-report                       # render evaluation/report.md
 ```
+
+`python evaluation/evaluate_verification.py --regrade` re-scores the stored
+citations of the last run without calling the LLM.
 
 ### 9. End-to-end demo with curl
 
@@ -410,7 +443,7 @@ claim2code/
 | 7 | Related Work | scholarly API + 5 structured comparable papers | Selected claim → 6-field (problem/method/dataset/metric/difference/agreement) comparison per paper; Semantic Scholar primary + OpenAlex fallback. `POST /analyses/{id}/related-work` + `GET`; per-paper LLM isolation (failure → `comparison=None`, paper still ships with metadata + score). |
 | 8 | Responsible AI | trust boundary + secret redaction + no-exec | All adversarial fixtures blocked. `SafetyGate` wraps every LLM call at the SDK seam (`chat.completions.create`); `SecretRedactor` replaces credential spans (OpenAI / Anthropic / AWS / GCP / GitHub / PEM / Bearer / `.env`) with `[REDACTED:<label>]`; `PromptInjectionDetector` returns hits without mutating text. Violations are appended to `AnalysisState.errors` with `{stage, kind, pattern, span_count, ts}` — no content persisted. 8 credential patterns + 5 injection patterns; 57 adversarial tests (`pytest -m safety`); new CI job `backend-safety` gates Phase 8. |
 | 9 | Observability | OTel spans + per-step metrics + trace tree | One analysis → one trace tree. Each of the 3 workflows (`paper_workflow.run`, `verification_workflow.run`, `related_work_workflow.run`) opens a root span; per-claim / per-paper / per-LLM-call / per-retriever-leg open child spans (`verification.claim_verify`, `literature.paper_compare`, `llm.{extract_claims,verdict,compare}`, `retrieval.{semantic,lexical,structural}`). `safety.gate_wrap` auto-parents under each LLM span via OTel contextvars. Metrics: `llm_tokens_total` (counter, model+kind), `llm_request_duration_seconds` (histogram), `retriever_request_duration_seconds` (histogram, leg label), `safety_violations_total` (counter, pattern label). Console exporter default + OTLP-HTTP optional via `OTEL_EXPORTER_OTLP_ENDPOINT`; FastAPIInstrumentor wraps every HTTP request as a server span. 29 tests (`pytest -m observability`); new CI job `backend-observability` gates Phase 9. |
-| 10 | Evaluation | 8–12 papers, 40–60 claims, all metrics | `evaluation/results.json` + Markdown report |
+| 10 | Evaluation | 8–12 papers, 40–60 claims, all metrics | `evaluation/results.json` + Markdown report. Shipped: retrieval, verification and safety evaluators + report (5 indexed pairs / 44 claims measured, see [Measured results](#measured-results)); more pairs still to annotate. |
 
 ## License
 

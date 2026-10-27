@@ -1,0 +1,486 @@
+{
+  "metrics": {
+    "secret_protection": {
+      "covered": {
+        "n": 10,
+        "passed": 10,
+        "rate": 1.0
+      },
+      "held_out": {
+        "n": 8,
+        "passed": 2,
+        "rate": 0.25
+      },
+      "all": {
+        "n": 18,
+        "passed": 12,
+        "rate": 0.6666666666666666
+      }
+    },
+    "injection_detection": {
+      "covered": {
+        "n": 6,
+        "passed": 6,
+        "rate": 1.0
+      },
+      "held_out": {
+        "n": 6,
+        "passed": 0,
+        "rate": 0.0
+      },
+      "all": {
+        "n": 12,
+        "passed": 6,
+        "rate": 0.5
+      }
+    },
+    "false_positive": {
+      "n": 12,
+      "flagged": 3,
+      "rate": 0.25
+    },
+    "failures": [
+      "s11",
+      "s13",
+      "s14",
+      "s15",
+      "s17",
+      "s18",
+      "i07",
+      "i08",
+      "i09",
+      "i10",
+      "i11",
+      "i12",
+      "c04",
+      "c06",
+      "c10"
+    ]
+  },
+  "cases": [
+    {
+      "id": "s01",
+      "category": "secret",
+      "subset": "covered",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "openai_key"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s02",
+      "category": "secret",
+      "subset": "covered",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "anthropic_key"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s03",
+      "category": "secret",
+      "subset": "covered",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "aws_access_key"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s04",
+      "category": "secret",
+      "subset": "covered",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "gcp_api_key"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s05",
+      "category": "secret",
+      "subset": "covered",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "github_pat"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s06",
+      "category": "secret",
+      "subset": "covered",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "pem_private_key"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s07",
+      "category": "secret",
+      "subset": "covered",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "bearer_token"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s08",
+      "category": "secret",
+      "subset": "covered",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "env_assignment"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s09",
+      "category": "secret",
+      "subset": "covered",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "env_assignment"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s10",
+      "category": "secret",
+      "subset": "covered",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "openai_key"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s11",
+      "category": "secret",
+      "subset": "held_out",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": false
+    },
+    {
+      "id": "s12",
+      "category": "secret",
+      "subset": "held_out",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "env_assignment"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s13",
+      "category": "secret",
+      "subset": "held_out",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": false
+    },
+    {
+      "id": "s14",
+      "category": "secret",
+      "subset": "held_out",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": false
+    },
+    {
+      "id": "s15",
+      "category": "secret",
+      "subset": "held_out",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "anthropic_key"
+      ],
+      "passed": false
+    },
+    {
+      "id": "s16",
+      "category": "secret",
+      "subset": "held_out",
+      "violation_kinds": [
+        "secret"
+      ],
+      "patterns": [
+        "pem_private_key"
+      ],
+      "passed": true
+    },
+    {
+      "id": "s17",
+      "category": "secret",
+      "subset": "held_out",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": false
+    },
+    {
+      "id": "s18",
+      "category": "secret",
+      "subset": "held_out",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": false
+    },
+    {
+      "id": "i01",
+      "category": "injection",
+      "subset": "covered",
+      "violation_kinds": [
+        "injection"
+      ],
+      "patterns": [
+        "ignore_previous"
+      ],
+      "passed": true
+    },
+    {
+      "id": "i02",
+      "category": "injection",
+      "subset": "covered",
+      "violation_kinds": [
+        "injection"
+      ],
+      "patterns": [
+        "reveal_system"
+      ],
+      "passed": true
+    },
+    {
+      "id": "i03",
+      "category": "injection",
+      "subset": "covered",
+      "violation_kinds": [
+        "injection"
+      ],
+      "patterns": [
+        "role_injection"
+      ],
+      "passed": true
+    },
+    {
+      "id": "i04",
+      "category": "injection",
+      "subset": "covered",
+      "violation_kinds": [
+        "injection"
+      ],
+      "patterns": [
+        "disregard_prior"
+      ],
+      "passed": true
+    },
+    {
+      "id": "i05",
+      "category": "injection",
+      "subset": "covered",
+      "violation_kinds": [
+        "injection"
+      ],
+      "patterns": [
+        "you_are_now"
+      ],
+      "passed": true
+    },
+    {
+      "id": "i06",
+      "category": "injection",
+      "subset": "covered",
+      "violation_kinds": [
+        "injection"
+      ],
+      "patterns": [
+        "ignore_previous"
+      ],
+      "passed": true
+    },
+    {
+      "id": "i07",
+      "category": "injection",
+      "subset": "held_out",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": false
+    },
+    {
+      "id": "i08",
+      "category": "injection",
+      "subset": "held_out",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": false
+    },
+    {
+      "id": "i09",
+      "category": "injection",
+      "subset": "held_out",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": false
+    },
+    {
+      "id": "i10",
+      "category": "injection",
+      "subset": "held_out",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": false
+    },
+    {
+      "id": "i11",
+      "category": "injection",
+      "subset": "held_out",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": false
+    },
+    {
+      "id": "i12",
+      "category": "injection",
+      "subset": "held_out",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": false
+    },
+    {
+      "id": "c01",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": true
+    },
+    {
+      "id": "c02",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": true
+    },
+    {
+      "id": "c03",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": true
+    },
+    {
+      "id": "c04",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [
+        "injection"
+      ],
+      "patterns": [
+        "role_injection"
+      ],
+      "passed": false
+    },
+    {
+      "id": "c05",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": true
+    },
+    {
+      "id": "c06",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [
+        "injection"
+      ],
+      "patterns": [
+        "disregard_prior"
+      ],
+      "passed": false
+    },
+    {
+      "id": "c07",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": true
+    },
+    {
+      "id": "c08",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": true
+    },
+    {
+      "id": "c09",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": true
+    },
+    {
+      "id": "c10",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [
+        "injection"
+      ],
+      "patterns": [
+        "you_are_now"
+      ],
+      "passed": false
+    },
+    {
+      "id": "c11",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": true
+    },
+    {
+      "id": "c12",
+      "category": "clean",
+      "subset": "clean",
+      "violation_kinds": [],
+      "patterns": [],
+      "passed": true
+    }
+  ]
+}

@@ -38,9 +38,11 @@
       "text": "Matrix A is initialized with a Gaussian and matrix B is initialized to zero so the initial forward pass equals the pretrained model.",
       "evidence_span": {"section": "4.1", "page": 5, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "loralib/layers.py", "name": "LoRALayer", "kind": "class"}
+        {"file_path": "loralib/layers.py", "name": "Linear", "kind": "class"},
+        {"file_path": "loralib/layers.py", "name": "MergedLinear", "kind": "class"}
       ],
-      "expected_verification": "VERIFIED"
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "reset_parameters zero-initialises B as stated but initialises A with nn.init.kaiming_uniform_, not a Gaussian. Corrected 2026-10-27: was VERIFIED with LoRALayer (which holds only r/alpha/dropout) as the relevant symbol."
     },
     {
       "claim_id": "lora_c4",
@@ -56,18 +58,21 @@
       "text": "Only the low-rank matrices A and B receive gradient updates during training; the original weight matrix is frozen.",
       "evidence_span": {"section": "1", "page": 2, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "loralib/layers.py", "name": "LoRALayer", "kind": "class"}
+        {"file_path": "loralib/layers.py", "name": "Linear", "kind": "class"},
+        {"file_path": "loralib/utils.py", "name": "mark_only_lora_as_trainable", "kind": "function"}
       ],
-      "expected_verification": "VERIFIED"
+      "expected_verification": "VERIFIED",
+      "notes": "Linear.__init__ sets weight.requires_grad = False; mark_only_lora_as_trainable freezes every non-lora_ parameter. Corrected 2026-10-27: the relevant symbol was LoRALayer, which does neither."
     },
     {
       "claim_id": "lora_c6",
-      "text": "The library exposes a function to mark specific linear layers as LoRA-adapted by replacing their forward method.",
+      "text": "The library exposes a helper that marks only the LoRA parameters of a model as trainable and freezes all others.",
       "evidence_span": {"section": "5", "page": 6, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
         {"file_path": "loralib/utils.py", "name": "mark_only_lora_as_trainable", "kind": "function"}
       ],
-      "expected_verification": "VERIFIED"
+      "expected_verification": "VERIFIED",
+      "notes": "Corrected 2026-10-27: the text said the helper replaces layers' forward methods, which the library does not do (layers are swapped for lora.Linear by hand)."
     },
     {
       "claim_id": "lora_c7",

@@ -62,6 +62,7 @@ def retrieve_semantic(
     *,
     top_k: int = 5,
     embedding_client: EmbeddingClient | None = None,
+    exclude_path_pattern: str | None = None,
 ) -> list[tuple[Any, float]]:
     """Return the top-``top_k`` symbols most similar to ``claim``.
 
@@ -71,6 +72,9 @@ def retrieve_semantic(
     :param top_k: number of results to return (default 5).
     :param embedding_client: optional override for the embedding
         client. Defaults to ``get_embedding_client()``.
+    :param exclude_path_pattern: optional POSIX regex (matched
+        case-insensitively); symbols whose ``file_path`` matches are
+        skipped.
     :returns: a list of ``(CodeSymbol, similarity)`` tuples in
         similarity-descending order. ``similarity`` is
         ``1.0 - cosine_distance`` (so ``0..1``, higher is better).
@@ -92,22 +96,32 @@ def retrieve_semantic(
         raise
 
     # 2. Cosine-distance query on the repo's embeddings.
-    sql = text(
-        "SELECT symbol_id, "
-        f"embedding {op_str()} CAST(:claim_vec AS vector) AS distance "
-        "FROM code_embeddings "
-        "WHERE repository_id = :repository_id "
-        f"ORDER BY embedding {op_str()} CAST(:claim_vec AS vector) "
-        "LIMIT :top_k"
-    )
-    rows = db.execute(
-        sql,
-        {
-            "claim_vec": claim_vec,
-            "repository_id": str(repository_id),
-            "top_k": top_k,
-        },
-    ).fetchall()
+    params: dict[str, Any] = {
+        "claim_vec": claim_vec,
+        "repository_id": str(repository_id),
+        "top_k": top_k,
+    }
+    if exclude_path_pattern is None:
+        sql = text(
+            "SELECT symbol_id, "
+            f"embedding {op_str()} CAST(:claim_vec AS vector) AS distance "
+            "FROM code_embeddings "
+            "WHERE repository_id = :repository_id "
+            f"ORDER BY embedding {op_str()} CAST(:claim_vec AS vector) "
+            "LIMIT :top_k"
+        )
+    else:
+        sql = text(
+            "SELECT e.symbol_id, "
+            f"e.embedding {op_str()} CAST(:claim_vec AS vector) AS distance "
+            "FROM code_embeddings e JOIN code_symbols s ON s.symbol_id = e.symbol_id "
+            "WHERE e.repository_id = :repository_id "
+            "  AND s.file_path !~* :exclude "
+            f"ORDER BY e.embedding {op_str()} CAST(:claim_vec AS vector) "
+            "LIMIT :top_k"
+        )
+        params["exclude"] = exclude_path_pattern
+    rows = db.execute(sql, params).fetchall()
 
     if not rows:
         return []

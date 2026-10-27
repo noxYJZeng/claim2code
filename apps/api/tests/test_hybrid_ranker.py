@@ -22,18 +22,23 @@ tests stub them via ``unittest.mock.patch``.
 
 from __future__ import annotations
 
+import importlib
+import re
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
-from claim2code_api.db.models import RepositoryDependency
+from claim2code_api.db.models import CodeSymbol, RepositoryDependency
 from claim2code_api.indexing.exceptions import EmbeddingError
 from claim2code_api.retrieval.hybrid_ranker import (
     HybridWeights,
     hybrid_ranker,
 )
+
+# ``claim2code_api.retrieval`` re-exports the function under the module's name.
+hybrid_ranker_mod = importlib.import_module("claim2code_api.retrieval.hybrid_ranker")
 
 # ============================================================
 # Helpers
@@ -52,13 +57,18 @@ def _lex_result(score: float, symbol_id):
 
 
 def _build_session(
-    *, code_symbols: list[SimpleNamespace], dependencies: list[str] | None = None,
+    *,
+    code_symbols: list[SimpleNamespace],
+    dependencies: list[str] | None = None,
+    manifests: list[str] | None = None,
 ) -> MagicMock:
-    """Build a MagicMock session that mimics the ranker's two queries.
+    """Build a MagicMock session that mimics the ranker's queries.
 
     After RRF the hybrid_ranker bulk-fetches CodeSymbol rows by id
-    (we return ``code_symbols``) and reads the repo's dependency
-    names (``dependencies``, default none).
+    (we return ``code_symbols``), reads the repo's dependency names
+    (``dependencies``, default none) and, when there are any, the
+    build-manifest paths (``manifests``); every manifest directory is
+    reported as holding a dependency-named package.
     """
     session = MagicMock(name="session")
     queue = [code_symbols]
@@ -67,6 +77,12 @@ def _build_session(
         q = MagicMock()
         if model is RepositoryDependency.name:
             q.filter.return_value.all.return_value = [(n,) for n in dependencies or []]
+        elif model is CodeSymbol.file_path:
+            q.filter.return_value.distinct.return_value.all.return_value = [
+                (p,) for p in manifests or []
+            ]
+        elif model is CodeSymbol.symbol_id:
+            q.filter.return_value.first.return_value = (uuid4(),)
         else:
             q.filter.return_value.all.return_value = queue.pop(0)
         return q
@@ -470,6 +486,87 @@ def test_hybrid_ranker_down_weights_vendored_dependency_dirs() -> None:
 
     assert [m.symbol_id for m in out] == [own, vendored]
     assert out[1].final_score == pytest.approx(0.40 / 61 * 61 * 0.5)
+
+
+def test_hybrid_ranker_down_weights_a_vendored_sub_project_wholesale() -> None:
+    """A sub-project with its own manifest and a dependency-named package
+    is a vendored library: its tests and examples are down-weighted too."""
+    own, lib_test = uuid4(), uuid4()
+    syms = [
+        SimpleNamespace(symbol_id=lib_test, kind="method", file_path="examples/NLU/tests/test_trainer.py"),
+        SimpleNamespace(symbol_id=own, kind="function", file_path="loralib/utils.py"),
+    ]
+
+    with (
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.retrieve_semantic",
+            return_value=[_sem_result(0.9, lib_test), _sem_result(0.8, own)],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.lexical_search",
+            return_value=[],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.structural_boost",
+            return_value={lib_test: 1.0, own: 1.0},
+        ),
+    ):
+        db = _build_session(
+            code_symbols=syms, dependencies=["transformers"], manifests=["examples/NLU/setup.py"],
+        )
+        out = hybrid_ranker(db, uuid4(), "x")
+
+    assert [m.symbol_id for m in out] == [own, lib_test]
+
+
+def test_hybrid_ranker_runs_each_leg_over_the_repos_own_code_too() -> None:
+    """When vendored code fills a leg's top-k, a second pass that excludes
+    it brings the repo's own symbols into the pool at their own-code rank."""
+    lib = [uuid4() for _ in range(3)]
+    own = uuid4()
+    syms = [
+        *(SimpleNamespace(symbol_id=s, kind="method", file_path="src/transformers/m.py") for s in lib),
+        SimpleNamespace(symbol_id=own, kind="class", file_path="loralib/layers.py"),
+    ]
+    sem_calls: list[str | None] = []
+
+    def _sem(*_a, exclude_path_pattern=None, **_k):
+        sem_calls.append(exclude_path_pattern)
+        if exclude_path_pattern is None:
+            return [_sem_result(0.9 - i / 10, s) for i, s in enumerate(lib)]
+        return [_sem_result(0.5, own)]
+
+    with (
+        patch("claim2code_api.retrieval.hybrid_ranker.retrieve_semantic", side_effect=_sem),
+        patch("claim2code_api.retrieval.hybrid_ranker.lexical_search", return_value=[]),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.structural_boost",
+            return_value={s: 1.0 for s in [*lib, own]},
+        ),
+    ):
+        db = _build_session(code_symbols=syms, dependencies=["transformers"])
+        out = hybrid_ranker(db, uuid4(), "x", top_k=2)
+
+    assert sem_calls[0] is None and sem_calls[1] is not None
+    assert out[0].symbol_id == own
+    assert out[0].rank_semantic == 1
+
+
+def test_vendored_pattern_matches_dependency_dirs_and_sub_project_roots() -> None:
+    db = _build_session(
+        code_symbols=[], dependencies=["PyYAML", "sentence-transformers", "transformers"], manifests=["examples/NLU/setup.py"],
+    )
+    pattern = hybrid_ranker_mod._vendored_pattern(db, uuid4())
+    hits = [
+        "examples/NLU/src/transformers/models/bert.py",
+        "examples/NLU/tests/test_trainer.py",
+        "third_party/PyYAML/loader.py",
+        "vendor/sentence_transformers/util.py",
+    ]
+    misses = ["loralib/layers.py", "examples/NLG/src/model.py", "examples/NLU2/run.py"]
+    assert all(re.search(pattern, p, re.IGNORECASE) for p in hits)
+    assert not any(re.search(pattern, p, re.IGNORECASE) for p in misses)
+    assert hybrid_ranker_mod._vendored_pattern(_build_session(code_symbols=[]), uuid4()) is None
 
 
 # ============================================================

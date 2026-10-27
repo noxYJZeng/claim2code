@@ -79,6 +79,7 @@ import time
 from dataclasses import dataclass, replace
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from claim2code_api.db.models import CodeSymbol, RepositoryDependency
@@ -100,8 +101,12 @@ _RRF_K = 60
 # the repo's own dependencies (``examples/NLU/src/transformers`` in
 # microsoft/LoRA): a vendored copy of a library, whose thousands of
 # symbols otherwise drown the paper's code. Down-weighted rather than
-# dropped, since authors do patch vendored files.
+# dropped, since authors do patch vendored files. When the vendored
+# package sits in a sub-project with its own build manifest
+# (``examples/NLU/setup.py``), the whole sub-project — the library's
+# tests, examples and tooling too — is the vendored copy.
 _VENDORED_FACTOR = 0.5
+_MANIFESTS = ("setup.py", "setup.cfg", "pyproject.toml")
 
 
 @dataclass(frozen=True)
@@ -203,19 +208,30 @@ def hybrid_ranker(
             "retrieval.weights": str(weights.as_dict()),
         },
     ) as root_span:
+        # A vendored library can fill both legs' top ``leg_top_k`` on
+        # its own (microsoft/LoRA: ~23k transformers symbols against
+        # ~40 of loralib), so each leg also runs over the repo's own
+        # code, and a symbol keeps the better of its two ranks.
+        vendored = _vendored_pattern(db, repository_id)
+        exclusions = [None] if vendored is None else [None, vendored]
+
         # ---- Leg 1: semantic ----
         leg_start = time.monotonic()
         with tracer.start_as_current_span(
             "retrieval.semantic",
             attributes={"retrieval.leg": "semantic"},
         ):
-            sem_results = retrieve_semantic(
-                db,
-                repository_id,
-                claim,
-                top_k=leg_top_k,
-                embedding_client=embedding_client,
-            )
+            sem_passes = [
+                retrieve_semantic(
+                    db,
+                    repository_id,
+                    claim,
+                    top_k=leg_top_k,
+                    embedding_client=embedding_client,
+                    exclude_path_pattern=exclude,
+                )
+                for exclude in exclusions
+            ]
         retriever_duration.record(
             time.monotonic() - leg_start, {"leg": "semantic"},
         )
@@ -226,26 +242,28 @@ def hybrid_ranker(
             "retrieval.lexical",
             attributes={"retrieval.leg": "lexical"},
         ):
-            lex_results = lexical_search(
-                db,
-                repository_id,
-                claim,
-                top_k=leg_top_k,
-            )
+            lex_passes = [
+                lexical_search(
+                    db,
+                    repository_id,
+                    claim,
+                    top_k=leg_top_k,
+                    exclude_path_pattern=exclude,
+                )
+                for exclude in exclusions
+            ]
         retriever_duration.record(
             time.monotonic() - leg_start, {"leg": "lexical"},
         )
 
         # ---- Build rank + score maps per leg ----
         # Ranks are 1-indexed; not-in-leg → omit from sum.
-        sem_ranks: dict[UUID, tuple[int, float]] = {
-            sym.symbol_id: (i + 1, float(sim))
-            for i, (sym, sim) in enumerate(sem_results)
-        }
-        lex_ranks: dict[UUID, tuple[int, float]] = {
-            sid: (i + 1, float(score))
-            for i, (sid, score) in enumerate(lex_results)
-        }
+        sem_ranks = _best_ranks(
+            [[(sym.symbol_id, float(sim)) for sym, sim in results] for results in sem_passes]
+        )
+        lex_ranks = _best_ranks(
+            [[(sid, float(score)) for sid, score in results] for results in lex_passes]
+        )
 
         # Union of (sem,lex) candidates is the pool — structural
         # isn't a ranker, so it doesn't expand the candidate set.
@@ -317,12 +335,11 @@ def hybrid_ranker(
         )
         by_id = {s.symbol_id: s for s in symbols}
 
-        vendored = _vendored_dir_names(db, repository_id)
-        if vendored:
+        if vendored is not None:
             matches = [
                 replace(m, final_score=m.final_score * _VENDORED_FACTOR)
                 if m.symbol_id in by_id
-                and _is_vendored(getattr(by_id[m.symbol_id], "file_path", ""), vendored)
+                and re.search(vendored, getattr(by_id[m.symbol_id], "file_path", ""), re.IGNORECASE)
                 else m
                 for m in matches
             ]
@@ -373,6 +390,40 @@ def _reserve_leg_tops(eligible: list[HybridMatch], top_k: int) -> list[HybridMat
     return top
 
 
+def _best_ranks(passes: list[list[tuple[UUID, float]]]) -> dict[UUID, tuple[int, float]]:
+    """Merge one leg's ranked passes: each symbol keeps its best (rank, score)."""
+    out: dict[UUID, tuple[int, float]] = {}
+    for results in passes:
+        for i, (sid, score) in enumerate(results):
+            if sid not in out or i + 1 < out[sid][0]:
+                out[sid] = (i + 1, score)
+    return out
+
+
+def _vendored_pattern(db: Session, repository_id: UUID) -> str | None:
+    """Regex matching the ``file_path`` of vendored code, or ``None``.
+
+    Vendored code is any directory named after a declared dependency,
+    plus — when that package sits in a sub-project with its own build
+    manifest (``examples/NLU/setup.py`` next to
+    ``examples/NLU/src/transformers``) — the whole sub-project. The
+    pattern is valid both for Python ``re`` and Postgres ``~*``.
+    """
+    names = sorted(_vendored_dir_names(db, repository_id))
+    if not names:
+        return None
+    alternatives = [r"(^|/)(" + "|".join(_package_regex(n) for n in names) + r")/"]
+    roots = _vendored_roots(db, repository_id, names)
+    if roots:
+        alternatives.append("^(" + "|".join(re.escape(r) for r in sorted(roots)) + ")/")
+    return "|".join(alternatives)
+
+
+def _package_regex(normalised: str) -> str:
+    """``py_yaml`` → ``py[-_.]yaml``: any PEP 503 spelling of the name."""
+    return "[-_.]".join(re.escape(part) for part in normalised.split("_"))
+
+
 def _vendored_dir_names(db: Session, repository_id: UUID) -> set[str]:
     """Normalised names of the repo's declared dependencies."""
     rows = (
@@ -383,11 +434,39 @@ def _vendored_dir_names(db: Session, repository_id: UUID) -> set[str]:
     return {_normalise_package(row[0]) for row in rows if row[0]}
 
 
-def _is_vendored(file_path: str, dependency_names: set[str]) -> bool:
-    """True when a directory on ``file_path`` is named after a dependency."""
-    return any(
-        _normalise_package(part) in dependency_names for part in file_path.split("/")[:-1]
+def _vendored_roots(db: Session, repository_id: UUID, dependency_names: list[str]) -> set[str]:
+    """Sub-project directories that are a vendored copy of a dependency.
+
+    A directory below the repo root holding a build manifest and a
+    package (``<dir>/<dep>/`` or ``<dir>/src/<dep>/``) named after a
+    declared dependency.
+    """
+    rows = (
+        db.query(CodeSymbol.file_path)
+        .filter(
+            CodeSymbol.repository_id == repository_id,
+            or_(*[CodeSymbol.file_path.like(f"%/{name}") for name in _MANIFESTS]),
+        )
+        .distinct()
+        .all()
     )
+    package = "(" + "|".join(_package_regex(n) for n in dependency_names) + ")"
+    roots: set[str] = set()
+    for (path,) in rows:
+        root = path.rsplit("/", 1)[0]
+        if root in roots:
+            continue
+        has_package = (
+            db.query(CodeSymbol.symbol_id)
+            .filter(
+                CodeSymbol.repository_id == repository_id,
+                CodeSymbol.file_path.op("~*")(f"^{re.escape(root)}/(src/)?{package}/"),
+            )
+            .first()
+        )
+        if has_package is not None:
+            roots.add(root)
+    return roots
 
 
 def _normalise_package(name: str) -> str:

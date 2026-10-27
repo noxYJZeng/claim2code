@@ -68,6 +68,7 @@ _LEXICAL_SQL = text(
     "     ) AS query "
     "WHERE repository_id = :repository_id "
     "  AND lex_tsv @@ query "
+    "  AND (CAST(:exclude AS text) IS NULL OR file_path !~* CAST(:exclude AS text)) "
     "ORDER BY score DESC "
     "LIMIT :top_k"
 )
@@ -79,6 +80,7 @@ def lexical_search(
     claim: str,
     *,
     top_k: int = 5,
+    exclude_path_pattern: str | None = None,
 ) -> list[tuple[UUID, float]]:
     """Return top-``top_k`` symbols by lexical overlap with ``claim``.
 
@@ -88,6 +90,9 @@ def lexical_search(
         Postgres's ``english`` config (lowercase + Porter stem +
         stopword removal) via ``plainto_tsquery``; terms are OR-ed.
     :param top_k: number of results to return (default 5).
+    :param exclude_path_pattern: optional POSIX regex (matched
+        case-insensitively); symbols whose ``file_path`` matches are
+        skipped.
     :returns: ``list[(symbol_id, score)]`` ordered by
         ``ts_rank_cd`` descending. ``score`` is the raw rank
         value (unbounded; ~ 0.0–1.0 in practice).
@@ -104,6 +109,7 @@ def lexical_search(
             "claim": claim,
             "repository_id": str(repository_id),
             "top_k": top_k,
+            "exclude": exclude_path_pattern,
         },
     ).fetchall()
 

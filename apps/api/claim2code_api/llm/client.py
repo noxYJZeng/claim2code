@@ -36,13 +36,12 @@ from collections.abc import Callable
 from threading import Lock
 from typing import Any
 
-import httpx
+import anthropic
 from openai import (
     APIConnectionError,
     APIStatusError,
     APITimeoutError,
     AuthenticationError,
-    OpenAI,
 )
 from opentelemetry.trace import Span
 from pydantic import ValidationError
@@ -50,6 +49,8 @@ from pydantic import ValidationError
 from claim2code_api.app.config import Settings, get_settings
 from claim2code_api.literature.exceptions import LiteratureComparisonError
 from claim2code_api.literature.schemas import Comparison, ScholarPaper
+from claim2code_api.llm import providers
+from claim2code_api.llm.chat_backends import build_backend
 from claim2code_api.observability import (
     get_tracer,
     llm_request_duration_seconds,
@@ -248,25 +249,34 @@ sparse-field placeholders — do NOT guess.
 """
 
 
+# Errors from either SDK a backend may raise (llm/chat_backends.py).
+# Both SDKs' status errors carry ``status_code`` and ``message``.
+_CONNECTION_ERRORS = (
+    APIConnectionError, APITimeoutError, anthropic.APIConnectionError,
+)
+_AUTH_ERRORS = (AuthenticationError, anthropic.AuthenticationError)
+_STATUS_ERRORS = (APIStatusError, anthropic.APIStatusError)
+
+
 class LLMClient:
     """OpenAI wrapper that exposes a typed ``extract_claims`` method."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        provider: providers.ResolvedProvider | None = None,
+    ) -> None:
         self._settings = settings
-        # ``proxy=None`` disables proxying via env vars
-        # (``all_proxy``/``HTTPS_PROXY``). Necessary because httpx 0.28
-        # does not understand ``socks://`` — see module docstring.
-        self._client = OpenAI(
-            api_key=settings.openai_api_key,
-            base_url=settings.openai_base_url,
-            # ``OpenAI`` ships its own vendored ``httpx2`` and (in newer
-            # SDK versions) annotates ``http_client`` as ``httpx2.Client``.
-            # Our ``httpx.Client(proxy=None)`` is API-compatible at
-            # runtime; tell mypy to stop checking.
-            http_client=httpx.Client(proxy=None),  # type: ignore[arg-type]
-            # Keep tight so a hung call doesn't burn the entire
-            # ``workflow_timeout_paper`` budget on a single attempt.
-            timeout=settings.llm_request_timeout_seconds,
+        # The chat provider is a runtime choice (llm/providers.py);
+        # without one, the client uses the OPENAI_* settings from .env.
+        self._provider = provider or providers.resolve(settings, preset_id="env")
+        self._model = self._provider.model
+        # Every backend keeps the OpenAI ``chat.completions.create``
+        # call shape (llm/chat_backends.py). Keep the timeout tight so
+        # a hung call doesn't burn the whole ``workflow_timeout_paper``
+        # budget on a single attempt.
+        self._client = build_backend(
+            self._provider, timeout=settings.llm_request_timeout_seconds,
         )
         # Phase 8: SafetyGate wraps every LLM call at the SDK seam
         # (see docs/architecture/phase-8-design.md §2). The gate
@@ -298,7 +308,7 @@ class LLMClient:
         ``chat.completions.create(...)`` — it includes the SDK's
         own retries on 429 / 5xx.
         """
-        model = self._settings.openai_model_chat
+        model = self._model
         usage = getattr(response, "usage", None)
         if usage is not None:
             prompt = getattr(usage, "prompt_tokens", None) or 0
@@ -361,7 +371,7 @@ class LLMClient:
             "llm.extract_claims",
             attributes={
                 "llm.method": "extract_claims",
-                "llm.model": self._settings.openai_model_chat,
+                "llm.model": self._model,
             },
         ) as span:
             gate_result = self._gate.wrap_messages(messages, kind="extract_claims")
@@ -383,7 +393,7 @@ class LLMClient:
             start = time.monotonic()
             try:
                 response = self._client.chat.completions.create(
-                    model=self._settings.openai_model_chat,
+                    model=self._model,
                     messages=gate_result.messages,  # type: ignore[call-overload]
                     response_format={
                         "type": "json_schema",
@@ -394,17 +404,17 @@ class LLMClient:
                         },
                     },
                 )
-            except (APIConnectionError, APITimeoutError) as exc:
+            except _CONNECTION_ERRORS as exc:
                 span.record_exception(exc)
                 raise ClaimExtractionError(
                     f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
                 ) from exc
-            except AuthenticationError as exc:
+            except _AUTH_ERRORS as exc:
                 span.record_exception(exc)
                 raise ClaimExtractionError(
-                    f"LLM auth error (check OPENAI_API_KEY): {exc}"
+                    f"LLM auth error (check the provider's API key): {exc}"
                 ) from exc
-            except APIStatusError as exc:
+            except _STATUS_ERRORS as exc:
                 span.record_exception(exc)
                 raise ClaimExtractionError(
                     f"LLM returned {exc.status_code}: {exc.message}"
@@ -508,7 +518,7 @@ class LLMClient:
             "llm.verdict",
             attributes={
                 "llm.method": "verdict",
-                "llm.model": self._settings.openai_model_chat,
+                "llm.model": self._model,
                 "llm.candidate_count": len(candidates),
             },
         ) as span:
@@ -529,7 +539,7 @@ class LLMClient:
             start = time.monotonic()
             try:
                 response = self._client.chat.completions.create(
-                    model=self._settings.openai_model_chat,
+                    model=self._model,
                     messages=gate_result.messages,  # type: ignore[call-overload]
                     response_format={
                         "type": "json_schema",
@@ -540,17 +550,17 @@ class LLMClient:
                         },
                     },
                 )
-            except (APIConnectionError, APITimeoutError) as exc:
+            except _CONNECTION_ERRORS as exc:
                 span.record_exception(exc)
                 raise VerificationLLMError(
                     f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
                 ) from exc
-            except AuthenticationError as exc:
+            except _AUTH_ERRORS as exc:
                 span.record_exception(exc)
                 raise VerificationLLMError(
-                    f"LLM auth error (check OPENAI_API_KEY): {exc}"
+                    f"LLM auth error (check the provider's API key): {exc}"
                 ) from exc
-            except APIStatusError as exc:
+            except _STATUS_ERRORS as exc:
                 span.record_exception(exc)
                 raise VerificationLLMError(
                     f"LLM returned {exc.status_code}: {exc.message}"
@@ -663,7 +673,7 @@ class LLMClient:
             "llm.compare",
             attributes={
                 "llm.method": "compare",
-                "llm.model": self._settings.openai_model_chat,
+                "llm.model": self._model,
                 "llm.paper_id": paper.paper_id,
             },
         ) as span:
@@ -684,7 +694,7 @@ class LLMClient:
             start = time.monotonic()
             try:
                 response = self._client.chat.completions.create(
-                    model=self._settings.openai_model_chat,
+                    model=self._model,
                     messages=gate_result.messages,  # type: ignore[call-overload]
                     response_format={
                         "type": "json_schema",
@@ -695,17 +705,17 @@ class LLMClient:
                         },
                     },
                 )
-            except (APIConnectionError, APITimeoutError) as exc:
+            except _CONNECTION_ERRORS as exc:
                 span.record_exception(exc)
                 raise LiteratureComparisonError(
                     f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
                 ) from exc
-            except AuthenticationError as exc:
+            except _AUTH_ERRORS as exc:
                 span.record_exception(exc)
                 raise LiteratureComparisonError(
-                    f"LLM auth error (check OPENAI_API_KEY): {exc}"
+                    f"LLM auth error (check the provider's API key): {exc}"
                 ) from exc
-            except APIStatusError as exc:
+            except _STATUS_ERRORS as exc:
                 span.record_exception(exc)
                 raise LiteratureComparisonError(
                     f"LLM returned {exc.status_code}: {exc.message}"
@@ -755,12 +765,7 @@ class LLMClient:
         so future phases can wire LLM readiness into ``/health/ready``.
         """
         try:
-            self._client.chat.completions.create(
-                model=self._settings.openai_model_chat,
-                messages=[{"role": "user", "content": "ping"}],
-                max_tokens=1,
-                timeout=10.0,
-            )
+            self._client.ping(self._model)
         except Exception as exc:  # noqa: BLE001 — probe is best-effort
             return False, f"{exc.__class__.__name__}: {str(exc)[:200]}"
         return True, None
@@ -780,8 +785,17 @@ def get_llm_client() -> LLMClient:
     if _client is None:
         with _client_lock:
             if _client is None:
-                _client = LLMClient(get_settings())
+                settings = get_settings()
+                _client = LLMClient(settings, providers.active(settings))
     return _client
+
+
+def reset_llm_client() -> None:
+    """Drop the cached client; the next ``get_llm_client`` rebuilds it
+    with the currently selected provider (llm/providers.py)."""
+    global _client
+    with _client_lock:
+        _client = None
 
 
 def reset_llm_for_tests() -> None:

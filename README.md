@@ -185,6 +185,13 @@ OPENAI_MODEL_CHAT=gpt-4o
 OPENAI_MODEL_EMBED=text-embedding-3-small
 OPENAI_EMBED_DIM=1536
 
+# ---- Other chat providers (optional; pick one in the web UI) ----
+ANTHROPIC_API_KEY=
+OPENAI_PLATFORM_API_KEY=
+GEMINI_API_KEY=
+DEEPSEEK_API_KEY=
+OPENROUTER_API_KEY=
+
 # ---- Optional ----
 SEMANTIC_SCHOLAR_API_KEY=                              # empty = anonymous mode
 GITHUB_TOKEN=                                          # empty = public rate limit
@@ -212,6 +219,21 @@ WORKFLOW_TIMEOUT_REPO=300
 WORKFLOW_TIMEOUT_TOTAL=900
 EOF
 ```
+
+**Choosing the chat model.** The `OPENAI_*` block is the default chat
+model and the embedding model. The **Chat model** panel at the top of the
+web UI (or `GET/POST /llm/providers`, `/llm/provider`, `/llm/provider/test`)
+switches the chat model used for claim extraction, verification and
+related work between LM Studio, Ollama, Anthropic (Claude, through the
+Anthropic SDK with structured outputs), OpenAI, Google Gemini, DeepSeek,
+OpenRouter, or any OpenAI-compatible server. "Test connection" checks a
+choice without switching to it. The choice is saved to
+`.claim2code/llm_provider.json` (git-ignored); an API key typed in the UI
+stays in the API's memory only, so put keys you want kept in `.env`.
+Embeddings are not switchable there: stored vectors come from one model,
+so changing `OPENAI_MODEL_EMBED` means re-indexing. DeepSeek only offers
+JSON mode, so its answers are checked against the schema afterwards
+rather than constrained by it.
 
 Every name in the template maps to a field declared at
 `apps/api/claim2code_api/app/config.py:22-142`. If you add a name

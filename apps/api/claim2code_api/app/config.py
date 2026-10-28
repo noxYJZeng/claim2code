@@ -73,6 +73,16 @@ class Settings(BaseSettings):
     # (e.g. LM Studio) prefilling a whole paper needs several minutes.
     llm_request_timeout_seconds: float = 60.0
 
+    # ---- Switchable chat providers (llm/providers.py) ----
+    # The OPENAI_* block above is the default chat model AND the
+    # embedding model. The UI can switch the chat model to one of these
+    # providers; each key is optional and only needed for its provider.
+    anthropic_api_key: str = ""
+    openai_platform_api_key: str = ""
+    gemini_api_key: str = ""
+    deepseek_api_key: str = ""
+    openrouter_api_key: str = ""
+
     # ---- Web (Vite reads these at build/dev time; declared here so a
     # shared ``.env`` does not trip extra="forbid") ----
     web_port: int = 5173

@@ -56,9 +56,12 @@ def _environment() -> dict[str, Any]:
         env["git_commit"] = None
     try:
         from claim2code_api.app.config import get_settings
+        from claim2code_api.llm import providers
 
         s = get_settings()
-        env["chat_model"] = s.openai_model_chat
+        chat = providers.active(s)
+        env["chat_provider"] = chat.preset_id
+        env["chat_model"] = chat.model
         env["embedding_model"] = s.openai_model_embed
     except Exception as exc:  # noqa: BLE001 — settings are informative only
         env["settings_error"] = str(exc)

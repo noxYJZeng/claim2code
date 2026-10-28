@@ -123,6 +123,7 @@ def _build_client(fake_openai: MagicMock, monkeypatch: pytest.MonkeyPatch) -> LL
 
     client._settings = cfg.get_settings()
     client._client = fake_openai
+    client._model = client._settings.openai_model_chat
     # Phase 8: also stub the safety gate + callback so existing tests
     # continue to work after the SDK-seam wiring. Production code
     # sets these in LLMClient.__init__; test_llm_client bypasses init.
@@ -314,16 +315,16 @@ def test_extract_claims_raises_on_empty_claim_list(sample_paper: Paper) -> None:
 
 def test_check_ready_returns_ok_on_success() -> None:
     fake = MagicMock()
-    fake.chat.completions.create.return_value = MagicMock()
     client = _build_client(fake, pytest.MonkeyPatch())
     ok, err = client.check_ready()
+    fake.ping.assert_called_once_with(client._model)
     assert ok is True
     assert err is None
 
 
 def test_check_ready_returns_error_on_failure() -> None:
     fake = MagicMock()
-    fake.chat.completions.create.side_effect = APITimeoutError(
+    fake.ping.side_effect = APITimeoutError(
         request=MagicMock()
     )
     client = _build_client(fake, pytest.MonkeyPatch())
@@ -340,16 +341,12 @@ def test_check_ready_returns_error_on_failure() -> None:
 
 def test_get_llm_client_is_lazy(monkeypatch: pytest.MonkeyPatch) -> None:
     """The module-level client is not built until first call."""
-    # Stub the OpenAI SDK so the real httpx proxy resolution doesn't run
-    # (CI env may publish socks:// proxies that httpx 0.28 rejects).
-    monkeypatch.setattr("claim2code_api.llm.client.OpenAI", MagicMock())
-
     llm_client_mod.reset_llm_for_tests()
     # Patch LLMClient.__init__ to count calls without constructing the
-    # real OpenAI SDK (the patched constructor above is a no-op MagicMock).
+    # real SDK.
     calls: list[Any] = []
 
-    def counting_init(self: Any, settings: Any) -> None:
+    def counting_init(self: Any, settings: Any, provider: Any = None) -> None:
         calls.append(settings)
         self._settings = settings
         self._client = MagicMock()
@@ -368,10 +365,8 @@ def test_get_llm_client_is_lazy(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_reset_llm_for_tests_rebuilds(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Patch __init__ so the real OpenAI SDK isn't constructed.
-    monkeypatch.setattr("claim2code_api.llm.client.OpenAI", MagicMock())
-
-    def fake_init(self: Any, settings: Any) -> None:
+    # Patch __init__ so the real SDK isn't constructed.
+    def fake_init(self: Any, settings: Any, provider: Any = None) -> None:
         self._settings = settings
         self._client = MagicMock()
         # Phase 8: safety gate + callback stubs.

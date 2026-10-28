@@ -347,6 +347,7 @@ def _build_client(fake_openai: MagicMock) -> LLMClient:
     import claim2code_api.app.config as cfg
     client._settings = cfg.get_settings()
     client._client = fake_openai
+    client._model = client._settings.openai_model_chat
     # Phase 8: stub safety gate + callback.
     from claim2code_api.safety import SafetyGate
     client._gate = SafetyGate()

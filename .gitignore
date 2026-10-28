@@ -10,6 +10,8 @@ interview-prep/
 .env
 .env.local
 .env.*.local
+# Chat-provider choice saved by the API (llm/providers.py)
+.claim2code/
 *.env
 !**/.env.example
 

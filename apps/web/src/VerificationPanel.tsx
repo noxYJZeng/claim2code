@@ -7,6 +7,7 @@ import {
   type Verification,
   type VerificationStatus,
 } from "./api";
+import CitedCode from "./CitedCode";
 
 type VerificationPanelProps = {
   analysisId: string;
@@ -204,6 +205,7 @@ export default function VerificationPanel({ analysisId }: VerificationPanelProps
         {claims.map((claim) => (
           <VerdictCard
             key={claim.claim_id}
+            analysisId={analysisId}
             claim={claim}
             verdict={verdicts[claim.claim_id]}
             state={
@@ -227,6 +229,7 @@ function byClaim(list: Verification[]): Record<string, Verification> {
 }
 
 type VerdictCardProps = {
+  analysisId: string;
   claim: Claim;
   verdict: Verification | undefined;
   state: "idle" | "running" | "queued";
@@ -234,7 +237,14 @@ type VerdictCardProps = {
   onVerify: () => void;
 };
 
-function VerdictCard({ claim, verdict, state, disabled, onVerify }: VerdictCardProps) {
+function VerdictCard({
+  analysisId,
+  claim,
+  verdict,
+  state,
+  disabled,
+  onVerify,
+}: VerdictCardProps) {
   const [open, setOpen] = useState(false);
   return (
     <li
@@ -285,14 +295,16 @@ function VerdictCard({ claim, verdict, state, disabled, onVerify }: VerdictCardP
             {verdict.discrepancies.length > 0 &&
               ` · ${verdict.discrepancies.length} discrepanc${verdict.discrepancies.length === 1 ? "y" : "ies"}`}
           </button>
-          {open && <VerdictDetails claim={claim} verdict={verdict} />}
+          {open && <VerdictDetails analysisId={analysisId} claim={claim} verdict={verdict} />}
         </div>
       )}
     </li>
   );
 }
 
-function VerdictDetails({ claim, verdict }: { claim: Claim; verdict: Verification }) {
+type VerdictDetailsProps = { analysisId: string; claim: Claim; verdict: Verification };
+
+function VerdictDetails({ analysisId, claim, verdict }: VerdictDetailsProps) {
   return (
     <div className="mt-3 space-y-4 text-xs text-slate-700" data-testid="verdict-details">
       <p className="whitespace-pre-line">{verdict.explanation}</p>
@@ -341,16 +353,10 @@ function VerdictDetails({ claim, verdict }: { claim: Claim; verdict: Verificatio
         {verdict.code_evidence.length === 0 ? (
           <p className="text-slate-500">No code cited.</p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {verdict.code_evidence.map((e, i) => (
-              <li key={i} data-testid="code-citation">
-                <p className="font-mono text-[11px] text-slate-500">
-                  {e.file_path}:{e.start_line}
-                  {e.end_line !== e.start_line && `-${e.end_line}`}
-                </p>
-                <pre className="mt-1 overflow-x-auto rounded bg-slate-100 p-2 font-mono text-[11px]">
-                  {e.quote}
-                </pre>
+              <li key={i}>
+                <CitedCode analysisId={analysisId} citation={e} />
               </li>
             ))}
           </ul>

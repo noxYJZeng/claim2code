@@ -225,6 +225,18 @@ export type ProvidersResult =
 export type ProviderTestResult =
   { ok: true; test: ProviderTest } | { ok: false; error: string };
 
+export type CodeExcerpt = {
+  file_path: string;
+  start_line: number;
+  end_line: number;
+  total_lines: number;
+  lines: { number: number; text: string }[];
+  url: string | null;
+};
+
+export type CodeExcerptResult =
+  { ok: true; excerpt: CodeExcerpt } | { ok: false; error: string };
+
 export async function getHealth(signal?: AbortSignal): Promise<HealthResult> {
   try {
     const response = await fetch(`${API_BASE_URL}/health`, { signal });
@@ -538,6 +550,37 @@ export async function testProvider(selection: ProviderSelection): Promise<Provid
       return { ok: false, error: await errorDetail(response) };
     }
     return { ok: true, test: (await response.json()) as ProviderTest };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** The code a citation points at, read from the cloned repository.
+ *  GET /analyses/{analysis_id}/code?file_path&start_line&end_line&context */
+export async function getCodeExcerpt(
+  analysisId: string,
+  citation: { file_path: string; start_line: number; end_line: number },
+  context: number,
+  signal?: AbortSignal,
+): Promise<CodeExcerptResult> {
+  const query = new URLSearchParams({
+    file_path: citation.file_path,
+    start_line: String(citation.start_line),
+    end_line: String(citation.end_line),
+    context: String(context),
+  });
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/code?${query}`,
+      { signal },
+    );
+    if (!response.ok) {
+      return { ok: false, error: await errorDetail(response) };
+    }
+    return { ok: true, excerpt: (await response.json()) as CodeExcerpt };
   } catch (err) {
     if (err instanceof Error) {
       return { ok: false, error: err.message };

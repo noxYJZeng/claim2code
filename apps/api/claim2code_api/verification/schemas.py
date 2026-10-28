@@ -90,14 +90,15 @@ class CodeEvidence(BaseModel):
 
       - reference a ``symbol_id`` that appears in the candidate
         list provided to the LLM;
-      - carry a ``quote`` that is a verbatim substring of that
-        candidate's ``signature`` or ``docstring``;
-      - cite a ``file_path`` / line range that matches the
-        candidate.
+      - carry a ``quote`` found in the candidate's actual source
+        at the cited line range (ignoring whitespace formatting);
+      - cite a line range within that candidate. The canonical
+        file path is taken from the validated candidate.
 
-    Empty ``code_evidence`` is permitted at the schema level;
-    the structural guard in :func:`compose_verification` coerces
-    such verifications to ``UNVERIFIED``.
+    The composition layer removes unverifiable citations, including
+    those whose source cannot be read. Empty ``code_evidence`` is
+    permitted at the schema level; after validation the structural
+    guard coerces evidence-free verifications to ``UNVERIFIED``.
     """
 
     model_config = ConfigDict(extra="forbid")

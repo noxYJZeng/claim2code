@@ -133,6 +133,32 @@ class WalkedFile:
     size_bytes: int
 
 
+def resolve_repo_file(clone_path: Path, relative_path: str) -> Path | None:
+    """Find a regular clone file without following repository symlinks.
+
+    Repository paths are untrusted even when they came from indexed
+    symbols. Apply this boundary again at later source-reading sites.
+    """
+    try:
+        if clone_path.is_symlink():
+            return None
+        root = clone_path.resolve(strict=True)
+        relative = Path(relative_path)
+        if not root.is_dir() or relative.is_absolute() or ".." in relative.parts:
+            return None
+        target = root
+        for part in relative.parts:
+            target = target / part
+            if target.is_symlink():
+                return None
+        target = target.resolve(strict=True)
+        if not target.is_relative_to(root) or not target.is_file():
+            return None
+        return target
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
 def walk_repo_files(
     clone_path: Path,
     *,
@@ -178,8 +204,6 @@ def walk_repo_files(
 
     out: list[WalkedFile] = []
     for path in clone_path.rglob("*"):
-        if not path.is_file():
-            continue
         # Skip if any parent directory is in the ignore list. The
         # parent check matters because ``node_modules`` appears deep
         # in many repos.
@@ -188,13 +212,16 @@ def walk_repo_files(
         rel = path.relative_to(clone_path).as_posix()
         if exclude and _is_excluded(rel, exclude):
             continue
+        safe_path = resolve_repo_file(clone_path, rel)
+        if safe_path is None:
+            continue
         try:
-            size = path.stat().st_size
+            size = safe_path.stat().st_size
         except OSError:
             continue
         if size > cap_bytes:
             continue
-        out.append(WalkedFile(absolute_path=path, relative_path=rel, size_bytes=size))
+        out.append(WalkedFile(absolute_path=safe_path, relative_path=rel, size_bytes=size))
         if len(out) >= cap_files:
             break
     return out
@@ -217,5 +244,6 @@ __all__ = [
     "WalkedFile",
     "classify_file",
     "data_repos_root",
+    "resolve_repo_file",
     "walk_repo_files",
 ]

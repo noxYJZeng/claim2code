@@ -21,6 +21,8 @@ reference to the patterns):
 Writes ``evaluation/results/safety.json``; ``evaluation/report.py``
 renders it.
 """
+# Imports below bootstrap the repository-root CLI entry point.
+# ruff: noqa: E402
 from __future__ import annotations
 
 import json
@@ -34,6 +36,8 @@ _REPO_ROOT = _THIS.parents[1]
 for _p in (_REPO_ROOT, _REPO_ROOT / "apps" / "api"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
+
+from evaluation.provenance import capture, finish
 
 logger = logging.getLogger("claim2code.eval.safety")
 
@@ -114,10 +118,12 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     from claim2code_api.safety.gate import SafetyGate
 
-    cases = json.loads(CORPUS.read_text())["cases"]
+    corpus = json.loads(CORPUS.read_text())
+    meta = capture("safety", corpus=corpus, parameters={"leak_window": _LEAK_WINDOW})
+    cases = corpus["cases"]
     gate = SafetyGate()
     records = [run_case(gate, c) for c in cases]
-    out = {"metrics": score(records), "cases": records}
+    out: dict[str, Any] = {"metrics": score(records), "cases": records, "provenance": finish(meta)}
     RESULTS_DIR.mkdir(exist_ok=True)
     RESULTS_JSON.write_text(json.dumps(out, indent=2))
     m = out["metrics"]

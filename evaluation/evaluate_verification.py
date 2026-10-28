@@ -40,9 +40,12 @@ Usage::
 
     python evaluation/evaluate_verification.py [--pairs dpo,mae] [--resume | --regrade]
 """
+# Imports below bootstrap the repository-root CLI entry point.
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import logging
 import re
@@ -66,6 +69,13 @@ from evaluation.evaluate_retrieval import (
     _resolve_symbol_ids,
     resolve_repo_ids,
 )
+from evaluation.provenance import (
+    capture,
+    finish,
+    measurement_identity,
+    repository_snapshot,
+    require_frozen,
+)
 
 logger = logging.getLogger("claim2code.eval.verification")
 
@@ -73,6 +83,7 @@ EVAL_DIR = _THIS.parent
 RESULTS_DIR = EVAL_DIR / "results"
 RESULTS_JSON = RESULTS_DIR / "verification.json"
 CLAIMS_JSONL = RESULTS_DIR / "verification_claims.jsonl"
+RUN_JSON = RESULTS_DIR / "verification_run.json"
 
 TOP_K = 8  # what the verification workflow uses in production
 STATUSES = ("VERIFIED", "PARTIALLY_VERIFIED", "CONTRADICTED", "UNVERIFIED")
@@ -86,6 +97,37 @@ _ELISION_RE = re.compile(r"\.{3,}|…")
 # ============================================================
 
 
+def classification_metrics(confusion: dict[str, dict[str, int]]) -> dict[str, Any]:
+    """Expose imbalance and undefined classes instead of hiding them in accuracy."""
+    counts = {s: sum(confusion.get(s, {}).values()) for s in STATUSES}
+    n = sum(counts.values())
+    majority = max(STATUSES, key=lambda s: counts[s]) if n else None
+    per_class: dict[str, dict[str, Any]] = {}
+    for label in STATUSES:
+        tp = confusion.get(label, {}).get(label, 0)
+        predicted = sum(row.get(label, 0) for row in confusion.values())
+        support = counts[label]
+        per_class[label] = {
+            "support": support,
+            "precision": tp / predicted if predicted else None,
+            "recall": tp / support if support else None,
+            "f1": 2 * tp / (support + predicted) if support else None,
+        }
+    present = [m for m in per_class.values() if m["support"]]
+    return {
+        "label_distribution": counts,
+        "majority_class_baseline": {
+            "label": majority, "status_accuracy": counts[majority] / n if majority else None,
+        },
+        "per_class": per_class,
+        "macro_f1_present_labels": sum(m["f1"] for m in present) / len(present) if present else None,
+        "balanced_accuracy_present_labels": (
+            sum(m["recall"] for m in present) / len(present) if present else None
+        ),
+        "missing_gold_labels": [s for s, count in counts.items() if count == 0],
+    }
+
+
 def score(records: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate per-claim records into the metrics block.
 
@@ -97,9 +139,9 @@ def score(records: list[dict[str, Any]]) -> dict[str, Any]:
         return {"n_claims": 0}
     exact = sum(r["predicted"] == r["expected"] for r in records)
     supported = [r for r in records if r["predicted"] in _SUPPORTED]
-    tp = sum(r["expected"] == "PARTIALLY_VERIFIED" and r["predicted"] in _FLAGGED for r in records)
+    tp = sum(r["expected"] in _FLAGGED and r["predicted"] in _FLAGGED for r in records)
     pred_pos = sum(r["predicted"] in _FLAGGED for r in records)
-    true_pos = sum(r["expected"] == "PARTIALLY_VERIFIED" for r in records)
+    true_pos = sum(r["expected"] in _FLAGGED for r in records)
     n_evidence = sum(r["n_evidence"] for r in records)
     confusion = {
         exp: {pred: 0 for pred in STATUSES} for exp in STATUSES
@@ -107,6 +149,7 @@ def score(records: list[dict[str, Any]]) -> dict[str, Any]:
     for r in records:
         confusion[r["expected"]][r["predicted"]] += 1
     return {
+        **classification_metrics(confusion),
         "n_claims": n,
         "status_accuracy": exact / n,
         "support_rate": len(supported) / n,
@@ -177,6 +220,18 @@ def grade_evidence(evidence: list[dict[str, Any]], read_file: Any) -> None:
         e["line_accurate"] = quote_is_grounded(e["quote"], text, e["start_line"], e["end_line"])
 
 
+def _read_clone_file(clone: Path, relative_path: str) -> str | None:
+    from claim2code_api.repos.storage import resolve_repo_file
+
+    path = resolve_repo_file(clone, relative_path)
+    if path is None:
+        return None
+    try:
+        return path.read_text(errors="replace")
+    except OSError:
+        return None
+
+
 # ============================================================
 # Running the pipeline
 # ============================================================
@@ -223,10 +278,7 @@ def verify_pair(
 
     def _file(rel: str) -> str | None:
         if rel not in file_cache:
-            try:
-                file_cache[rel] = (clone / rel).read_text(errors="replace")
-            except OSError:
-                file_cache[rel] = None
+            file_cache[rel] = _read_clone_file(clone, rel)
         return file_cache[rel]
 
     for ann_claim in annotation["claims"]:
@@ -252,7 +304,7 @@ def verify_pair(
             for e in evidence
         ]
         grade_evidence(cited, _file)
-        grounded = sum(c["grounded"] for c in cited)
+        grounded = sum(bool(c["grounded"]) for c in cited)
         hit = any(
             str(e.symbol_id) in relevant_ids
             or any(
@@ -268,7 +320,7 @@ def verify_pair(
             "predicted": verification.status.value,
             "n_evidence": len(evidence),
             "n_grounded": grounded,
-            "n_line_accurate": sum(c["line_accurate"] for c in cited),
+            "n_line_accurate": sum(bool(c["line_accurate"]) for c in cited),
             "evidence_hit": hit,
             "evidence": cited,
             "discrepancies": [
@@ -293,11 +345,12 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 
 def _run(
-    SessionLocal: Any,
+    session_factory: Any,
     annotations: list[dict[str, Any]],
     repo_ids: dict[str, str],
     *,
     resume: bool,
+    run_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Verify every pending claim, streaming records to ``CLAIMS_JSONL``."""
     records = _read_jsonl(CLAIMS_JSONL) if resume else []
@@ -309,8 +362,10 @@ def _run(
         if pair_id not in repo_ids:
             continue
         skip = {cid for pid, cid in finished if pid == pair_id}
-        with SessionLocal() as db, CLAIMS_JSONL.open("a") as sink:
+        with session_factory() as db, CLAIMS_JSONL.open("a") as sink:
             for record in verify_pair(db, annotation, UUID(repo_ids[pair_id]), skip=skip):
+                if run_id is not None:
+                    record["inference_run_id"] = run_id
                 sink.write(json.dumps(record) + "\n")
                 sink.flush()
                 records.append(record)
@@ -318,7 +373,7 @@ def _run(
 
 
 def _regrade(
-    SessionLocal: Any,
+    session_factory: Any,
     repo_ids: dict[str, str],
     records: list[dict[str, Any]],
     annotations: list[dict[str, Any]],
@@ -326,11 +381,13 @@ def _regrade(
     """Re-score stored records: current annotated labels, citation grounding."""
     from claim2code_api.db.models import Repository
 
+    records = copy.deepcopy(records)
     expected = {
-        c["claim_id"]: c["expected_verification"] for a in annotations for c in a["claims"]
+        (a["pair_id"], c["claim_id"]): c["expected_verification"]
+        for a in annotations for c in a["claims"]
     }
 
-    with SessionLocal() as db:
+    with session_factory() as db:
         clones = {
             pid: Path(db.get(Repository, UUID(rid)).clone_path) for pid, rid in repo_ids.items()
         }
@@ -340,12 +397,12 @@ def _regrade(
             continue
 
         def _file(rel: str, clone: Path = clone) -> str | None:
-            try:
-                return (clone / rel).read_text(errors="replace")
-            except OSError:
-                return None
+            return _read_clone_file(clone, rel)
 
-        r["expected"] = expected.get(r["claim_id"], r["expected"])
+        # Keep the original inference label alongside the newly graded
+        # one. Regrading never claims that the model has been run again.
+        r.setdefault("inference_expected", r["expected"])
+        r["expected"] = expected.get((r["pair_id"], r["claim_id"]), r["expected"])
         grade_evidence(r["evidence"], _file)
         r["n_grounded"] = sum(e["grounded"] for e in r["evidence"])
         r["n_line_accurate"] = sum(e["line_accurate"] for e in r["evidence"])
@@ -357,6 +414,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--pairs", help="comma-separated pair_ids (default: every indexed pair)")
     parser.add_argument("--resume", action="store_true", help="keep finished claims from the last run")
+    parser.add_argument("--require-reproducible", action="store_true",
+                        help="require frozen annotation/clone inputs; does not verify model weight revisions")
     parser.add_argument(
         "--regrade", action="store_true",
         help="re-score the last run's stored verdicts and citations without calling the LLM",
@@ -367,33 +426,78 @@ def main(argv: list[str] | None = None) -> int:
     if args.pairs:
         wanted = set(args.pairs.split(","))
         annotations = [a for a in annotations if a["pair_id"] in wanted]
-    SessionLocal = _build_session_factory()
-    with SessionLocal() as db:
-        repo_ids = resolve_repo_ids(db, annotations)
+    session_factory = _build_session_factory()
+    try:
+        with session_factory() as db:
+            repo_ids = resolve_repo_ids(db, annotations)
+            repositories = repository_snapshot(db, annotations, repo_ids)
+        current = capture(
+            "verification_grading" if args.regrade else "verification",
+            annotations=annotations, repositories=repositories,
+            parameters={"top_k": TOP_K, "scope": "curated_claim_to_code"}, models=not args.regrade,
+        )
+        if args.require_reproducible:
+            require_frozen(current)
+    except ValueError as exc:
+        logger.error("%s", exc)
+        return 2
+    for issue in current["reproducibility_issues"]:
+        logger.warning("development evaluation: %s", issue)
 
     RESULTS_DIR.mkdir(exist_ok=True)
     skipped_pairs = [a["pair_id"] for a in annotations if a["pair_id"] not in repo_ids]
     for pair_id in skipped_pairs:
         logger.warning("skipping pair_id=%s (repository not indexed)", pair_id)
     if args.regrade:
-        records = _regrade(SessionLocal, repo_ids, _read_jsonl(CLAIMS_JSONL), annotations)
+        previous = json.loads(RESULTS_JSON.read_text()) if RESULTS_JSON.exists() else {}
+        stored = _read_jsonl(CLAIMS_JSONL)
+        ids = {r.get("inference_run_id") for r in stored}
+        original = json.loads(RUN_JSON.read_text()) if RUN_JSON.exists() else previous.get("provenance")
+        inference = original if original and ids == {original.get("run_id")} else None
+        if inference is None:
+            logger.warning("original inference provenance unknown; regrading will not invent it")
+        records = _regrade(session_factory, repo_ids, stored, annotations)
+        for record in records:
+            record["grading_run_id"] = current["run_id"]
         CLAIMS_JSONL.write_text("".join(json.dumps(r) + "\n" for r in records))
     else:
-        records = _run(SessionLocal, annotations, repo_ids, resume=args.resume)
+        if args.resume and _read_jsonl(CLAIMS_JSONL):
+            if not RUN_JSON.exists():
+                logger.error("cannot resume legacy records without inference provenance; start a new run")
+                return 2
+            inference = json.loads(RUN_JSON.read_text())
+            if measurement_identity(inference) != measurement_identity(current):
+                logger.error("resume inputs, code or model differ from the original measurement")
+                return 2
+        else:
+            inference = current
+            RUN_JSON.write_text(json.dumps(inference, indent=2))
+        records = _run(session_factory, annotations, repo_ids, resume=args.resume, run_id=inference["run_id"])
+        for record in records:
+            record.setdefault("inference_run_id", inference["run_id"])
+        CLAIMS_JSONL.write_text("".join(json.dumps(r) + "\n" for r in records))
 
     if not records:
         logger.error("no annotated pair has an indexed repository")
         return 2
+    if not args.regrade and inference is not None:
+        inference = finish(inference)
+        RUN_JSON.write_text(json.dumps(inference, indent=2))
     by_pair: dict[str, list[dict[str, Any]]] = {}
     for r in records:
         by_pair.setdefault(r["pair_id"], []).append(r)
     out = {
+        "scope": "curated_claim_to_code",
+        "paper_evidence_source": "annotation text, not verified against PDF bytes",
+        "provenance": inference,
         "top_k": TOP_K,
         "aggregate": score(records),
         "per_pair": {pid: score(rs) for pid, rs in sorted(by_pair.items())},
         "skipped_pairs": skipped_pairs,
         "claims": records,
     }
+    if args.regrade:
+        out["grading_provenance"] = finish(current)
     RESULTS_JSON.write_text(json.dumps(out, indent=2))
     logger.info("wrote %s", RESULTS_JSON)
     return 0

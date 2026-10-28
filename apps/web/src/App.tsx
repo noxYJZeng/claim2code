@@ -8,6 +8,7 @@ import ClaimRetrievalPanel from "./ClaimRetrievalPanel";
 import VerificationPanel from "./VerificationPanel";
 import OpenAnalysisForm from "./OpenAnalysisForm";
 import ModelProviderPanel from "./ModelProviderPanel";
+import DemoAnalysis from "./DemoAnalysis";
 
 // Claim2Code — Phase 3 single-page UI.
 //
@@ -35,6 +36,28 @@ import ModelProviderPanel from "./ModelProviderPanel";
 // becomes its own route; for now, the whole interaction is still
 // one screen.
 export default function App() {
+  const [demo, setDemo] = useState(() =>
+    new URLSearchParams(window.location.search).get("demo") === "1",
+  );
+
+  function changeMode(showDemo: boolean) {
+    const url = new URL(window.location.href);
+    if (showDemo) url.searchParams.set("demo", "1");
+    else url.searchParams.delete("demo");
+    window.history.replaceState(null, "", url);
+    setDemo(showDemo);
+  }
+
+  // The static demo mounts no workbench effects or API clients. A
+  // portfolio can link directly to ?demo=1 without a backend or key.
+  return demo ? (
+    <DemoAnalysis onOpenWorkbench={() => changeMode(false)} />
+  ) : (
+    <Workbench onOpenDemo={() => changeMode(true)} />
+  );
+}
+
+function Workbench({ onOpenDemo }: { onOpenDemo: () => void }) {
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [analysisId, setAnalysisId] = useState<string | null>(() =>
@@ -87,6 +110,13 @@ export default function App() {
           <p className="mt-2 text-slate-600">
             AI Research Agent for Paper–Code Verification and Reproducibility.
           </p>
+          <button
+            type="button"
+            onClick={onOpenDemo}
+            className="mt-4 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+          >
+            View sample analysis
+          </button>
           <div className="mt-4 flex items-center gap-3">
             <span
               data-testid="status-badge"

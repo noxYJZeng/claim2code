@@ -18,22 +18,45 @@
 - ✅ **Verification** — every claim gets a verdict + paper evidence + code evidence
 - ⚠️ **Discrepancy Detection** — hyperparameter / objective / dataset / metric mismatches
 - 📚 **Related Work** — selected claim → 5 structured comparable papers
-- 🛡️ **Responsible-AI Guardrails** — secret redaction, prompt-injection defense, no code execution
+- 🛡️ **Input checks** — pattern-based secret redaction and injection detection, with measured coverage gaps; ingested code is never executed
 - 📊 **Observability** — OpenTelemetry traces + per-step latency/token/retrieval metrics
 - 🧪 **Evaluation Harness** — hand-annotated paper/repo pairs; retrieval Recall@1/5 + MRR, verification accuracy + discrepancy precision/recall + grounding rate, safety redaction/detection rates ([measured results](#measured-results))
 
+## Try the portfolio demo
+
+The **View sample analysis** entry opens a self-contained, read-only example.
+It needs no API server, database, model, or API key. Start the frontend and open
+it with `?demo=1`, or use the sample button on the landing page:
+
+```bash
+cd apps/web
+npm ci --registry=https://registry.npmjs.org --replace-registry-host=always
+npm run dev
+# npm run build produces dist/ for a static website deployment.
+```
+
+The sample uses recorded development results. Its curated claim text is not
+presented as an independently verified quotation from a PDF. For a personal
+website, publish the static demo with a short explanation of the architecture,
+retrieval comparison, and known failure cases. It does not expose model
+configuration or accept uploads.
+
 ## Measured results
 
-From [`evaluation/report.md`](evaluation/report.md), measured locally with
+Historical development benchmark from [`evaluation/report.md`](evaluation/report.md), measured locally with
 `qwen3.8-27b-mlx` (LM Studio) and `nomic-embed-text-v1.5` embeddings on 8
 annotated pairs (Attention Is All You Need, BERT, DDIM, DDPM, DPO, LoRA, MAE,
-Reflexion; 79 claims). Re-run with `make eval-all`.
+Reflexion; 79 claims). These are historical results from before the stricter
+runtime citation checks in this revision; no new model run is claimed here.
+The legacy files do not contain complete per-run provenance. New evaluators
+record their execution metadata; see [evaluation instructions](evaluation/README.md)
+before running `make eval-all`.
 
 | Area | Metric | Claim2Code | Baseline |
 |---|---|---|---|
 | Retrieval (top 5) | Recall@5, macro avg | **0.74** | 0.65 embedding-only · 0.52 lexical-only |
 | | MRR, macro avg | **0.529** | 0.462 embedding-only · 0.320 lexical-only |
-| Verification | Status accuracy (4-way) | 81.0% | — |
+| Verification | Status accuracy on observed labels | 81.0% | 88.6% always-VERIFIED baseline |
 | | Support rate (claim judged VERIFIED / PARTIALLY_VERIFIED) | 87.3% | — |
 | | Discrepancy precision / recall (claim level) | 58.3% / 77.8% | — |
 | | Grounding rate (cited code exists in the cited file) | 99.5% of 191 citations | — |
@@ -41,6 +64,14 @@ Reflexion; 79 claims). Re-run with `make eval-all`.
 | Safety | Secrets protected, covered / held-out forms | 10/10 · 2/8 | — |
 | | Injections detected, covered / held-out forms | 6/6 · 0/6 | — |
 | | Clean text flagged | 3/12 | — |
+
+The gold set contains 70 `VERIFIED` and 9 `PARTIALLY_VERIFIED` claims, with no
+`CONTRADICTED` or `UNVERIFIED` examples. It does not establish four-way
+classification quality. Evaluation supplies curated claims, using those texts
+as paper quotes; it does not measure PDF-to-claim extraction or paper-citation
+correctness. Code grounding measures quote existence, not verdict correctness.
+Hybrid retrieval improves the macro average by about 9 percentage points over
+embedding-only here, while some individual pairs regress.
 
 Caveats: only 9 of the 79 claims carry an annotated discrepancy, so the
 discrepancy rates rest on few cases. The annotations were written during
@@ -59,6 +90,8 @@ checkout), 2 more are UNVERIFIED despite evidence, 5 are PARTIALLY_VERIFIED verd
 mismatch was caught but over-graded). The safety `held_out` cases (GitHub
 fine-grained / Slack / Hugging Face tokens, paraphrased injections) are coverage
 gaps of the regex gate, which matches only the forms listed in Phase 8.
+Injection detection records a match; it is not a guarantee that the input was
+blocked. Use the static demo for public portfolio access.
 
 ## Why
 
@@ -92,8 +125,8 @@ cd claim2code
 
 # 2. configure
 cp .env.example .env
-# Edit .env — set POSTGRES_PASSWORD and OPENAI_API_KEY (the LLM is
-# required by Phase 2's claim extractor).
+# Edit .env for the database and a model endpoint. Hosted providers use
+# their own API keys; a local OpenAI-compatible server needs no cloud key.
 
 # 3. start stack
 make dev          # brings up postgres+pgvector, api, web
@@ -137,7 +170,7 @@ curl -sS http://localhost:8000/analyses/<analysis_id>/claims | jq '.claims | len
 |---|---|---|---|
 | **Python 3.11+** | YES | `brew install python@3.11` | `sudo apt install python3.11 python3.11-venv` |
 | **PostgreSQL 16 + pgvector** | YES (for paper pipeline, repo indexing, retrieval) | `brew install postgresql@16 pgvector` | `sudo apt install postgresql-16 postgresql-16-pgvector` |
-| **OpenAI API key** | YES (for `gpt-4o` + `text-embedding-3-small`) | https://platform.openai.com/api-keys | same |
+| **Model endpoint** | YES for live analysis; local LM Studio/Ollama or a hosted provider | Local endpoint, or provider credentials | same |
 | **Node 20+** | YES (only if you want the React frontend) | `brew install node` | `nvm install 20` |
 | **Semantic Scholar API key** | optional (raises rate-limit 1/s → 100/5min) | https://www.semanticscholar.org/product/api | same |
 | **GitHub token** | optional (raises REST rate limit on popular repos) | https://github.com/settings/tokens | same |
@@ -234,6 +267,42 @@ Embeddings are not switchable there: stored vectors come from one model,
 so changing `OPENAI_MODEL_EMBED` means re-indexing. DeepSeek only offers
 JSON mode, so its answers are checked against the schema afterwards
 rather than constrained by it.
+
+Model-management writes are disabled by default. For a private workstation,
+set `LLM_MANAGEMENT_ALLOW_LOCAL=true` and connect from the same machine. For
+administrative access, set `LLM_MANAGEMENT_TOKEN` securely and enter it in the
+model panel; the token stays in browser memory, not browser storage. Hosted
+provider addresses cannot be overridden to carry saved keys elsewhere. A custom
+endpoint uses only its explicitly supplied key.
+Behind a reverse proxy, use the administrator token and leave the loopback
+opt-in disabled; the proxy itself may appear as a loopback peer.
+
+For a read-only API deployment, set `API_READ_ONLY=true`; mutating requests
+are rejected before model or database work. The static portfolio demo needs no
+API at all. A public service accepting uploads additionally needs deployment
+authentication, request quotas and resource budgets; it is not provided by the
+static demo configuration.
+
+If your Docker builder uses an HTTPS-inspecting proxy, supply its trusted CA
+bundle as a build-only secret while retaining certificate verification:
+
+```bash
+docker build --secret id=pip_ca,src=/path/to/trusted-ca-bundle.crt \
+  -f deployments/Dockerfile.api -t claim2code-api .
+```
+
+The CA bundle is optional and is not retained in the image. Standard builds
+need no extra trust configuration.
+
+**Local LM Studio.** Load a chat model and an embedding model, enable the
+OpenAI-compatible server, and set `OPENAI_BASE_URL`, `OPENAI_MODEL_CHAT`,
+`OPENAI_MODEL_EMBED`, and `OPENAI_EMBED_DIM` to the actual model identifiers and
+embedding dimensions. Use the local server's supported authentication setting.
+For an unauthenticated local endpoint, its SDK configuration value is not a
+cloud credential. Changing embedding model or dimensions requires a fresh
+database/index, not mixing old vectors with new ones. If the API runs in a
+container, its `localhost` is the container; configure access to the host model
+server explicitly.
 
 Every name in the template maps to a field declared at
 `apps/api/claim2code_api/app/config.py:22-142`. If you add a name
@@ -489,4 +558,4 @@ claim2code/
 
 ## License
 
-TBD.
+MIT — see [LICENSE](LICENSE).

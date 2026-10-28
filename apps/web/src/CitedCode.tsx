@@ -24,6 +24,8 @@ export default function CitedCode({ analysisId, citation }: CitedCodeProps) {
 
   useEffect(() => {
     const controller = new AbortController();
+    setExcerpt(null);
+    setError(null);
     getCodeExcerpt(analysisId, citation, context, controller.signal).then((result) => {
       if (controller.signal.aborted) return;
       if (result.ok) {

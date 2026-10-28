@@ -9,11 +9,13 @@ writes:
     object, plus the git commit and model names it was measured with.
   - ``evaluation/report.md`` — the human-readable report.
 """
+# Imports below bootstrap the repository-root CLI entry point.
+# ruff: noqa: E402
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import json
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -29,6 +31,8 @@ from evaluation.evaluate_retrieval import (
     BaselineMetrics,
     _render_report_md,
 )
+from evaluation.evaluate_verification import classification_metrics
+from evaluation.provenance import comparison_warnings
 
 EVAL_DIR = _THIS.parent
 RESULTS_DIR = EVAL_DIR / "results"
@@ -43,29 +47,6 @@ def _pct(x: float | None) -> str:
 
 def _frac(block: dict[str, Any]) -> str:
     return f"{block['passed']}/{block['n']} ({_pct(block['rate'])})"
-
-
-def _environment() -> dict[str, Any]:
-    env: dict[str, Any] = {"generated_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds")}
-    try:
-        env["git_commit"] = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=_REPO_ROOT, capture_output=True, text=True, check=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        env["git_commit"] = None
-    try:
-        from claim2code_api.app.config import get_settings
-        from claim2code_api.llm import providers
-
-        s = get_settings()
-        chat = providers.active(s)
-        env["chat_provider"] = chat.preset_id
-        env["chat_model"] = chat.model
-        env["embedding_model"] = s.openai_model_embed
-    except Exception as exc:  # noqa: BLE001 — settings are informative only
-        env["settings_error"] = str(exc)
-    return env
 
 
 def render_retrieval(data: dict[str, Any]) -> list[str]:
@@ -94,16 +75,25 @@ def render_retrieval(data: dict[str, Any]) -> list[str]:
 
 
 def render_verification(data: dict[str, Any]) -> list[str]:
-    agg = data["aggregate"]
+    agg = {**data["aggregate"], **classification_metrics(data["aggregate"]["confusion"])}
+    majority = agg["majority_class_baseline"]
     lines = [
         "## Verification",
         "",
-        (f"{agg['n_claims']} annotated claims, production pipeline (hybrid retrieval top_k="
+        (f"{agg['n_claims']} curated annotated claims, claim-to-code pipeline (hybrid retrieval top_k="
         f"{data['top_k']} → deterministic checkers → LLM verdict)."),
+        "",
+        ("The input is an annotation's claim text, also used as its paper quote. This does not "
+         "measure PDF extraction accuracy or verify the paper citation against a PDF."),
         "",
         "| Metric | Value |",
         "|---|---|",
-        f"| Status accuracy (exact, 4-way) | {_pct(agg['status_accuracy'])} |",
+        f"| Status accuracy (exact, on observed labels) | {_pct(agg['status_accuracy'])} |",
+        (f"| Majority-class baseline (always {majority['label']}) "
+         f"| {_pct(majority['status_accuracy'])} |"),
+        f"| Macro F1 (gold-present labels only) | {_pct(agg['macro_f1_present_labels'])} |",
+        (f"| Balanced accuracy (gold-present labels only) "
+         f"| {_pct(agg['balanced_accuracy_present_labels'])} |"),
         f"| Support rate (VERIFIED or PARTIALLY_VERIFIED) | {_pct(agg['support_rate'])} |",
         (f"| Discrepancy precision | {_pct(agg['discrepancy_precision'])} "
         f"({agg['n_flagged']} flagged) |"),
@@ -128,6 +118,21 @@ def render_verification(data: dict[str, Any]) -> list[str]:
             f"| {_pct(m['grounding_rate'])} |"
         )
     statuses = ("VERIFIED", "PARTIALLY_VERIFIED", "CONTRADICTED", "UNVERIFIED")
+    lines += [
+        "", "### Label coverage", "",
+        "| Gold label | Count | Precision | Recall | F1 |", "|---|---|---|---|---|",
+    ]
+    for label, metrics in agg["per_class"].items():
+        lines.append(
+            f"| {label} | {metrics['support']} | {_pct(metrics['precision'])} "
+            f"| {_pct(metrics['recall'])} | {_pct(metrics['f1'])} |"
+        )
+    if agg["missing_gold_labels"]:
+        lines += ["", "No gold examples for: " + ", ".join(agg["missing_gold_labels"])
+                  + ". These results do not establish four-way classification performance."]
+    lines += [
+        "", "Code grounding measures whether a quote exists, not whether the verdict is correct.",
+    ]
     lines += [
         "",
         "### Confusion (rows = annotated, columns = predicted)",
@@ -178,20 +183,35 @@ RENDERERS = {
 }
 
 
-def build() -> tuple[dict[str, Any], str]:
+def build(*, require_provenance: bool = False) -> tuple[dict[str, Any], str]:
     """Load the per-evaluator results and render the combined outputs."""
-    env = _environment()
+    env = {"report_generated_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds")}
     combined: dict[str, Any] = {"environment": env}
     lines = [
         "# Claim2Code — Evaluation Report",
         "",
-        f"Generated {env['generated_at']} at commit `{env.get('git_commit')}`"
-        + (
-            f" with chat model `{env['chat_model']}` and embeddings `{env['embedding_model']}`."
-            if "chat_model" in env else "."
-        ),
+        f"Report rendered {env['report_generated_at']}. Rendering does not run the models.",
+        "Measurement code and model identities below come only from stored evaluator provenance.",
         "",
     ]
+    # Preserve the old header as an unverified historical declaration,
+    # never upgrade it into missing per-evaluator inference provenance.
+    previous = RESULTS_DIR.parent / "results.json"
+    if previous.exists():
+        old = json.loads(previous.read_text())
+        legacy = old.get("legacy_reported_environment")
+        if legacy is None and old.get("environment", {}).get("git_commit"):
+            legacy = old["environment"]
+        if legacy:
+            combined["legacy_reported_environment"] = legacy
+            lines += [
+                ("Historical combined-report header (not verified per evaluator): "
+                f"commit `{legacy.get('git_commit', 'unknown')}`, "
+                f"chat `{legacy.get('chat_model', 'unknown')}`, "
+                f"embeddings `{legacy.get('embedding_model', 'unknown')}`."),
+                "These archived numbers predate subsequent fixes and are not a new measurement of this checkout.",
+                "",
+            ]
     for name in SECTIONS:
         path = RESULTS_DIR / f"{name}.json"
         if not path.exists():
@@ -200,12 +220,43 @@ def build() -> tuple[dict[str, Any], str]:
             continue
         data = json.loads(path.read_text())
         combined[name] = data
+        meta = data.get("provenance")
+        if meta:
+            lines += [
+                (f"Measurement `{name}`: run `{meta.get('run_id', 'unknown')}`, "
+                f"code `{meta.get('code', {}).get('git_commit', 'unknown')}`, "
+                f"started `{meta.get('started_at', 'unknown')}`."),
+                "",
+            ]
+            if meta.get("models"):
+                model = meta["models"]
+                lines += [(f"Recorded chat `{model.get('chat_model', 'unknown')}`; "
+                           f"embeddings `{model.get('embedding_model', 'unknown')}`."), ""]
+        else:
+            lines += [f"Measurement `{name}`: legacy artifact; inference provenance unknown.", ""]
         lines += RENDERERS[name](data)
+    warnings = comparison_warnings({name: combined[name] for name in SECTIONS})
+    combined["provenance_warnings"] = warnings
+    if require_provenance and warnings:
+        raise ValueError("Cannot render a comparison with complete source/input provenance: "
+                         + "; ".join(warnings))
+    if warnings:
+        lines += ["## Provenance and reproducibility warnings", ""]
+        lines.extend(f"- {warning}" for warning in warnings)
+        lines.append("")
     return combined, "\n".join(lines)
 
 
-def main() -> int:
-    combined, md = build()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
+    parser.add_argument("--require-provenance", action="store_true",
+                        help="require compatible recorded source/input metadata; model weights are not verified")
+    args = parser.parse_args(argv)
+    try:
+        combined, md = build(require_provenance=args.require_provenance)
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     RESULTS_JSON.write_text(json.dumps(combined, indent=2))
     REPORT_MD.write_text(md)
     print(f"wrote {RESULTS_JSON} and {REPORT_MD}")

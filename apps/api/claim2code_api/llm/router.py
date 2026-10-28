@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import logging
 import time
+from hmac import compare_digest
+from ipaddress import ip_address
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from claim2code_api.app.config import get_settings
@@ -26,6 +28,28 @@ from claim2code_api.llm.client import reset_llm_client
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/llm", tags=["llm"])
+
+
+def require_model_manager(request: Request) -> None:
+    """Model management is disabled until an operator explicitly enables it."""
+    settings = get_settings()
+    if settings.llm_management_token:
+        scheme, _, supplied = request.headers.get("Authorization", "").partition(" ")
+        if scheme.lower() == "bearer" and compare_digest(
+            supplied.encode(), settings.llm_management_token.encode(),
+        ):
+            return
+        raise HTTPException(
+            status_code=401, detail="Model management requires an administrator token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if settings.llm_management_allow_local and request.client is not None:
+        try:
+            if ip_address(request.client.host).is_loopback:
+                return
+        except ValueError:
+            pass
+    raise HTTPException(status_code=403, detail="Model management is disabled for this client")
 
 
 class ProviderSelection(BaseModel):
@@ -50,7 +74,7 @@ def list_providers() -> dict[str, object]:
     return providers.describe(get_settings())
 
 
-@router.post("/provider/test", response_model=ProviderTestResult)
+@router.post("/provider/test", response_model=ProviderTestResult, dependencies=[Depends(require_model_manager)])
 def test_provider(body: ProviderSelection) -> ProviderTestResult:
     """Check that a selection reaches its server and knows the model.
 
@@ -61,7 +85,8 @@ def test_provider(body: ProviderSelection) -> ProviderTestResult:
     try:
         resolved = providers.resolve(
             settings, preset_id=body.provider_id, model=body.model,
-            base_url=body.base_url, api_key=body.api_key or providers.session_key(body.provider_id),
+            base_url=body.base_url,
+            api_key=body.api_key or providers.session_key(settings, body.provider_id, body.base_url),
         )
     except providers.ProviderError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -79,7 +104,7 @@ def test_provider(body: ProviderSelection) -> ProviderTestResult:
     )
 
 
-@router.post("/provider")
+@router.post("/provider", dependencies=[Depends(require_model_manager)])
 def set_provider(body: ProviderSelection) -> dict[str, object]:
     settings = get_settings()
     try:

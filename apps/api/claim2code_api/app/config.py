@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_log_level: str = "info"
+    api_read_only: bool = False
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     # ---- Database ----
@@ -82,6 +83,11 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     deepseek_api_key: str = ""
     openrouter_api_key: str = ""
+    # Model management changes process-wide settings and can make network
+    # requests. Public instances leave both options unset (read-only).
+    # Local opt-in accepts only the actual peer's loopback address.
+    llm_management_allow_local: bool = False
+    llm_management_token: str = Field(default="", repr=False)
 
     # ---- Web (Vite reads these at build/dev time; declared here so a
     # shared ``.env`` does not trip extra="forbid") ----

@@ -29,15 +29,68 @@ Annotation pairs are matched to indexed repositories by `repo.url`
 (`CLAIM2CODE_EVAL_REPO_IDS='{"pair_id": "<uuid>"}'` overrides). A pair
 whose repository is not indexed is skipped and listed in the report.
 
+## Measurement scope and reproducibility
+
+The checked-in numbers are historical **development-set measurements**,
+made before later citation-validation fixes. They are not a fresh test of
+the current checkout. The saved verification predictions have 70 VERIFIED
+and 9 PARTIALLY_VERIFIED gold labels, with no CONTRADICTED or UNVERIFIED
+gold examples. The 81.0% status accuracy should be compared with the 88.6%
+always-VERIFIED majority baseline. Reports now include that baseline,
+label counts, per-class metrics and macro F1 over gold-present classes;
+metrics for absent gold classes remain undefined.
+
+Verification starts from curated claims, not PDF upload. The annotation
+text is also used as its paper quote, so these numbers do **not** measure
+claim extraction accuracy or the correctness of paper evidence against
+the original PDF. Code grounding checks textual existence; it does not
+measure whether a conclusion follows from that text.
+
+New evaluator runs record their own `provenance` when executing: run ID,
+start/end timestamps, full code SHA and source digest, non-secret model
+IDs/settings, annotation hashes, and the actual indexed clone revisions.
+Model revision and quantization are explicitly unknown when the runtime
+does not expose them. API keys and full environment dumps are never
+captured. The report propagates the saved metadata; it does not read the
+current model configuration to relabel old results. Legacy files remain
+marked as provenance-unknown. Their original combined-report header is
+preserved only as an unverified historical declaration.
+
+Several legacy annotations still contain `commit: "main"` and placeholder
+PDF hashes. New development runs warn about these inputs. For a frozen
+benchmark, supply real full repository SHAs and PDF hashes, then run:
+
+```bash
+python evaluation/evaluate_retrieval.py --require-reproducible
+python evaluation/evaluate_verification.py --require-reproducible
+python evaluation/report.py --require-provenance
+```
+
+A pinned annotation whose SHA differs from the indexed clone is rejected
+even in development mode; repository-ID overrides cannot silently point
+at a different project. `--require-reproducible` also refuses unknown or
+dirty clone states. This input gate does not promise deterministic model
+outputs or validate PDF bytes that the curated-claim evaluator never reads.
+`--require-provenance` refuses missing, mixed or unfrozen result provenance
+instead of producing a falsely unified comparison.
+
+`--resume` requires the same code, model, settings, annotations and clone
+revisions as the run's `verification_run.json` sidecar; legacy JSONL files
+without that identity cannot be resumed. `--regrade` retains the original
+inference identity and label, records a separate grading identity, and
+leaves unknown historical inference metadata unknown. Regrading old
+predictions never means that the current model or verifier has been rerun.
+
 ### What the verification metrics mean
 
-- **Status accuracy** — exact match with `expected_verification`.
-- **Support rate** — every annotated claim is implemented in its repo, so
-  VERIFIED or PARTIALLY_VERIFIED counts as supported.
+- **Status accuracy** — exact match with `expected_verification` on the
+  labels present in the selected data, accompanied by majority baseline.
+- **Support rate** — the proportion predicted VERIFIED or
+  PARTIALLY_VERIFIED; a descriptive rate, not accuracy.
 - **Discrepancy precision / recall** — claim level: annotated positive when
-  `expected_verification` is PARTIALLY_VERIFIED (the mismatch is recorded in
-  `notes`), predicted positive when the verdict is PARTIALLY_VERIFIED or
-  CONTRADICTED.
+  `expected_verification` is PARTIALLY_VERIFIED or CONTRADICTED (the
+  mismatch is recorded in `notes`), predicted positive when the verdict is
+  PARTIALLY_VERIFIED or CONTRADICTED.
 - **Grounding rate** — the cited code exists in the cited file. A quote is
   split at line breaks and `...` elisions and every fragment must occur
   verbatim (whitespace and `\` line continuations ignored), so skipped or
@@ -57,8 +110,8 @@ gate, which catches partial redactions.
 
 Phase 0: empty layout.
 Phase 1+: wire annotation schema.
-Phase 5: ✅ retrieval evaluator — 7 hand-labelled (paper, repo) pairs
-  in `annotations/` (attention, BERT, LoRA, MAE, DDIM, Reflexion, DPO) + `baselines/{embedding_only,lexical_only,
+Phase 5: ✅ retrieval evaluator — 8 hand-labelled (paper, repo) pairs
+  in `annotations/` (attention, BERT, LoRA, MAE, DDIM, DDPM, Reflexion, DPO) + `baselines/{embedding_only,lexical_only,
   hybrid_claim2code}.py` + `evaluate_retrieval.py`. Run via
   `make eval-retrieval` (requires live Postgres + OpenAI).
 Phase 6: ✅ verifier implemented — 4-status output
@@ -68,8 +121,8 @@ Phase 6: ✅ verifier implemented — 4-status output
   metrics) + LLMClient.verdict_for_claim residual. Acceptance
   rule (`paper_evidence AND code_evidence OR UNVERIFIED`) is
   enforced as the structural guard in `compose_verification`.
-  106 unit tests + 1 opt-in integration test cover the
-  pipeline. Wiring `evaluate_verification.py` is Phase 10's job.
+  Unit and opt-in integration tests cover the pipeline;
+  `evaluate_verification.py` supplies the curated-claim evaluation.
 Phase 7: ✅ related-work pipeline — SemanticScholarClient primary +
   OpenAlexClient fallback, 4-leg linear-combination ranker
   (semantic / recency / citation / method_overlap),
@@ -90,8 +143,9 @@ Phase 8: ✅ responsible-AI safety gate — `SafetyGate` wraps every
   `AnalysisState.errors` with `{stage, kind, pattern, span_count,
   ts}` — no content persisted. 57 adversarial tests
   (`pytest -m safety`); new CI job `backend-safety` gates
-  Phase 8. Wiring `evaluate_safety.py` (secret-leak + injection-
-  block rate vs target 100%) is Phase 10's job.
+  Phase 8. `evaluate_safety.py` measures secret protection and
+  injection detection, including held-out failures; detection does
+  not establish that a malicious instruction was blocked.
 Phase 9: ✅ OpenTelemetry spans + per-step metrics. Every workflow
   call opens a root span (`paper_workflow.run`,
   `verification_workflow.run`, `related_work_workflow.run`); child

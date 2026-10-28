@@ -83,4 +83,15 @@ describe("CitedPaper", () => {
     );
     expect(screen.getByTestId("paper-citation")).toHaveTextContent(evidence.quote);
   });
+
+  it("rejects a malformed image response and keeps the recorded quote", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(excerpt({ image: "https://other.example/image.png" }))));
+    render(<CitedPaper analysisId={analysisId} evidence={evidence} />);
+
+    expect(await screen.findByTestId("paper-excerpt-error")).toHaveTextContent(
+      "Invalid paper excerpt response",
+    );
+    expect(screen.queryByTestId("paper-excerpt")).not.toBeInTheDocument();
+    expect(screen.getByTestId("paper-citation")).toHaveTextContent(evidence.quote);
+  });
 });

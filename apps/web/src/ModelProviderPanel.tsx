@@ -37,6 +37,7 @@ export default function ModelProviderPanel() {
   const [test, setTest] = useState<TestState>({ kind: "idle" });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [managementToken, setManagementToken] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -62,6 +63,9 @@ export default function ModelProviderPanel() {
 
   const presets = Object.fromEntries(view.presets.map((p) => [p.id, p]));
   const preset: ProviderPreset | undefined = form ? presets[form.provider_id] : undefined;
+  const managementEnabled = view.management?.enabled === true;
+  const authRequired = view.management?.auth_required === true;
+  const fixedEndpoint = preset && !preset.local && preset.id !== "custom";
 
   function startEditing() {
     if (!view) return;
@@ -91,7 +95,7 @@ export default function ModelProviderPanel() {
   async function runTest() {
     if (!form) return;
     setTest({ kind: "running" });
-    const result = await testProvider(form);
+    const result = await testProvider(form, managementToken);
     if (!result.ok) setTest({ kind: "failed", error: result.error });
     else if (!result.test.ok) setTest({ kind: "failed", error: result.test.error ?? "failed" });
     else setTest({ kind: "ok", latencyMs: result.test.latency_ms });
@@ -101,7 +105,7 @@ export default function ModelProviderPanel() {
     if (!form) return;
     setSaving(true);
     setSaveError(null);
-    const result = await setProvider(form);
+    const result = await setProvider(form, managementToken);
     setSaving(false);
     if (!result.ok) {
       setSaveError(result.error);
@@ -109,6 +113,8 @@ export default function ModelProviderPanel() {
     }
     setView(result.view);
     setOpen(false);
+    setForm(null);
+    setManagementToken("");
   }
 
   return (
@@ -129,7 +135,7 @@ export default function ModelProviderPanel() {
             .env — changing it means re-indexing repositories)
           </p>
         </div>
-        {!open && (
+        {!open && managementEnabled && (
           <button
             type="button"
             onClick={startEditing}
@@ -141,8 +147,30 @@ export default function ModelProviderPanel() {
         )}
       </div>
 
-      {open && form && preset && (
+      {!managementEnabled && (
+        <p className="mt-2 text-xs text-slate-500" data-testid="provider-read-only">
+          Model settings are read-only on this server.
+        </p>
+      )}
+
+      {managementEnabled && open && form && preset && (
         <div className="mt-4 space-y-3 border-t border-slate-100 pt-4" data-testid="provider-form">
+          {authRequired && (
+            <label className="block">
+              <span className="text-xs font-medium text-slate-600">Management token</span>
+              <input
+                type="password"
+                autoComplete="off"
+                value={managementToken}
+                onChange={(e) => setManagementToken(e.target.value)}
+                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono"
+                data-testid="provider-management-token"
+              />
+              <span className="mt-1 block text-xs text-slate-500">
+                Required by this server for model changes. Kept in memory until this form closes.
+              </span>
+            </label>
+          )}
           <label className="block">
             <span className="text-xs font-medium text-slate-600">Provider</span>
             <select
@@ -184,11 +212,17 @@ export default function ModelProviderPanel() {
             <input
               type="text"
               value={form.base_url}
+              readOnly={fixedEndpoint}
               onChange={(e) => update({ base_url: e.target.value })}
               placeholder="https://host/v1"
               className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono"
               data-testid="provider-base-url"
             />
+            {fixedEndpoint && (
+              <span className="mt-1 block text-xs text-slate-500">
+                This provider uses its configured endpoint.
+              </span>
+            )}
           </label>
 
           {(preset.needs_key || preset.id === "custom") && (
@@ -227,7 +261,7 @@ export default function ModelProviderPanel() {
             <button
               type="button"
               onClick={runTest}
-              disabled={test.kind === "running"}
+              disabled={test.kind === "running" || (authRequired && !managementToken.trim())}
               className="rounded-lg border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100 disabled:text-slate-400"
               data-testid="provider-test"
             >
@@ -236,7 +270,7 @@ export default function ModelProviderPanel() {
             <button
               type="button"
               onClick={save}
-              disabled={saving}
+              disabled={saving || (authRequired && !managementToken.trim())}
               className="rounded-lg bg-slate-900 px-3 py-1.5 font-medium text-white hover:bg-slate-700 disabled:bg-slate-400"
               data-testid="provider-save"
             >
@@ -244,7 +278,11 @@ export default function ModelProviderPanel() {
             </button>
             <button
               type="button"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false);
+                setForm(null);
+                setManagementToken("");
+              }}
               className="px-2 py-1.5 text-slate-500 hover:underline"
             >
               Cancel

@@ -203,7 +203,7 @@ def test_report_renders_available_sections_and_marks_missing(tmp_path, monkeypat
     combined, md = report.build()
     assert combined["retrieval"] is None
     assert "Not run (`retrieval.json` missing)" in md
-    assert "| Status accuracy (exact, 4-way) | 50.0% |" in md
+    assert "| Status accuracy (exact, on observed labels) | 50.0% |" in md
     assert "Skipped (repository not indexed): bert." in md
     assert "| c1 | clean | clean | role_injection |" in md
     json.dumps(combined)  # serialisable

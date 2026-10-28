@@ -11,7 +11,7 @@ ROOT="$(pwd)"
 if [ ! -f "$ROOT/.env" ]; then
     echo "› .env not found — copying from .env.example"
     cp "$ROOT/.env.example" "$ROOT/.env"
-    echo "› EDIT $ROOT/.env (set POSTGRES_PASSWORD and OPENAI_API_KEY) before running for real"
+    echo "› EDIT $ROOT/.env for database and local or hosted model access before live analysis"
 fi
 
 # 2. ensure data directories exist (for cloned repos / uploads / embeddings)
@@ -20,6 +20,10 @@ touch "$ROOT/data/repos/.gitkeep" "$ROOT/data/uploads/.gitkeep" "$ROOT/data/embe
 
 # 3. bring up the stack
 docker compose up -d --build
+
+# Run migrations from their actual working directory before declaring
+# the stack ready; SELECT 1 alone does not prove application tables exist.
+docker compose exec -T --workdir /app/api api alembic upgrade head
 
 echo ""
 echo "Claim2Code stack is up:"

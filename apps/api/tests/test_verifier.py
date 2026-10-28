@@ -95,6 +95,10 @@ def _sym_id():
     return uuid4()
 
 
+def _grounded_candidate(signature: str = "def train(learning_rate=5e-5): ...") -> RetrieveMatch:
+    return _candidate(signature).model_copy(update={"source": signature, "end_line": 1})
+
+
 def _llm_verdict(
     *,
     status: VerificationStatus = VerificationStatus.VERIFIED,
@@ -119,14 +123,14 @@ def _llm_verdict(
 
 
 def test_compose_verified_when_llm_verified_and_code_evidence() -> None:
-    sym_id = _sym_id()
+    cand = _grounded_candidate()
     ce = [CodeEvidence(
-        symbol_id=sym_id, file_path="m.py", start_line=1, end_line=10,
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
         quote="def train(learning_rate=5e-5): ...",
     )]
     out = compose_verification(
         claim=_claim(),
-        candidates=[_candidate()],
+        candidates=[cand],
         deterministic_discrepancies=[],
         llm_verdict=_llm_verdict(code_evidence=ce),
     )
@@ -135,9 +139,9 @@ def test_compose_verified_when_llm_verified_and_code_evidence() -> None:
 
 
 def test_compose_takes_the_file_path_from_the_cited_candidate() -> None:
-    cand = _candidate()
+    cand = _grounded_candidate()
     ce = [CodeEvidence(
-        symbol_id=cand.symbol_id, file_path="m.py:1-10", start_line=1, end_line=10,
+        symbol_id=cand.symbol_id, file_path="m.py:1", start_line=1, end_line=1,
         quote="def train(learning_rate=5e-5): ...",
     )]
     out = compose_verification(
@@ -145,6 +149,77 @@ def test_compose_takes_the_file_path_from_the_cited_candidate() -> None:
         llm_verdict=_llm_verdict(code_evidence=ce),
     )
     assert out.code_evidence[0].file_path == "m.py"
+
+
+@pytest.mark.parametrize("invalid", [
+    "unknown_symbol", "invented_quote", "wrong_lines", "reversed_lines",
+    "outside_symbol", "missing_source", "truncated_source", "context_only",
+    "blank_quote",
+])
+def test_compose_rejects_citations_not_grounded_at_the_cited_lines(invalid: str) -> None:
+    cand = _candidate().model_copy(update={
+        "start_line": 10, "end_line": 12,
+        "source": "def train():\n    lr = 5e-5\n    return lr",
+    })
+    citation = CodeEvidence(
+        symbol_id=cand.symbol_id, file_path=cand.file_path,
+        start_line=11, end_line=11, quote="lr = 5e-5",
+    )
+    if invalid == "unknown_symbol":
+        citation.symbol_id = _sym_id()
+    elif invalid == "invented_quote":
+        citation.quote = "optimizer = ImaginaryOptimizer()"
+    elif invalid == "wrong_lines":
+        citation.start_line = citation.end_line = 10
+    elif invalid == "reversed_lines":
+        citation.start_line, citation.end_line = 12, 11
+    elif invalid == "outside_symbol":
+        citation.start_line, citation.end_line = 1, 999
+    elif invalid == "missing_source":
+        cand.source = None
+    elif invalid == "truncated_source":
+        cand.source = "def train():"
+    elif invalid == "context_only":
+        cand.class_context = "lr = 5e-5"
+        cand.source = "def train():\n    pass\n    return None"
+    elif invalid == "blank_quote":
+        citation.quote = "   "
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[citation]),
+    )
+    assert out.status == VerificationStatus.UNVERIFIED
+    assert out.code_evidence == []
+    assert out.confidence == 0.0
+
+
+def test_compose_rejects_invented_citation_when_no_candidates_exist() -> None:
+    citation = CodeEvidence(
+        symbol_id=_sym_id(), file_path="does-not-exist.py",
+        start_line=999, end_line=1000, quote="invented code",
+    )
+    out = compose_verification(
+        claim=_claim(), candidates=[], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[citation]),
+    )
+    assert out.status == VerificationStatus.UNVERIFIED
+    assert not out.code_evidence
+
+
+def test_compose_retains_only_valid_unique_citations() -> None:
+    cand = _grounded_candidate()
+    valid = CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="copied-wrong.py",
+        start_line=1, end_line=1, quote="  def train(learning_rate=5e-5):   ... ",
+    )
+    unknown = valid.model_copy(update={"symbol_id": _sym_id()})
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[unknown, valid, valid]),
+    )
+    assert out.status == VerificationStatus.VERIFIED
+    assert len(out.code_evidence) == 1
+    assert out.code_evidence[0].file_path == cand.file_path
 
 
 def test_compose_unverified_when_llm_verified_but_no_code_evidence() -> None:
@@ -159,9 +234,10 @@ def test_compose_unverified_when_llm_verified_but_no_code_evidence() -> None:
 
 
 def test_compose_contradicted_when_high_severity_and_code_evidence() -> None:
-    sym_id = _sym_id()
+    cand = _grounded_candidate()
     ce = [CodeEvidence(
-        symbol_id=sym_id, file_path="m.py", start_line=1, end_line=10, quote="x",
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
     )]
     high = Discrepancy(
         type=DiscrepancyType.HYPERPARAMETER_MISMATCH,
@@ -170,7 +246,7 @@ def test_compose_contradicted_when_high_severity_and_code_evidence() -> None:
     )
     out = compose_verification(
         claim=_claim(),
-        candidates=[_candidate()],
+        candidates=[cand],
         deterministic_discrepancies=[high],
         llm_verdict=_llm_verdict(status=VerificationStatus.VERIFIED, code_evidence=ce),
     )
@@ -179,9 +255,10 @@ def test_compose_contradicted_when_high_severity_and_code_evidence() -> None:
 
 
 def test_compose_partial_when_medium_severity_and_code_evidence() -> None:
-    sym_id = _sym_id()
+    cand = _grounded_candidate()
     ce = [CodeEvidence(
-        symbol_id=sym_id, file_path="m.py", start_line=1, end_line=10, quote="x",
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
     )]
     medium = Discrepancy(
         type=DiscrepancyType.DATASET_MISMATCH,
@@ -190,7 +267,7 @@ def test_compose_partial_when_medium_severity_and_code_evidence() -> None:
     )
     out = compose_verification(
         claim=_claim(),
-        candidates=[_candidate()],
+        candidates=[cand],
         deterministic_discrepancies=[medium],
         llm_verdict=_llm_verdict(code_evidence=ce),
     )
@@ -199,8 +276,10 @@ def test_compose_partial_when_medium_severity_and_code_evidence() -> None:
 
 def test_compose_drops_llm_discrepancies_without_a_candidate_quote() -> None:
     """An LLM discrepancy must quote conflicting candidate code to count."""
+    cand = _grounded_candidate()
     ce = [CodeEvidence(
-        symbol_id=_sym_id(), file_path="m.py", start_line=1, end_line=10, quote="x",
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
     )]
     quoted = Discrepancy(
         type=DiscrepancyType.HYPERPARAMETER_MISMATCH,
@@ -225,7 +304,7 @@ def test_compose_drops_llm_discrepancies_without_a_candidate_quote() -> None:
     ).model_copy(update={"discrepancies": [quoted, silent, invented]})
     out = compose_verification(
         claim=_claim(),
-        candidates=[_candidate()],
+        candidates=[cand],
         deterministic_discrepancies=[],
         llm_verdict=verdict,
     )
@@ -235,8 +314,10 @@ def test_compose_drops_llm_discrepancies_without_a_candidate_quote() -> None:
 
 def test_compose_verified_once_unquoted_discrepancies_drop() -> None:
     """PARTIALLY_VERIFIED needs a surviving discrepancy (phase-6-design §2.5)."""
+    cand = _grounded_candidate()
     ce = [CodeEvidence(
-        symbol_id=_sym_id(), file_path="m.py", start_line=1, end_line=10, quote="x",
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
     )]
     silent = Discrepancy(
         type=DiscrepancyType.CONFIGURATION_MISMATCH,
@@ -248,7 +329,7 @@ def test_compose_verified_once_unquoted_discrepancies_drop() -> None:
     ).model_copy(update={"discrepancies": [silent]})
     out = compose_verification(
         claim=_claim(),
-        candidates=[_candidate()],
+        candidates=[cand],
         deterministic_discrepancies=[],
         llm_verdict=verdict,
     )
@@ -301,14 +382,15 @@ def test_compose_synthesises_explanation_when_llm_skipped() -> None:
 def test_extract_verdict_runs_deterministic_checkers() -> None:
     """A high-severity hp mismatch in the deterministic checkers
     turns a VERIFIED LLM verdict into CONTRADICTED."""
-    sym_id = _sym_id()
+    cand = _grounded_candidate(signature="def train(learning_rate=1e-3): ...")
     ce = [CodeEvidence(
-        symbol_id=sym_id, file_path="m.py", start_line=1, end_line=10, quote="x",
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
     )]
     out = extract_verdict(
         claim=_claim(),
         # 1e-3 vs 5e-5 → 20× ratio, multiplicative regime fails.
-        candidates=[_candidate(signature="def train(learning_rate=1e-3): ...")],
+        candidates=[cand],
         llm_verdict=_llm_verdict(code_evidence=ce),
     )
     assert any(d.severity == DiscrepancySeverity.HIGH for d in out.discrepancies)

@@ -202,6 +202,7 @@ export type ProvidersView = {
   active: { provider_id: string; label: string; model: string; base_url: string };
   presets: ProviderPreset[];
   embedding: { model: string; base_url: string; dim: number };
+  management?: { enabled: boolean; auth_required: boolean };
 };
 
 export type ProviderSelection = {
@@ -510,7 +511,13 @@ export async function getProviders(signal?: AbortSignal): Promise<ProvidersResul
     if (!response.ok) {
       return { ok: false, error: `HTTP ${response.status}` };
     }
-    return { ok: true, view: (await response.json()) as ProvidersView };
+    const view: unknown = await response.json();
+    if (!isObject(view) || !isObject(view.active) || !Array.isArray(view.presets)
+      || !isObject(view.embedding) || typeof view.active.model !== "string"
+      || typeof view.active.label !== "string") {
+      return { ok: false, error: "Invalid model settings response" };
+    }
+    return { ok: true, view: view as ProvidersView };
   } catch (err) {
     if (err instanceof Error) {
       return { ok: false, error: err.message };
@@ -519,10 +526,13 @@ export async function getProviders(signal?: AbortSignal): Promise<ProvidersResul
   }
 }
 
-async function postJson(path: string, body: unknown): Promise<Response> {
+async function postJson(path: string, body: unknown, managementToken?: string): Promise<Response> {
   return fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      ...(managementToken ? { Authorization: `Bearer ${managementToken}` } : {}),
+    },
     body: JSON.stringify(body),
   });
 }
@@ -538,9 +548,11 @@ async function errorDetail(response: Response): Promise<string> {
 }
 
 /** Switch the chat model. POST /llm/provider — the next LLM call uses it. */
-export async function setProvider(selection: ProviderSelection): Promise<ProvidersResult> {
+export async function setProvider(
+  selection: ProviderSelection, managementToken?: string,
+): Promise<ProvidersResult> {
   try {
-    const response = await postJson("/llm/provider", selection);
+    const response = await postJson("/llm/provider", selection, managementToken);
     if (!response.ok) {
       return { ok: false, error: await errorDetail(response) };
     }
@@ -555,9 +567,11 @@ export async function setProvider(selection: ProviderSelection): Promise<Provide
 
 /** Check a selection reaches its server, without switching to it.
  *  POST /llm/provider/test */
-export async function testProvider(selection: ProviderSelection): Promise<ProviderTestResult> {
+export async function testProvider(
+  selection: ProviderSelection, managementToken?: string,
+): Promise<ProviderTestResult> {
   try {
-    const response = await postJson("/llm/provider/test", selection);
+    const response = await postJson("/llm/provider/test", selection, managementToken);
     if (!response.ok) {
       return { ok: false, error: await errorDetail(response) };
     }
@@ -592,7 +606,11 @@ export async function getCodeExcerpt(
     if (!response.ok) {
       return { ok: false, error: await errorDetail(response) };
     }
-    return { ok: true, excerpt: (await response.json()) as CodeExcerpt };
+    const excerpt: unknown = await response.json();
+    if (!isCodeExcerpt(excerpt)) {
+      return { ok: false, error: "Invalid code excerpt response" };
+    }
+    return { ok: true, excerpt };
   } catch (err) {
     if (err instanceof Error) {
       return { ok: false, error: err.message };
@@ -628,13 +646,41 @@ export async function getPaperExcerpt(
     if (!response.ok) {
       return { ok: false, error: await errorDetail(response) };
     }
-    return { ok: true, excerpt: (await response.json()) as PaperExcerpt };
+    const excerpt: unknown = await response.json();
+    if (!isPaperExcerpt(excerpt)) {
+      return { ok: false, error: "Invalid paper excerpt response" };
+    }
+    return { ok: true, excerpt };
   } catch (err) {
     if (err instanceof Error) {
       return { ok: false, error: err.message };
     }
     return { ok: false, error: "unknown error" };
   }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isCodeExcerpt(value: unknown): value is CodeExcerpt {
+  return isObject(value)
+    && typeof value.file_path === "string"
+    && Number.isInteger(value.start_line) && Number.isInteger(value.end_line)
+    && Number.isInteger(value.total_lines)
+    && (value.url === null || typeof value.url === "string")
+    && Array.isArray(value.lines)
+    && value.lines.every((line: unknown) => isObject(line)
+      && Number.isInteger(line.number) && typeof line.text === "string");
+}
+
+function isPaperExcerpt(value: unknown): value is PaperExcerpt {
+  return isObject(value)
+    && Number.isInteger(value.page) && Number.isInteger(value.n_pages)
+    && typeof value.found === "boolean"
+    && typeof value.image === "string" && /^data:image\/(png|jpeg|webp);base64,/.test(value.image)
+    && typeof value.width === "number" && value.width > 0
+    && typeof value.height === "number" && value.height > 0;
 }
 
 export { API_BASE_URL };

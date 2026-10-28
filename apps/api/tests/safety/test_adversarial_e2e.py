@@ -1,10 +1,9 @@
 """Adversarial end-to-end tests for Phase 8 SafetyGate integration.
 
 These tests exercise the full ``LLMClient`` -> ``SafetyGate`` ->
-``chat.completions.create`` pipeline using a mocked OpenAI SDK. The
-gate is wired inside ``LLMClient.__init__``; we use ``LLMClient.__new__``
-to bypass the heavyweight SDK init (mirrors the pattern in
-``test_llm_client.py``, ``test_comparator.py``, ``test_verifier.py``).
+``chat.completions.create`` pipeline using a mocked provider backend.
+The real client constructor wires the safety gate and model settings;
+only the external provider boundary is replaced.
 
 Acceptance criteria (per ``docs/architecture/phase-8-design.md`` §5):
 
@@ -25,7 +24,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -42,7 +41,7 @@ from claim2code_api.repos.schemas import (
     CodeSymbolKind,
     RetrieveMatch,
 )
-from claim2code_api.safety import SafetyGate, SafetyViolation
+from claim2code_api.safety import SafetyViolation
 from claim2code_api.verification.schemas import (
     VerificationStatus,
 )
@@ -60,15 +59,11 @@ def _make_response(content: str) -> MagicMock:
 
 
 def _build_client(fake_openai: MagicMock) -> LLMClient:
-    """Build an LLMClient bypassing SDK init (mirrors test_llm_client)."""
-    client = LLMClient.__new__(LLMClient)
+    """Initialize the real client without constructing a network backend."""
     import claim2code_api.app.config as cfg
 
-    client._settings = cfg.get_settings()
-    client._client = fake_openai
-    client._gate = SafetyGate()
-    client._on_violations = None
-    return client
+    with patch("claim2code_api.llm.client.build_backend", return_value=fake_openai):
+        return LLMClient(cfg.get_settings())
 
 
 def _capturing_callback() -> tuple[

@@ -40,6 +40,7 @@ from sqlalchemy.orm import Session
 from claim2code_api.app.config import get_settings
 from claim2code_api.app.deps import get_db
 from claim2code_api.db.models import AnalysisState, Repository
+from claim2code_api.repos.storage import resolve_repo_file
 from claim2code_api.verification.exceptions import (
     VerificationConfigError,
     VerificationLLMError,
@@ -233,12 +234,12 @@ def get_code_excerpt(
     if repo is None:
         raise HTTPException(status_code=404, detail="no repository bound to this analysis")
     root = Path(repo.clone_path).resolve()
-    target = (root / file_path).resolve()
-    if not target.exists():
+    target = resolve_repo_file(root, file_path)
+    if target is None:
         # Verdicts stored before citation paths were taken from the
         # candidates may carry a line suffix ("m.py:12-30").
-        target = (root / re.sub(r":\d+(-\d+)?$", "", file_path)).resolve()
-    if not target.is_relative_to(root) or not target.is_file():
+        target = resolve_repo_file(root, re.sub(r":\d+(-\d+)?$", "", file_path))
+    if target is None:
         raise HTTPException(status_code=404, detail=f"{file_path} not found in the repository")
     if target.stat().st_size > get_settings().max_file_kb * 1024:
         raise HTTPException(status_code=413, detail=f"{file_path} is too large to show")

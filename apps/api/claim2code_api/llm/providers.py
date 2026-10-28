@@ -31,9 +31,11 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
+from ipaddress import ip_address
 from pathlib import Path
 from threading import Lock
 from typing import Literal
+from urllib.parse import urlsplit, urlunsplit
 
 from claim2code_api.app.config import _PROJECT_ROOT, Settings
 
@@ -221,6 +223,56 @@ def _settings_key(settings: Settings, preset: ProviderPreset) -> str:
     return str(getattr(settings, preset.key_setting) or "")
 
 
+def _validated_url(url: str) -> str:
+    """Reject credentials and non-HTTP schemes before constructing an SDK."""
+    try:
+        parsed = urlsplit(url)
+        port = parsed.port  # Validate malformed / out-of-range ports.
+        if (
+            parsed.scheme not in {"http", "https"} or not parsed.hostname
+            or parsed.username is not None or parsed.password is not None
+            or parsed.query or parsed.fragment
+        ):
+            raise ValueError
+    except ValueError:
+        raise ProviderError("base URL must be an HTTP(S) URL without credentials, query or fragment") from None
+    host = parsed.hostname.lower()
+    authority = f"[{host}]" if ":" in host else host
+    if port is not None:
+        authority += f":{port}"
+    return urlunsplit((parsed.scheme, authority, parsed.path.rstrip("/"), "", ""))
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _destination(settings: Settings, preset: ProviderPreset, requested: str) -> str:
+    configured = settings.openai_base_url if preset.id == "env" else preset.base_url
+    url = requested or configured or ""
+    if not url:
+        raise ProviderError(f"{preset.label}: a base URL is required")
+    validated = _validated_url(url)
+    if preset.id == "env" or preset.key_setting is not None:
+        # A server-held credential is scoped to its configured endpoint.
+        # Changing servers requires the custom preset and an explicit key.
+        if requested and validated != _validated_url(configured or ""):
+            raise ProviderError(f"{preset.label}: its configured base URL cannot be overridden; use custom")
+    elif preset.local:
+        if not _is_loopback_host(urlsplit(validated).hostname or ""):
+            raise ProviderError(f"{preset.label}: the base URL must use a loopback host")
+    elif urlsplit(validated).scheme != "https" and not _is_loopback_host(
+        urlsplit(validated).hostname or "",
+    ):
+        raise ProviderError("custom servers require HTTPS, except on loopback")
+    return validated
+
+
 def resolve(
     settings: Settings,
     *,
@@ -235,15 +287,9 @@ def resolve(
         model or API key is missing.
     """
     preset = get_preset(preset_id)
-    if preset.id == "env":
-        url = base_url or settings.openai_base_url
-        name = model or settings.openai_model_chat
-    else:
-        url = base_url or preset.base_url or ""
-        name = model or preset.default_model
+    name = model or (settings.openai_model_chat if preset.id == "env" else preset.default_model)
+    url = _destination(settings, preset, base_url)
     key = api_key or _settings_key(settings, preset)
-    if not url:
-        raise ProviderError(f"{preset.label}: a base URL is required")
     if not name:
         raise ProviderError(f"{preset.label}: a model name is required")
     if preset.key_setting is not None and preset.id != "env" and not key:
@@ -297,7 +343,11 @@ def select(
     global _selection
     with _lock:
         sel = _current()
-        if not api_key and sel.preset_id == preset_id:
+        target = _destination(settings, get_preset(preset_id), base_url)
+        same_destination = sel.preset_id == preset_id and (
+            _destination(settings, get_preset(sel.preset_id), sel.base_url) == target
+        )
+        if not api_key and same_destination:
             api_key = sel.api_key
         resolved = resolve(
             settings, preset_id=preset_id, model=model, base_url=base_url, api_key=api_key,
@@ -315,11 +365,16 @@ def select(
     return resolved
 
 
-def session_key(preset_id: str) -> str:
+def session_key(settings: Settings, preset_id: str, base_url: str = "") -> str:
     """A key entered in the UI this session for ``preset_id``, if any."""
     with _lock:
         sel = _current()
-        return sel.api_key if sel.preset_id == preset_id else ""
+        if sel.preset_id != preset_id:
+            return ""
+        preset = get_preset(preset_id)
+        if _destination(settings, preset, base_url) != _destination(settings, preset, sel.base_url):
+            return ""
+        return sel.api_key
 
 
 def describe(settings: Settings) -> dict[str, object]:
@@ -349,6 +404,12 @@ def describe(settings: Settings) -> dict[str, object]:
             "note": p.note,
         })
     return {
+        "management": {
+            "enabled": not settings.api_read_only and (
+                bool(settings.llm_management_token) or settings.llm_management_allow_local
+            ),
+            "auth_required": bool(settings.llm_management_token),
+        },
         "active": {
             "provider_id": current.preset_id,
             "label": current.label,

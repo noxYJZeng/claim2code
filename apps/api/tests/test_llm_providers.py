@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -29,7 +30,7 @@ def _settings(**overrides) -> Settings:
         openai_model_chat="local-model",
         anthropic_api_key="",
     )
-    return Settings(_env_file=None, **{**base, **overrides})
+    return Settings(**{**base, **overrides})
 
 
 def _resolved(kind="openai_compat", json_mode="schema") -> providers.ResolvedProvider:
@@ -76,7 +77,7 @@ def test_resolve_requires_a_key_url_and_model() -> None:
     with pytest.raises(providers.ProviderError, match="base URL"):
         providers.resolve(s, preset_id="custom", model="m")
     with pytest.raises(providers.ProviderError, match="model name"):
-        providers.resolve(s, preset_id="custom", base_url="http://h/v1")
+        providers.resolve(s, preset_id="custom", base_url="https://h/v1")
     with pytest.raises(providers.ProviderError, match="unknown provider"):
         providers.resolve(s, preset_id="nope")
     # Keyless local servers still get a placeholder the OpenAI SDK accepts.
@@ -86,7 +87,7 @@ def test_resolve_requires_a_key_url_and_model() -> None:
 def test_describe_never_returns_keys() -> None:
     s = _settings(anthropic_api_key="sk-ant-from-env")
     providers.select(s, preset_id="deepseek", api_key="sk-deepseek-session")
-    view = providers.describe(s)
+    view = cast(dict[str, Any], providers.describe(s))
     text = json.dumps(view)
     assert "sk-ant-from-env" not in text and "sk-deepseek-session" not in text
     by_id = {p["id"]: p for p in view["presets"]}
@@ -208,8 +209,8 @@ def client(monkeypatch):
     from claim2code_api.app.main import create_app
     from claim2code_api.llm import router as router_mod
 
-    monkeypatch.setattr(router_mod, "get_settings", lambda: _settings())
-    return TestClient(create_app())
+    monkeypatch.setattr(router_mod, "get_settings", lambda: _settings(llm_management_allow_local=True))
+    return TestClient(create_app(), client=("127.0.0.1", 50000))
 
 
 def test_routes_list_select_and_reject_incomplete_choices(client) -> None:
@@ -238,3 +239,119 @@ def test_route_test_reports_failure_without_switching(client, monkeypatch) -> No
     res = client.post("/llm/provider/test", json={"provider_id": "ollama"}).json()
     assert res["ok"] is False and "refused" in res["error"]
     assert client.get("/llm/providers").json()["active"]["provider_id"] == "env"
+
+
+@pytest.mark.parametrize("preset", ["openai", "anthropic", "gemini", "deepseek", "openrouter", "env"])
+def test_saved_credentials_cannot_be_routed_to_another_server(preset) -> None:
+    settings = _settings(
+        openai_platform_api_key="SENTINEL_OPENAI", anthropic_api_key="SENTINEL_ANTHROPIC",
+        gemini_api_key="SENTINEL_GEMINI", deepseek_api_key="SENTINEL_DEEPSEEK",
+        openrouter_api_key="SENTINEL_OPENROUTER",
+    )
+    with pytest.raises(providers.ProviderError, match="cannot be overridden"):
+        providers.resolve(settings, preset_id=preset, model="test", base_url="https://attacker.invalid/v1")
+
+
+def test_custom_does_not_inherit_configured_or_other_endpoint_keys() -> None:
+    settings = _settings(openai_platform_api_key="SENTINEL_CONFIGURED")
+    assert providers.resolve(
+        settings, preset_id="custom", model="test", base_url="https://custom.invalid/v1",
+    ).api_key == "not-needed"
+    providers.select(
+        settings, preset_id="custom", model="test", base_url="https://first.invalid/v1",
+        api_key="SENTINEL_SESSION",
+    )
+    assert providers.session_key(settings, "custom", "https://second.invalid/v1") == ""
+    assert providers.select(
+        settings, preset_id="custom", model="test", base_url="https://second.invalid/v1",
+    ).api_key == "not-needed"
+
+
+@pytest.mark.parametrize("url", [
+    "file:///etc/passwd", "https://user:password@host.invalid/v1",
+    "https://host.invalid/v1?token=value", "https://host.invalid/v1#fragment",
+    "http://remote.invalid/v1", "https://host.invalid:bad/v1",
+])
+def test_custom_url_validation(url) -> None:
+    with pytest.raises(providers.ProviderError):
+        providers.resolve(_settings(), preset_id="custom", model="test", base_url=url)
+
+
+@pytest.mark.parametrize("preset", ["lmstudio", "ollama"])
+def test_local_presets_only_accept_loopback_servers(preset) -> None:
+    with pytest.raises(providers.ProviderError, match="loopback"):
+        providers.resolve(_settings(), preset_id=preset, base_url="https://remote.invalid/v1")
+    assert providers.resolve(
+        _settings(), preset_id=preset, base_url="http://127.0.0.1:1234/v1",
+    ).base_url == "http://127.0.0.1:1234/v1"
+
+
+@pytest.mark.parametrize("path", ["/llm/provider", "/llm/provider/test"])
+def test_provider_management_is_disabled_by_default(path, monkeypatch) -> None:
+    from claim2code_api.app.main import create_app
+    from claim2code_api.llm import router as router_mod
+
+    monkeypatch.setattr(router_mod, "get_settings", _settings)
+    backend = MagicMock()
+    monkeypatch.setattr(router_mod, "build_backend", backend)
+    client = TestClient(create_app(), client=("127.0.0.1", 50000))
+    response = client.post(path, json={"provider_id": "ollama"})
+    assert response.status_code == 403
+    backend.assert_not_called()
+    assert client.get("/llm/providers").json()["management"] == {
+        "enabled": False, "auth_required": False,
+    }
+
+
+def test_local_opt_in_does_not_trust_forwarded_or_host_headers(monkeypatch) -> None:
+    from claim2code_api.app.main import create_app
+    from claim2code_api.llm import router as router_mod
+
+    monkeypatch.setattr(router_mod, "get_settings", lambda: _settings(llm_management_allow_local=True))
+    client = TestClient(create_app(), client=("203.0.113.10", 50000))
+    response = client.post(
+        "/llm/provider", json={"provider_id": "ollama"},
+        headers={"host": "localhost", "x-forwarded-for": "127.0.0.1"},
+    )
+    assert response.status_code == 403
+
+
+def test_admin_token_is_required_even_when_local_mode_is_enabled(monkeypatch) -> None:
+    from claim2code_api.app.main import create_app
+    from claim2code_api.llm import router as router_mod
+
+    settings = _settings(llm_management_token="SENTINEL_ADMIN", llm_management_allow_local=True)
+    monkeypatch.setattr(router_mod, "get_settings", lambda: settings)
+    backend = MagicMock()
+    monkeypatch.setattr(router_mod, "build_backend", lambda *_a, **_k: backend)
+    client = TestClient(create_app(), client=("127.0.0.1", 50000))
+    payload = {"provider_id": "ollama"}
+    assert client.post("/llm/provider/test", json=payload).status_code == 401
+    assert client.post(
+        "/llm/provider/test", json=payload, headers={"Authorization": "Bearer incorrect"},
+    ).status_code == 401
+    backend.ping.assert_not_called()
+    response = client.post(
+        "/llm/provider/test", json=payload, headers={"Authorization": "Bearer SENTINEL_ADMIN"},
+    )
+    assert response.status_code == 200 and response.json()["ok"]
+    assert "SENTINEL_ADMIN" not in client.get("/llm/providers").text
+    assert client.get("/llm/providers").json()["management"] == {
+        "enabled": True, "auth_required": True,
+    }
+
+
+def test_authorized_probe_rejects_endpoint_override_before_building_sdk(client, monkeypatch) -> None:
+    from claim2code_api.llm import router as router_mod
+
+    monkeypatch.setattr(router_mod, "get_settings", lambda: _settings(
+        llm_management_allow_local=True, openai_platform_api_key="SENTINEL_SERVER",
+    ))
+    backend = MagicMock()
+    monkeypatch.setattr(router_mod, "build_backend", backend)
+    response = client.post("/llm/provider/test", json={
+        "provider_id": "openai", "base_url": "https://attacker.invalid/v1",
+    })
+    assert response.status_code == 422
+    assert "SENTINEL_SERVER" not in response.text
+    backend.assert_not_called()

@@ -46,7 +46,7 @@ function json(body: unknown, status: number = 200): Response {
   });
 }
 
-// Routes the panel's three calls; POSTs answer with `postVerdict`.
+// Include citation routes mounted when verdict details are expanded.
 function stubApi(
   stored: object[],
   postVerdict: (claimId: string) => Response = (id) =>
@@ -54,6 +54,21 @@ function stubApi(
 ) {
   const posts: string[][] = [];
   const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith("/code")) {
+      return Promise.resolve(json({
+        file_path: "diffusion_tf/utils.py", start_line: 12, end_line: 14,
+        total_lines: 20,
+        lines: [{ number: 12, text: "betas = np.linspace(beta_start, beta_end, n)" }],
+        url: null,
+      }));
+    }
+    if (path.endsWith("/paper/excerpt")) {
+      return Promise.resolve(json({
+        page: 3, n_pages: 10, found: true,
+        image: "data:image/png;base64,AAAA", width: 600, height: 300,
+      }));
+    }
     if (url.endsWith("/claims")) {
       return Promise.resolve(json({ analysis_id: analysisId, claims }));
     }
@@ -62,7 +77,10 @@ function stubApi(
       posts.push(ids);
       return Promise.resolve(postVerdict(ids[0]));
     }
-    return Promise.resolve(json({ analysis_id: analysisId, verifications: stored }));
+    if (path.endsWith("/verifications")) {
+      return Promise.resolve(json({ analysis_id: analysisId, verifications: stored }));
+    }
+    return Promise.reject(new Error(`Unexpected request: ${url}`));
   });
   vi.stubGlobal("fetch", fetchMock);
   return posts;
@@ -137,6 +155,10 @@ describe("VerificationPanel", () => {
     expect(details).toHaveTextContent("Explanation for C1.");
     expect(details).toHaveTextContent("Paper says 1e-4, code defaults to 1e-3.");
     expect(screen.getByTestId("code-citation")).toHaveTextContent("diffusion_tf/utils.py:12-14");
+    expect(await screen.findByTestId("code-excerpt")).toHaveTextContent("betas = np.linspace");
+    expect(await screen.findByTestId("paper-excerpt")).toHaveAttribute(
+      "src", "data:image/png;base64,AAAA",
+    );
   });
 
   it("renders the load error", async () => {

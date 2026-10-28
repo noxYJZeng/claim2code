@@ -1,5 +1,8 @@
 {
   "environment": {
+    "report_generated_at": "2026-10-28T03:06:58+00:00"
+  },
+  "legacy_reported_environment": {
     "generated_at": "2026-10-27T22:43:30+00:00",
     "git_commit": "0aa09dc",
     "chat_model": "qwen3.8-27b-mlx",
@@ -3834,5 +3837,10 @@
         "passed": true
       }
     ]
-  }
+  },
+  "provenance_warnings": [
+    "retrieval: legacy output has no per-run measurement provenance",
+    "verification: legacy output has no per-run measurement provenance",
+    "safety: legacy output has no per-run measurement provenance"
+  ]
 }

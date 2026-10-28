@@ -53,6 +53,14 @@ from claim2code_api.repos.workflow import (
 # ============================================================
 
 
+@pytest.fixture(autouse=True)
+def stub_embedding_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep repo workflow unit tests independent of external model servers."""
+    monkeypatch.setattr(
+        "claim2code_api.repos.workflow.embed_and_persist_symbols", MagicMock(),
+    )
+
+
 @pytest.fixture
 def engine():
     """In-memory SQLite engine with the Phase 3 schema migrated.

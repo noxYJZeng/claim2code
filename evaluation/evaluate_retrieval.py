@@ -41,8 +41,11 @@ Run requirements
     the lookup (see :func:`resolve_repo_ids`). Pairs whose repo is
     not indexed are skipped.
 """
+# Imports below bootstrap the repository-root CLI entry point.
+# ruff: noqa: E402
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import statistics
@@ -60,9 +63,10 @@ for _p in (_REPO_ROOT, _REPO_ROOT / "apps" / "api"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from claim2code_api.db.models import Base
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
+
+from claim2code_api.db.models import Base
 
 # Baselines are imported AFTER sys.path setup.
 from evaluation.baselines import (
@@ -70,6 +74,7 @@ from evaluation.baselines import (
     hybrid_claim2code,
     lexical_only,
 )
+from evaluation.provenance import capture, finish, repository_snapshot, require_frozen
 
 logger = logging.getLogger("claim2code.eval.retrieval")
 
@@ -329,12 +334,13 @@ def evaluate_all(
     *,
     repo_ids: dict[str, str] | None = None,
     top_k: int = 5,
+    annotations: list[dict[str, Any]] | None = None,
 ) -> list[BaselineMetrics]:
     """Run all baselines × all annotations, return flat list of metrics."""
-    annotations = _load_annotations()
-    SessionLocal = _build_session_factory()
+    annotations = _load_annotations() if annotations is None else annotations
+    session_factory = _build_session_factory()
     if repo_ids is None:
-        with SessionLocal() as db:
+        with session_factory() as db:
             repo_ids = resolve_repo_ids(db, annotations)
     out: list[BaselineMetrics] = []
 
@@ -345,7 +351,7 @@ def evaluate_all(
             logger.warning("skipping pair_id=%s (repository not indexed)", pair_id)
             continue
         repo_id = UUID(repo_id_str)
-        with SessionLocal() as db:
+        with session_factory() as db:
             for baseline in BASELINES:
                 m = evaluate_baseline_on_dataset(
                     db=db,
@@ -410,15 +416,15 @@ def _render_report_md(metrics: list[BaselineMetrics]) -> str:
         lines.append("| Baseline          | Recall@1 | Recall@5 | MRR     |")
         lines.append("|-------------------|----------|----------|---------|")
         for baseline in [b.NAME for b in BASELINES]:
-            m = by_baseline.get(baseline)
-            if m is None:
+            metric = by_baseline.get(baseline)
+            if metric is None:
                 lines.append(f"| {baseline:<17} | (no data) | (no data) | (no data) |")
                 continue
             lines.append(
                 f"| {baseline:<17} "
-                f"| {m.recall_at_1:<8.2f} "
-                f"| {m.recall_at_5:<8.2f} "
-                f"| {m.mrr:<7.3f} |"
+                f"| {metric.recall_at_1:<8.2f} "
+                f"| {metric.recall_at_5:<8.2f} "
+                f"| {metric.mrr:<7.3f} |"
             )
         lines.append("")
 
@@ -426,11 +432,11 @@ def _render_report_md(metrics: list[BaselineMetrics]) -> str:
     lines.append("")
     lines.append("| Baseline          | Avg R@1  | Avg R@5  | Avg MRR  |")
     lines.append("|-------------------|----------|----------|----------|")
-    by_baseline: dict[str, list[BaselineMetrics]] = {}
+    baseline_rows: dict[str, list[BaselineMetrics]] = {}
     for m in metrics:
-        by_baseline.setdefault(m.baseline, []).append(m)
+        baseline_rows.setdefault(m.baseline, []).append(m)
     for baseline in [b.NAME for b in BASELINES]:
-        ms = by_baseline.get(baseline, [])
+        ms = baseline_rows.get(baseline, [])
         if not ms:
             lines.append(f"| {baseline:<17} | (no data) | (no data) | (no data) |")
             continue
@@ -444,15 +450,38 @@ def _render_report_md(metrics: list[BaselineMetrics]) -> str:
     return "\n".join(lines)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Entry point. Returns process exit code (0 success)."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    metrics = evaluate_all()
+    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
+    parser.add_argument("--require-reproducible", action="store_true",
+                        help="require frozen annotation/clone inputs; does not verify model weight revisions")
+    args = parser.parse_args(argv)
+    annotations = _load_annotations()
+    session_factory = _build_session_factory()
+    try:
+        with session_factory() as db:
+            repo_ids = resolve_repo_ids(db, annotations)
+            repositories = repository_snapshot(db, annotations, repo_ids)
+        meta = capture(
+            "retrieval", annotations=annotations, repositories=repositories,
+            parameters={"top_k": 5, "baselines": [b.NAME for b in BASELINES]}, models=True,
+        )
+        if args.require_reproducible:
+            require_frozen(meta)
+    except ValueError as exc:
+        logger.error("%s", exc)
+        return 2
+    for issue in meta["reproducibility_issues"]:
+        logger.warning("development evaluation: %s", issue)
+    metrics = evaluate_all(repo_ids=repo_ids, annotations=annotations)
     if not metrics:
         logger.error("no annotated pair has an indexed repository")
         return 2
     RESULTS_DIR.mkdir(exist_ok=True)
-    RESULTS_JSON.write_text(json.dumps(_render_results_json(metrics), indent=2))
+    RESULTS_JSON.write_text(json.dumps({
+        **_render_results_json(metrics), "provenance": finish(meta),
+    }, indent=2))
     logger.info("wrote %s", RESULTS_JSON)
     return 0
 

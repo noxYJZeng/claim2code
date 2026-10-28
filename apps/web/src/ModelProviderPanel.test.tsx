@@ -26,6 +26,7 @@ function preset(id: string, label: string, extra: object = {}) {
 }
 
 const view = {
+  management: { enabled: true, auth_required: false },
   active: {
     provider_id: "lmstudio",
     label: "LM Studio (local)",
@@ -53,20 +54,20 @@ function json(body: unknown, status: number = 200): Response {
   });
 }
 
-function stubApi(handlers: { test?: () => Response; save?: () => Response } = {}) {
-  const posts: { path: string; body: Record<string, string> }[] = [];
+function stubApi(handlers: { test?: () => Response; save?: () => Response; view?: object } = {}) {
+  const posts: { path: string; body: Record<string, string>; headers: HeadersInit | undefined }[] = [];
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (init?.method === "POST") {
         const path = new URL(url).pathname;
-        posts.push({ path, body: JSON.parse(init.body as string) });
+        posts.push({ path, body: JSON.parse(init.body as string), headers: init.headers });
         if (path === "/llm/provider/test") {
           return Promise.resolve(handlers.test?.() ?? json({ ok: true, latency_ms: 42 }));
         }
-        return Promise.resolve(handlers.save?.() ?? json(view));
+        return Promise.resolve(handlers.save?.() ?? json(handlers.view ?? view));
       }
-      return Promise.resolve(json(view));
+      return Promise.resolve(json(handlers.view ?? view));
     }),
   );
   return posts;
@@ -80,6 +81,34 @@ describe("ModelProviderPanel", () => {
       "LM Studio (local) · qwen3.8-27b-mlx",
     );
     expect(screen.getByTestId("provider-panel")).toHaveTextContent("nomic-embed");
+  });
+
+  it("keeps disabled or older server configurations read-only", async () => {
+    stubApi({ view: { ...view, management: undefined } });
+    render(<ModelProviderPanel />);
+
+    expect(await screen.findByTestId("provider-read-only")).toBeInTheDocument();
+    expect(screen.queryByTestId("provider-change")).not.toBeInTheDocument();
+  });
+
+  it("sends the management token only in authorization headers and clears it on close", async () => {
+    const posts = stubApi({ view: { ...view, management: { enabled: true, auth_required: true } } });
+    render(<ModelProviderPanel />);
+    fireEvent.click(await screen.findByTestId("provider-change"));
+    expect(screen.getByTestId("provider-test")).toBeDisabled();
+    fireEvent.change(screen.getByTestId("provider-management-token"), { target: { value: "local-admin-test" } });
+    fireEvent.click(screen.getByTestId("provider-test"));
+    await screen.findByTestId("provider-test-result");
+    fireEvent.click(screen.getByTestId("provider-save"));
+    await waitFor(() => expect(screen.queryByTestId("provider-form")).not.toBeInTheDocument());
+
+    for (const post of posts) {
+      expect(new Headers(post.headers).get("Authorization")).toBe("Bearer local-admin-test");
+      expect(JSON.stringify(post.body)).not.toContain("local-admin-test");
+    }
+    expect(window.localStorage.getItem("managementToken")).toBeNull();
+    fireEvent.click(screen.getByTestId("provider-change"));
+    expect(screen.getByTestId("provider-management-token")).toHaveValue("");
   });
 
   it("switching provider fills its defaults and asks for a key", async () => {

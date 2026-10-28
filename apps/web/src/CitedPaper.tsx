@@ -26,7 +26,10 @@ export default function CitedPaper({ analysisId, evidence }: CitedPaperProps) {
 
   useEffect(() => {
     const controller = new AbortController();
+    setExcerpt(null);
+    setError(null);
     getPaperExcerpt(analysisId, evidence, full, controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
       if (controller.signal.aborted) return;
       if (result.ok) {
         setExcerpt(result.excerpt);

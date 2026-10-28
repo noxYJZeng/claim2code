@@ -71,20 +71,43 @@ def extract_verdict(
     )
 
 
-def _with_candidate_paths(
+def _validated_code_evidence(
     evidence: list[CodeEvidence], candidates: list[RetrieveMatch],
 ) -> list[CodeEvidence]:
-    """Take each citation's file path from the candidate it cites.
+    """Keep citations whose quotes occur at the stated source lines.
 
-    The LLM copies the path by hand and small models garble it (e.g.
-    ``"utils.py:128-168"``); the cited symbol's own path is the truth.
+    Candidates are populated from the clone by the workflow. Signatures,
+    docstrings and free-form setup/callee context cannot establish a file
+    location on their own. Missing source therefore fails closed. The
+    candidate's canonical path repairs a model's copied path only after
+    its symbol, line range and quote have been checked.
     """
-    paths = {c.symbol_id: c.file_path for c in candidates}
-    return [
-        e.model_copy(update={"file_path": paths[e.symbol_id]})
-        if e.symbol_id in paths and paths[e.symbol_id] != e.file_path else e
-        for e in evidence
-    ]
+    by_id = {c.symbol_id: c for c in candidates}
+    valid: list[CodeEvidence] = []
+    seen = set()
+    for citation in evidence:
+        candidate = by_id.get(citation.symbol_id)
+        if candidate is None or not candidate.source:
+            continue
+        if not (
+            candidate.start_line <= citation.start_line
+            <= citation.end_line <= candidate.end_line
+        ):
+            continue
+        lines = candidate.source.splitlines()
+        first = citation.start_line - candidate.start_line
+        last = citation.end_line - candidate.start_line + 1
+        if last > len(lines):
+            continue
+        quote = _squash(citation.quote)
+        if not quote or quote not in _squash("\n".join(lines[first:last])):
+            continue
+        identity = (citation.symbol_id, citation.start_line, citation.end_line, quote)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        valid.append(citation.model_copy(update={"file_path": candidate.file_path}))
+    return valid
 
 
 def compose_verification(
@@ -114,8 +137,10 @@ def compose_verification(
     synthesise one from the discrepancies ("Claim X; Y
     discrepancies found; no LLM verdict").
     """
+    submitted_evidence = llm_verdict.code_evidence if llm_verdict else []
+    code_evidence = _validated_code_evidence(submitted_evidence, candidates)
     llm_emitted = llm_verdict.discrepancies if llm_verdict else []
-    if llm_verdict is not None and not llm_verdict.code_evidence:
+    if not code_evidence:
         # Without code evidence the verdict is UNVERIFIED by the
         # structural guard; LLM "discrepancies" there are just "no
         # code found" restated (often as HIGH), which reads as a real
@@ -126,9 +151,6 @@ def compose_verification(
         deterministic=deterministic_discrepancies,
         llm_emitted=llm_emitted,
     )
-    code_evidence = _with_candidate_paths(
-        llm_verdict.code_evidence if llm_verdict else [], candidates,
-    )
     hyperparameters = llm_verdict.hyperparameters if llm_verdict else []
     explanation = (
         llm_verdict.explanation
@@ -138,6 +160,9 @@ def compose_verification(
         )
     )
     confidence = llm_verdict.confidence if llm_verdict else 0.0
+    if submitted_evidence and not code_evidence:
+        explanation = "No source-validated code citation was retained; evidence is insufficient."
+        confidence = 0.0
 
     status = determine_status(
         has_code_evidence=bool(code_evidence),
@@ -202,8 +227,7 @@ def _quote_in_candidates(quote: str | None, candidates: list[RetrieveMatch]) -> 
     if not needle:
         return False
     for c in candidates:
-        fields = (c.signature, c.docstring, c.source, c.class_context, c.callee_context)
-        if any(needle in _squash(f) for f in fields if f):
+        if c.source and needle in _squash(c.source):
             return True
     return False
 

@@ -374,3 +374,18 @@ def test_code_excerpt_tolerates_a_line_suffix_on_old_paths(tmp_path) -> None:
     )
     assert out.file_path == "m.py"
 
+
+def test_code_excerpt_rejects_symlinks_even_within_the_clone(tmp_path) -> None:
+    from fastapi import HTTPException
+
+    from claim2code_api.verification.router import get_code_excerpt
+
+    (tmp_path / "actual.py").write_text("x = 1\n")
+    (tmp_path / "linked.py").symlink_to(tmp_path / "actual.py")
+    with pytest.raises(HTTPException) as excinfo:
+        get_code_excerpt(
+            analysis_id=uuid4(), file_path="linked.py", start_line=1, end_line=1, context=0,
+            db=_code_db(_repo_at(tmp_path)),
+        )
+    assert excinfo.value.status_code == 404
+

@@ -76,4 +76,14 @@ describe("CitedCode", () => {
     expect(fallback).toHaveTextContent("pkg/m.py not found in the repository");
     expect(fallback).toHaveTextContent("x = 5");
   });
+
+  it("reports a malformed success response without crashing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json({ verifications: [] })));
+    render(<CitedCode analysisId={analysisId} citation={citation} />);
+
+    expect(await screen.findByTestId("code-excerpt-error")).toHaveTextContent(
+      "Invalid code excerpt response",
+    );
+    expect(screen.getByTestId("code-excerpt-error")).toHaveTextContent(citation.quote);
+  });
 });

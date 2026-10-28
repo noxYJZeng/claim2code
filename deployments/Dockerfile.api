@@ -23,7 +23,12 @@ RUN apt-get update \
 # pyproject.toml + the source tree stay in sync; editable install is not
 # needed at runtime.
 COPY apps/api /app/api
-RUN pip install --upgrade pip \
+# Optional trusted CA bundle for a corporate/environment HTTPS proxy.
+# A BuildKit secret keeps this build-only trust file out of the image.
+RUN --mount=type=secret,id=pip_ca \
+    set -eu; \
+    if [ -f /run/secrets/pip_ca ]; then export PIP_CERT=/run/secrets/pip_ca; fi; \
+    pip install --upgrade pip \
     && pip install /app/api
 
 ENV PYTHONPATH=/app

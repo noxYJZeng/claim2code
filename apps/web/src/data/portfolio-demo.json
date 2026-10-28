@@ -1,0 +1,123 @@
+{
+  "source": "evaluation/results/verification.json",
+  "annotationSource": "evaluation/annotations/*.json",
+  "scope": "Historical development examples using manually curated claims. The claim text is not a verbatim PDF quotation, and these stored verdicts have not been rerun with the current verifier.",
+  "cases": [
+    {
+      "id": "mae_c2",
+      "label": "Supported result",
+      "note": "The recorded model verdict and development annotation agree. Inspect the saved code quote below.",
+      "paperTitle": "Masked Autoencoders Are Scalable Vision Learners",
+      "paperUrl": "https://arxiv.org/abs/2111.06377",
+      "repoUrl": "https://github.com/facebookresearch/mae",
+      "claim": "Masking a high proportion of the input image, e.g., 75%, yields a nontrivial and meaningful self-supervisory task.",
+      "annotatedStatus": "VERIFIED",
+      "recordedStatus": "VERIFIED",
+      "evidence": [
+        {
+          "file_path": "main_pretrain.py",
+          "start_line": 53,
+          "end_line": 54,
+          "quote": "parser.add_argument('--mask_ratio', default=0.75, type=float,\n                        help='Masking ratio (percentage of removed patches).')",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "models_mae.py",
+          "start_line": 216,
+          "end_line": 220,
+          "quote": "def forward(self, imgs, mask_ratio=0.75):",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "models_mae.py",
+          "start_line": 123,
+          "end_line": 148,
+          "quote": "def random_masking(self, x, mask_ratio):",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "models_mae.py",
+          "start_line": 198,
+          "end_line": 214,
+          "quote": "loss = (loss * mask).sum() / mask.sum()  # mean loss on removed patches",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": []
+    },
+    {
+      "id": "mae_c7",
+      "label": "Configuration discrepancy",
+      "note": "The model flagged default hyperparameters. This recorded interpretation still needs human review, including effective batch size and learning-rate scaling.",
+      "paperTitle": "Masked Autoencoders Are Scalable Vision Learners",
+      "paperUrl": "https://arxiv.org/abs/2111.06377",
+      "repoUrl": "https://github.com/facebookresearch/mae",
+      "claim": "MAE pre-training uses AdamW optimizer with base learning rate 1.5e-4, weight decay 0.05, batch size 4096, cosine decay schedule, and 40 warmup epochs.",
+      "annotatedStatus": "PARTIALLY_VERIFIED",
+      "recordedStatus": "PARTIALLY_VERIFIED",
+      "evidence": [
+        {
+          "file_path": "main_pretrain.py",
+          "start_line": 66,
+          "end_line": 67,
+          "quote": "parser.add_argument('--blr', type=float, default=1e-3, metavar='LR',\n                        help='base learning rate: absolute_lr = base_lr * total_batch_size / 256')",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "main_pretrain.py",
+          "start_line": 61,
+          "end_line": 62,
+          "quote": "parser.add_argument('--weight_decay', type=float, default=0.05,\n                        help='weight decay (default: 0.05)')",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "main_pretrain.py",
+          "start_line": 71,
+          "end_line": 72,
+          "quote": "parser.add_argument('--warmup_epochs', type=int, default=40, metavar='N',\n                        help='epochs to warmup LR')",
+          "grounded": true,
+          "line_accurate": true
+        },
+        {
+          "file_path": "main_pretrain.py",
+          "start_line": 40,
+          "end_line": 41,
+          "quote": "parser.add_argument('--batch_size', default=64, type=int,\n                        help='Batch size per GPU (effective batch size is batch_size * accum_iter * # gpus')",
+          "grounded": true,
+          "line_accurate": true
+        }
+      ],
+      "discrepancies": [
+        {
+          "type": "HYPERPARAMETER_MISMATCH",
+          "severity": "MEDIUM",
+          "detail": "Base learning rate default is 1e-3 in code, but paper claims 1.5e-4. The help text shows absolute_lr = base_lr * total_batch_size / 256, so the effective LR calculation differs from the paper's stated value."
+        },
+        {
+          "type": "HYPERPARAMETER_MISMATCH",
+          "severity": "MEDIUM",
+          "detail": "Batch size default is 64 per GPU in code, but paper claims batch size 4096. The effective batch size depends on accum_iter and number of GPUs, but the default per-GPU value is 64."
+        }
+      ]
+    },
+    {
+      "id": "dpo_c8",
+      "label": "Insufficient evidence",
+      "note": "The development annotation expects support, but the model returned UNVERIFIED. Missing retrieved evidence is shown rather than turned into a positive verdict.",
+      "paperTitle": "Direct Preference Optimization: Your Language Model is Secretly a Reward Model",
+      "paperUrl": "https://arxiv.org/abs/2305.18290",
+      "repoUrl": "https://github.com/eric-mitchell/direct-preference-optimization",
+      "claim": "The reference policy is initialised from the SFT model: DPO training loads the SFT checkpoint into both the policy and the reference model.",
+      "annotatedStatus": "VERIFIED",
+      "recordedStatus": "UNVERIFIED",
+      "evidence": [],
+      "discrepancies": []
+    }
+  ]
+}

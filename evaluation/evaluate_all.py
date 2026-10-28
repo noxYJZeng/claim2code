@@ -6,6 +6,8 @@ embedding model; verification additionally calls the chat model once per
 annotated claim (the slow part). ``--skip-verification`` reuses the last
 ``results/verification.json``.
 """
+# Imports below bootstrap the repository-root CLI entry point.
+# ruff: noqa: E402
 from __future__ import annotations
 
 import argparse
@@ -31,10 +33,10 @@ def main() -> int:
     parser.add_argument("--skip-verification", action="store_true")
     args = parser.parse_args()
     status = evaluate_safety.main()
-    status = evaluate_retrieval.main() or status
+    status = evaluate_retrieval.main([]) or status
     if not args.skip_verification:
         status = evaluate_verification.main([]) or status
-    report.main()
+    report.main([])
     return status
 
 

@@ -40,6 +40,14 @@ from claim2code_api.repos import cloner
 from claim2code_api.repos.workflow import run_repo_workflow
 
 
+@pytest.fixture(autouse=True)
+def stub_embedding_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """This suite covers parsing/persistence; embeddings have their own tests."""
+    monkeypatch.setattr(
+        "claim2code_api.repos.workflow.embed_and_persist_symbols", MagicMock(),
+    )
+
+
 @pytest.fixture
 def engine():
     eng = create_engine(

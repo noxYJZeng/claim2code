@@ -237,6 +237,18 @@ export type CodeExcerpt = {
 export type CodeExcerptResult =
   { ok: true; excerpt: CodeExcerpt } | { ok: false; error: string };
 
+export type PaperExcerpt = {
+  page: number;
+  n_pages: number;
+  found: boolean;
+  image: string;
+  width: number;
+  height: number;
+};
+
+export type PaperExcerptResult =
+  { ok: true; excerpt: PaperExcerpt } | { ok: false; error: string };
+
 export async function getHealth(signal?: AbortSignal): Promise<HealthResult> {
   try {
     const response = await fetch(`${API_BASE_URL}/health`, { signal });
@@ -581,6 +593,42 @@ export async function getCodeExcerpt(
       return { ok: false, error: await errorDetail(response) };
     }
     return { ok: true, excerpt: (await response.json()) as CodeExcerpt };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** The uploaded PDF; append `#page=N` to open it at a page. */
+export function paperPdfUrl(analysisId: string, page?: number): string {
+  const url = `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/paper/pdf`;
+  return page ? `${url}#page=${page}` : url;
+}
+
+/** The cited region of the paper, rendered with the quote highlighted.
+ *  GET /analyses/{analysis_id}/paper/excerpt?page&quote&full */
+export async function getPaperExcerpt(
+  analysisId: string,
+  evidence: { page: number; quote: string },
+  full: boolean,
+  signal?: AbortSignal,
+): Promise<PaperExcerptResult> {
+  const query = new URLSearchParams({
+    page: String(evidence.page),
+    quote: evidence.quote,
+    full: String(full),
+  });
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/paper/excerpt?${query}`,
+      { signal },
+    );
+    if (!response.ok) {
+      return { ok: false, error: await errorDetail(response) };
+    }
+    return { ok: true, excerpt: (await response.json()) as PaperExcerpt };
   } catch (err) {
     if (err instanceof Error) {
       return { ok: false, error: err.message };

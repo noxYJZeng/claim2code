@@ -8,6 +8,7 @@ import {
   type VerificationStatus,
 } from "./api";
 import CitedCode from "./CitedCode";
+import CitedPaper from "./CitedPaper";
 
 type VerificationPanelProps = {
   analysisId: string;
@@ -295,16 +296,16 @@ function VerdictCard({
             {verdict.discrepancies.length > 0 &&
               ` · ${verdict.discrepancies.length} discrepanc${verdict.discrepancies.length === 1 ? "y" : "ies"}`}
           </button>
-          {open && <VerdictDetails analysisId={analysisId} claim={claim} verdict={verdict} />}
+          {open && <VerdictDetails analysisId={analysisId} verdict={verdict} />}
         </div>
       )}
     </li>
   );
 }
 
-type VerdictDetailsProps = { analysisId: string; claim: Claim; verdict: Verification };
+type VerdictDetailsProps = { analysisId: string; verdict: Verification };
 
-function VerdictDetails({ analysisId, claim, verdict }: VerdictDetailsProps) {
+function VerdictDetails({ analysisId, verdict }: VerdictDetailsProps) {
   return (
     <div className="mt-3 space-y-4 text-xs text-slate-700" data-testid="verdict-details">
       <p className="whitespace-pre-line">{verdict.explanation}</p>
@@ -339,13 +340,7 @@ function VerdictDetails({ analysisId, claim, verdict }: VerdictDetailsProps) {
 
       <div>
         <h3 className="mb-1 font-medium uppercase tracking-wide text-slate-500">Paper</h3>
-        <blockquote className="border-l-2 border-slate-300 pl-3 italic text-slate-600">
-          "{verdict.paper_evidence.quote}"
-        </blockquote>
-        <p className="mt-1 text-slate-500">
-          {claim.paper_evidence.section_title || "(preamble)"}, page{" "}
-          {claim.paper_evidence.page}
-        </p>
+        <CitedPaper analysisId={analysisId} evidence={verdict.paper_evidence} />
       </div>
 
       <div>

@@ -305,8 +305,11 @@ then use the **Verification** panel to verify one claim or all of them.
 Verdicts render as each claim finishes (a few minutes per claim on a local
 model) and are saved, so reopening the analysis shows them again. The open
 analysis is kept in the URL (`http://localhost:5173/?analysis=<id>`), so a
-refresh or a bookmarked link returns to it; "Show
-details" lists the explanation, discrepancies and cited code lines.
+refresh or a bookmarked link returns to it. "Show details" on a verdict
+lists the explanation and discrepancies, the cited paper passage on the
+rendered PDF page with the quote highlighted (plus a link that opens the
+PDF at that page), and the cited code as read from the cloned repository,
+with line numbers and a GitHub link pinned to the cloned commit.
 
 ### 7. Run the test suite
 

@@ -210,3 +210,22 @@ class ErrorResponse(BaseModel):
 
     error: str
     detail: str | None = None
+
+
+class PaperExcerptResponse(BaseModel):
+    """Response body for ``GET /analyses/{id}/paper/excerpt``.
+
+    ``image`` is a ``data:image/png;base64,...`` URL of the cited region
+    (or the whole page) with the quote highlighted. ``page`` is where
+    the quote was found, which can differ from the cited page when the
+    extractor's page number was off; ``found=false`` means the quote was
+    not located and ``image`` shows the cited page unmarked.
+    """
+
+    page: int = Field(ge=1)
+    n_pages: int = Field(ge=1)
+    found: bool
+    image: str
+    width: int
+    height: int
+

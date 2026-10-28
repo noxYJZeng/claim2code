@@ -112,6 +112,9 @@ def run_verification(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     except VerificationConfigError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    # The workflow only flushes; without a commit the session's close
+    # rolls the persisted verdicts back and GET returns nothing.
+    db.commit()
 
     logger.info(
         "verification analysis=%s n=%d verified=%d partial=%d contradicted=%d unverified=%d errors=%d",

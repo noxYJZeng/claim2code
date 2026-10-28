@@ -197,8 +197,14 @@ def run_verification_workflow(
 
         # Persist to JSONB. The AnalysisState.verifications column
         # was pre-staged in Phase 1's 0001_init migration; Phase 6
-        # only writes to it.
-        state.verifications = [v.model_dump(mode="json") for v in verifications]
+        # only writes to it. A subset run replaces only its own
+        # claims' entries; earlier verdicts for other claims stay.
+        rerun = {v.claim_id for v in verifications}
+        kept = [e for e in (state.verifications or []) if e.get("claim_id") not in rerun]
+        state.verifications = sorted(
+            kept + [v.model_dump(mode="json") for v in verifications],
+            key=lambda e: e["claim_id"],
+        )
         state.errors = (state.errors or []) + [
             {"stage": "verify", "message": e} for e in errors
         ]

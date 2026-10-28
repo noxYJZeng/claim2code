@@ -136,6 +136,7 @@ def test_post_returns_run_response() -> None:
         )
     assert resp.n_unverified == 1
     assert resp.verifications[0].claim_id == "c1"
+    fake_db.commit.assert_called_once()  # verdicts persist for GET
 
 
 def test_post_404_when_workflow_raises_http_exception() -> None:

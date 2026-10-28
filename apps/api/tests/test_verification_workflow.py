@@ -405,3 +405,22 @@ def test_workflow_only_verifies_requested_claims() -> None:
 
     assert len(result.verifications) == 1
     assert result.verifications[0].claim_id == "c2"
+
+
+def test_workflow_subset_run_keeps_other_claims_verdicts() -> None:
+    state = _StubAnalysisState(
+        analysis_id=uuid4(),
+        claims=[_claim_dict("c1"), _claim_dict("c2")],
+        verifications=[
+            {"claim_id": "c1", "status": "VERIFIED"},
+            {"claim_id": "c2", "status": "VERIFIED"},
+        ],
+    )
+    db = _make_db(state=state, repo=None)
+
+    with patch.object(workflow_mod, "get_llm_client", return_value=MagicMock()):
+        run_verification_workflow(db=db, analysis_id=state.analysis_id, claim_ids=["c2"])
+
+    assert [e["claim_id"] for e in state.verifications] == ["c1", "c2"]
+    assert state.verifications[0] == {"claim_id": "c1", "status": "VERIFIED"}
+    assert state.verifications[1]["status"] == "UNVERIFIED"  # no repo → re-run verdict

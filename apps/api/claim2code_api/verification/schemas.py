@@ -228,3 +228,27 @@ class VerificationListResponse(BaseModel):
 
     analysis_id: UUID
     verifications: list[Verification]
+
+
+class CodeLine(BaseModel):
+    number: int = Field(ge=1)
+    text: str
+
+
+class CodeExcerpt(BaseModel):
+    """Response body for ``GET /analyses/{id}/code``.
+
+    The lines a citation points at, read from the cloned repository,
+    plus ``context`` lines either side. ``start_line`` / ``end_line``
+    are the cited range (clamped to the file); ``lines`` covers the
+    wider window. ``url`` links the cited range on the forge, pinned
+    to the cloned commit when it is known.
+    """
+
+    file_path: str
+    start_line: int = Field(ge=1)
+    end_line: int = Field(ge=1)
+    total_lines: int = Field(ge=0)
+    lines: list[CodeLine]
+    url: str | None = None
+

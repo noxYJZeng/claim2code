@@ -29,19 +29,25 @@ read path).
 from __future__ import annotations
 
 import logging
+import re
+import subprocess
+from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException  # noqa: B008
+from fastapi import APIRouter, Depends, HTTPException, Query  # noqa: B008
 from sqlalchemy.orm import Session
 
+from claim2code_api.app.config import get_settings
 from claim2code_api.app.deps import get_db
-from claim2code_api.db.models import AnalysisState
+from claim2code_api.db.models import AnalysisState, Repository
 from claim2code_api.verification.exceptions import (
     VerificationConfigError,
     VerificationLLMError,
     VerificationNotFoundError,
 )
 from claim2code_api.verification.schemas import (
+    CodeExcerpt,
+    CodeLine,
     VerificationListResponse,
     VerificationRunRequest,
     VerificationRunResponse,
@@ -191,4 +197,83 @@ def get_verifications(
     )
 
 
-__all__ = ["router", "run_verification", "get_verifications"]
+# ----------------------------------------------------------------------
+# GET /analyses/{analysis_id}/code
+# ----------------------------------------------------------------------
+
+# Longest excerpt returned, context included.
+_MAX_EXCERPT_LINES = 400
+
+
+@router.get(
+    "/analyses/{analysis_id}/code",
+    response_model=CodeExcerpt,
+    responses={404: {"description": "Analysis, repository or file not found"}},
+)
+def get_code_excerpt(
+    analysis_id: UUID,
+    file_path: str = Query(min_length=1),
+    start_line: int = Query(ge=1),
+    end_line: int = Query(ge=1),
+    context: int = Query(default=3, ge=0, le=50),
+    db: Session = Depends(get_db),  # noqa: B008
+) -> CodeExcerpt:
+    """Return the code a verdict cites, read from the cloned repository.
+
+    The verdict's own ``quote`` is the LLM's copy of a fragment; this
+    is the file itself, so the user can check the citation. Paths are
+    resolved inside the clone only (``..`` and absolute paths that
+    escape it are 404), and files over ``MAX_FILE_KB`` are refused.
+    """
+    repo = (
+        db.query(Repository)
+        .filter(Repository.analysis_id == analysis_id)
+        .one_or_none()
+    )
+    if repo is None:
+        raise HTTPException(status_code=404, detail="no repository bound to this analysis")
+    root = Path(repo.clone_path).resolve()
+    target = (root / file_path).resolve()
+    if not target.exists():
+        # Verdicts stored before citation paths were taken from the
+        # candidates may carry a line suffix ("m.py:12-30").
+        target = (root / re.sub(r":\d+(-\d+)?$", "", file_path)).resolve()
+    if not target.is_relative_to(root) or not target.is_file():
+        raise HTTPException(status_code=404, detail=f"{file_path} not found in the repository")
+    if target.stat().st_size > get_settings().max_file_kb * 1024:
+        raise HTTPException(status_code=413, detail=f"{file_path} is too large to show")
+
+    text = target.read_text(encoding="utf-8", errors="replace").splitlines()
+    total = len(text)
+    first = min(start_line, max(total, 1))
+    last = min(max(end_line, first), max(total, 1))
+    lo = max(1, first - context)
+    hi = min(total, last + context, lo + _MAX_EXCERPT_LINES - 1)
+    rel = target.relative_to(root).as_posix()
+    return CodeExcerpt(
+        file_path=rel,
+        start_line=first,
+        end_line=last,
+        total_lines=total,
+        lines=[CodeLine(number=n, text=text[n - 1]) for n in range(lo, hi + 1)],
+        url=_forge_url(repo, root, rel, first, last),
+    )
+
+
+def _forge_url(repo: Repository, root: Path, rel: str, first: int, last: int) -> str | None:
+    """GitHub-style link to the cited lines, pinned to the cloned commit."""
+    if "github.com" not in repo.url:
+        return None
+    try:
+        ref = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True, timeout=5,
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        ref = repo.default_branch
+    base = repo.url.removesuffix(".git").rstrip("/")
+    anchor = f"#L{first}" if first == last else f"#L{first}-L{last}"
+    return f"{base}/blob/{ref}/{rel}{anchor}"
+
+
+__all__ = ["router", "run_verification", "get_verifications", "get_code_excerpt"]

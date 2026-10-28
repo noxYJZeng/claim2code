@@ -288,3 +288,89 @@ def test_post_endpoint_round_trip_via_test_client() -> None:
         assert body["n_unverified"] == 1
         assert len(body["verifications"]) == 1
         assert body["verifications"][0]["claim_id"] == "c1"
+
+# ============================================================
+# GET /analyses/{analysis_id}/code
+# ============================================================
+
+
+def _code_db(repo):
+    db = MagicMock()
+    db.query.return_value.filter.return_value.one_or_none.return_value = repo
+    return db
+
+
+def _repo_at(path, url="https://github.com/o/r.git"):
+    from types import SimpleNamespace
+    return SimpleNamespace(clone_path=str(path), url=url, default_branch="main")
+
+
+def test_code_excerpt_returns_cited_lines_with_context(tmp_path) -> None:
+    from claim2code_api.verification.router import get_code_excerpt
+
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "m.py").write_text("".join(f"line {n}\n" for n in range(1, 21)))
+    out = get_code_excerpt(
+        analysis_id=uuid4(), file_path="pkg/m.py", start_line=5, end_line=7, context=2,
+        db=_code_db(_repo_at(tmp_path)),
+    )
+    assert (out.start_line, out.end_line, out.total_lines) == (5, 7, 20)
+    assert [ln.number for ln in out.lines] == [3, 4, 5, 6, 7, 8, 9]
+    assert out.lines[2].text == "line 5"
+    # Not a git checkout → falls back to the default branch.
+    assert out.url == "https://github.com/o/r/blob/main/pkg/m.py#L5-L7"
+
+
+def test_code_excerpt_clamps_ranges_past_the_end(tmp_path) -> None:
+    from claim2code_api.verification.router import get_code_excerpt
+
+    (tmp_path / "m.py").write_text("a\nb\nc\n")
+    out = get_code_excerpt(
+        analysis_id=uuid4(), file_path="m.py", start_line=2, end_line=99, context=0,
+        db=_code_db(_repo_at(tmp_path, url="https://gitlab.com/o/r")),
+    )
+    assert (out.start_line, out.end_line) == (2, 3)
+    assert [ln.text for ln in out.lines] == ["b", "c"]
+    assert out.url is None
+
+
+@pytest.mark.parametrize("path", ["../secret.txt", "/etc/passwd", "missing.py"])
+def test_code_excerpt_refuses_paths_outside_the_clone(tmp_path, path) -> None:
+    from fastapi import HTTPException
+
+    from claim2code_api.verification.router import get_code_excerpt
+
+    clone = tmp_path / "clone"
+    clone.mkdir()
+    (tmp_path / "secret.txt").write_text("nope")
+    with pytest.raises(HTTPException) as excinfo:
+        get_code_excerpt(
+            analysis_id=uuid4(), file_path=path, start_line=1, end_line=1, context=0,
+            db=_code_db(_repo_at(clone)),
+        )
+    assert excinfo.value.status_code == 404
+
+
+def test_code_excerpt_404_without_a_repository() -> None:
+    from fastapi import HTTPException
+
+    from claim2code_api.verification.router import get_code_excerpt
+
+    with pytest.raises(HTTPException) as excinfo:
+        get_code_excerpt(
+            analysis_id=uuid4(), file_path="m.py", start_line=1, end_line=1, context=0,
+            db=_code_db(None),
+        )
+    assert excinfo.value.status_code == 404
+
+
+def test_code_excerpt_tolerates_a_line_suffix_on_old_paths(tmp_path) -> None:
+    from claim2code_api.verification.router import get_code_excerpt
+
+    (tmp_path / "m.py").write_text("a\nb\n")
+    out = get_code_excerpt(
+        analysis_id=uuid4(), file_path="m.py:1-2", start_line=1, end_line=2, context=0,
+        db=_code_db(_repo_at(tmp_path)),
+    )
+    assert out.file_path == "m.py"
+

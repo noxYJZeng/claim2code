@@ -134,6 +134,19 @@ def test_compose_verified_when_llm_verified_and_code_evidence() -> None:
     assert out.confidence == 0.85
 
 
+def test_compose_takes_the_file_path_from_the_cited_candidate() -> None:
+    cand = _candidate()
+    ce = [CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="m.py:1-10", start_line=1, end_line=10,
+        quote="def train(learning_rate=5e-5): ...",
+    )]
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=ce),
+    )
+    assert out.code_evidence[0].file_path == "m.py"
+
+
 def test_compose_unverified_when_llm_verified_but_no_code_evidence() -> None:
     """Structural guard: LLM says VERIFIED but no code_evidence → UNVERIFIED."""
     out = compose_verification(

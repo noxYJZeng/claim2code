@@ -29,6 +29,7 @@ from claim2code_api.verification.normalizers import (
     ModelNameNormalizer,
 )
 from claim2code_api.verification.schemas import (
+    CodeEvidence,
     Discrepancy,
     Verification,
 )
@@ -70,6 +71,22 @@ def extract_verdict(
     )
 
 
+def _with_candidate_paths(
+    evidence: list[CodeEvidence], candidates: list[RetrieveMatch],
+) -> list[CodeEvidence]:
+    """Take each citation's file path from the candidate it cites.
+
+    The LLM copies the path by hand and small models garble it (e.g.
+    ``"utils.py:128-168"``); the cited symbol's own path is the truth.
+    """
+    paths = {c.symbol_id: c.file_path for c in candidates}
+    return [
+        e.model_copy(update={"file_path": paths[e.symbol_id]})
+        if e.symbol_id in paths and paths[e.symbol_id] != e.file_path else e
+        for e in evidence
+    ]
+
+
 def compose_verification(
     *,
     claim: Claim,
@@ -109,7 +126,9 @@ def compose_verification(
         deterministic=deterministic_discrepancies,
         llm_emitted=llm_emitted,
     )
-    code_evidence = llm_verdict.code_evidence if llm_verdict else []
+    code_evidence = _with_candidate_paths(
+        llm_verdict.code_evidence if llm_verdict else [], candidates,
+    )
     hyperparameters = llm_verdict.hyperparameters if llm_verdict else []
     explanation = (
         llm_verdict.explanation

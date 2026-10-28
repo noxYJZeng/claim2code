@@ -15,7 +15,7 @@ in.
 from __future__ import annotations
 
 from claim2code_api.papers.schemas import Claim
-from claim2code_api.repos.schemas import RetrieveMatch
+from claim2code_api.repos.schemas import RetrieveMatch, SourceSpan
 from claim2code_api.verification.discrepancies import (
     determine_status,
     merge_discrepancies,
@@ -74,40 +74,101 @@ def extract_verdict(
 def _validated_code_evidence(
     evidence: list[CodeEvidence], candidates: list[RetrieveMatch],
 ) -> list[CodeEvidence]:
-    """Keep citations whose quotes occur at the stated source lines.
+    """Keep citations whose quotes occur in source the verifier was shown.
 
-    Candidates are populated from the clone by the workflow. Signatures,
-    docstrings and free-form setup/callee context cannot establish a file
-    location on their own. Missing source therefore fails closed. The
-    candidate's canonical path repairs a model's copied path only after
-    its symbol, line range and quote have been checked.
+    The located sources are each candidate's body and the setup/callee
+    methods attached to it as context (``context_spans``), all read
+    from the clone with their real file and line range. A citation is
+    kept at its stated lines when the quote is there. Otherwise the
+    quote is looked up across all located sources: a model often copies
+    the right code under the wrong candidate's ``symbol_id`` or a few
+    lines off. If it occurs, the citation is moved to the occurrence
+    nearest its stated lines (same file first); a tie is ambiguous and
+    dropped. A quote that occurs nowhere is dropped, so invented code
+    never survives. Free-form text without a location (signature,
+    docstring) cannot establish one, and missing source fails closed.
     """
-    by_id = {c.symbol_id: c for c in candidates}
+    spans = _located_spans(candidates)
     valid: list[CodeEvidence] = []
     seen = set()
     for citation in evidence:
-        candidate = by_id.get(citation.symbol_id)
-        if candidate is None or not candidate.source:
-            continue
-        if not (
-            candidate.start_line <= citation.start_line
-            <= citation.end_line <= candidate.end_line
-        ):
-            continue
-        lines = candidate.source.splitlines()
-        first = citation.start_line - candidate.start_line
-        last = citation.end_line - candidate.start_line + 1
-        if last > len(lines):
-            continue
         quote = _squash(citation.quote)
-        if not quote or quote not in _squash("\n".join(lines[first:last])):
+        if not quote:
             continue
-        identity = (citation.symbol_id, citation.start_line, citation.end_line, quote)
+        located = _locate(citation, quote, spans)
+        if located is None:
+            continue
+        span, start, end = located
+        identity = (span.file_path, start, end, quote)
         if identity in seen:
             continue
         seen.add(identity)
-        valid.append(citation.model_copy(update={"file_path": candidate.file_path}))
+        valid.append(citation.model_copy(update={
+            "symbol_id": span.symbol_id, "file_path": span.file_path,
+            "start_line": start, "end_line": end,
+        }))
     return valid
+
+
+def _located_spans(candidates: list[RetrieveMatch]) -> list[SourceSpan]:
+    spans: list[SourceSpan] = []
+    for c in candidates:
+        if c.source:
+            spans.append(SourceSpan(
+                symbol_id=c.symbol_id, file_path=c.file_path,
+                start_line=c.start_line, end_line=c.end_line, name=c.name, source=c.source,
+            ))
+        spans.extend(c.context_spans)
+    return spans
+
+
+def _locate(
+    citation: CodeEvidence, quote: str, spans: list[SourceSpan],
+) -> tuple[SourceSpan, int, int] | None:
+    """Where ``quote`` sits: the stated lines if it is there, else the nearest occurrence."""
+    # A model sometimes appends the line range to the path ("m.py:10-12").
+    cited_file = citation.file_path.split(":", 1)[0]
+    for span in spans:
+        if span.file_path != cited_file or not (
+            span.start_line <= citation.start_line <= citation.end_line <= span.end_line
+        ):
+            continue
+        lines = span.source.splitlines()
+        first = citation.start_line - span.start_line
+        last = citation.end_line - span.start_line + 1
+        if 0 <= first < last <= len(lines) and quote in _squash("\n".join(lines[first:last])):
+            return span, citation.start_line, citation.end_line
+    found: dict[tuple[str, int, int], SourceSpan] = {}
+    for span in spans:
+        for start, end in _occurrences(quote, span):
+            found.setdefault((span.file_path, start, end), span)
+    if not found:
+        return None
+    same_file = [k for k in found if k[0] == cited_file]
+    keys = same_file or list(found)
+    distance = {k: abs(k[1] - citation.start_line) for k in keys}
+    best = min(distance.values())
+    nearest = [k for k in keys if distance[k] == best]
+    if len(nearest) != 1:
+        return None
+    _, start, end = nearest[0]
+    return found[nearest[0]], start, end
+
+
+def _occurrences(quote: str, span: SourceSpan) -> list[tuple[int, int]]:
+    """Smallest line ranges of ``span`` whose text contains ``quote``."""
+    lines = span.source.splitlines()
+    out: list[tuple[int, int]] = []
+    for i in range(len(lines)):
+        if quote not in _squash("\n".join(lines[i:])):
+            break  # no later start can match either
+        for j in range(i + 1, len(lines) + 1):
+            if quote in _squash("\n".join(lines[i:j])):
+                # Minimal: dropping the first line loses the match.
+                if not (j - i > 1 and quote in _squash("\n".join(lines[i + 1:j]))):
+                    out.append((span.start_line + i, span.start_line + j - 1))
+                break
+    return out
 
 
 def compose_verification(
@@ -226,10 +287,7 @@ def _quote_in_candidates(quote: str | None, candidates: list[RetrieveMatch]) -> 
     needle = _squash(quote or "")
     if not needle:
         return False
-    for c in candidates:
-        if c.source and needle in _squash(c.source):
-            return True
-    return False
+    return any(needle in _squash(span.source) for span in _located_spans(candidates))
 
 
 def _squash(text: str) -> str:

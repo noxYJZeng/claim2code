@@ -1,4 +1,8 @@
-"""The HTTP verification path must persist only source-validated citations."""
+"""The HTTP verification path must persist only source-validated citations.
+
+Real code cited under the wrong symbol or lines is moved to where it is;
+invented code is dropped.
+"""
 from __future__ import annotations
 
 import os
@@ -101,10 +105,12 @@ def test_http_persists_only_source_validated_citations(
                         stored = client.get(f"/analyses/{analysis_id}/verifications")
                         assert stored.status_code == 200
                         verdict = stored.json()["verifications"][0]
-                        if citation_kind == "valid":
+                        if citation_kind != "invented_quote":
                             assert verdict["status"] == "VERIFIED"
-                            assert verdict["code_evidence"][0]["quote"] == "return x"
-                            assert verdict["code_evidence"][0]["start_line"] == 3
+                            [kept] = verdict["code_evidence"]
+                            assert kept["quote"] == "return x"
+                            assert (kept["start_line"], kept["end_line"]) == (3, 3)
+                            assert kept["symbol_id"] == str(symbol.symbol_id)
                         else:
                             assert verdict["status"] == "UNVERIFIED"
                             assert verdict["code_evidence"] == []

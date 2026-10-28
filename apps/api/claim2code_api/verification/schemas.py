@@ -88,15 +88,16 @@ class CodeEvidence(BaseModel):
     ``docs/specs/spec-summary.md:148-150``) means each
     ``CodeEvidence`` entry must:
 
-      - reference a ``symbol_id`` that appears in the candidate
-        list provided to the LLM;
-      - carry a ``quote`` found in the candidate's actual source
-        at the cited line range (ignoring whitespace formatting);
-      - cite a line range within that candidate. The canonical
-        file path is taken from the validated candidate.
+      - carry a ``quote`` found (ignoring whitespace formatting) in
+        source the LLM was shown: a candidate's body or the setup /
+        callee methods attached to it, read from the clone;
+      - point at the lines where that quote actually is.
 
-    The composition layer removes unverifiable citations, including
-    those whose source cannot be read. Empty ``code_evidence`` is
+    The composition layer moves a real quote cited under the wrong
+    symbol or lines to its actual location, taking ``symbol_id``,
+    file path and line range from the source it was found in, and
+    removes unverifiable citations, including those whose source
+    cannot be read. Empty ``code_evidence`` is
     permitted at the schema level; after validation the structural
     guard coerces evidence-free verifications to ``UNVERIFIED``.
     """

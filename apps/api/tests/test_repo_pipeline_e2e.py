@@ -270,7 +270,7 @@ def test_methods_link_to_enclosing_class_and_feed_class_context(
 
     from claim2code_api.repos.storage import WalkedFile
     from claim2code_api.repos.workflow import _extract_symbols
-    from claim2code_api.verification.workflow import _class_context
+    from claim2code_api.verification.workflow import _class_spans
 
     src = tmp_path / "layers.py"
     src.write_text(
@@ -300,12 +300,12 @@ def test_methods_link_to_enclosing_class_and_feed_class_context(
     assert rows[("forward", 8)].parent_symbol_id == linear.symbol_id
     assert rows[("forward", 13)].parent_symbol_id == other.symbol_id
 
-    ctx = _class_context(session, rows[("forward", 8)], tmp_path)
-    assert ctx is not None
-    assert "# __init__ (lines 2-3)" in ctx and "self.scaling = 1 / r" in ctx
-    assert "# reset_parameters (lines 5-6)" in ctx and "init_zeros(self.B)" in ctx
-    assert "return x * self.scaling" not in ctx  # not the candidate itself
-    assert _class_context(session, rows[("forward", 13)], tmp_path) is None
+    spans = _class_spans(session, rows[("forward", 8)], tmp_path)
+    located = {(s.name, s.file_path, s.start_line, s.end_line): s.source for s in spans}
+    assert "self.scaling = 1 / r" in located[("__init__", "layers.py", 2, 3)]
+    assert "init_zeros(self.B)" in located[("reset_parameters", "layers.py", 5, 6)]
+    assert all("return x * self.scaling" not in s.source for s in spans)  # not the candidate itself
+    assert _class_spans(session, rows[("forward", 13)], tmp_path) == []
 
 
 def test_callee_context_resolves_nearest_definition(
@@ -318,7 +318,7 @@ def test_callee_context_resolves_nearest_definition(
 
     from claim2code_api.repos.storage import WalkedFile
     from claim2code_api.repos.workflow import _extract_symbols
-    from claim2code_api.verification.workflow import _callee_context
+    from claim2code_api.verification.workflow import _callee_spans
 
     files = {
         "alf/run.py": (
@@ -346,13 +346,14 @@ def test_callee_context_resolves_nearest_definition(
     run = rows[("alf/run.py", "run")]
     helper = rows[("alf/util.py", "helper")]
 
-    ctx = _callee_context(session, run, files["alf/run.py"], tmp_path, exclude={helper.symbol_id})
-    assert ctx is not None
-    assert "# exhausted (alf/hist.py:1-2)" in ctx and "env.repeats > 1" in ctx
-    assert "web/hist.py" not in ctx  # farther definition of the same name
-    assert "helper" not in ctx  # already a candidate
+    spans = _callee_spans(session, run, files["alf/run.py"], tmp_path, exclude={helper.symbol_id})
+    # Not the farther definition in web/hist.py, nor helper (already a candidate).
+    assert [(s.name, s.file_path, s.start_line, s.end_line) for s in spans] == [
+        ("exhausted", "alf/hist.py", 1, 2),
+    ]
+    assert "env.repeats > 1" in spans[0].source
 
-    assert _callee_context(session, helper, files["alf/util.py"], tmp_path, exclude=set()) is None
+    assert _callee_spans(session, helper, files["alf/util.py"], tmp_path, exclude=set()) == []
 
 
 def test_callee_context_follows_registry_dispatch(
@@ -364,7 +365,7 @@ def test_callee_context_follows_registry_dispatch(
 
     from claim2code_api.repos.storage import WalkedFile
     from claim2code_api.repos.workflow import _extract_symbols
-    from claim2code_api.verification.workflow import _callee_context
+    from claim2code_api.verification.workflow import _callee_spans
 
     files = {
         "runner.py": (
@@ -392,7 +393,8 @@ def test_callee_context_follows_registry_dispatch(
     session.flush()
 
     train = next(s for s in session.query(CodeSymbol).all() if s.name == "train")
-    ctx = _callee_context(session, train, files["runner.py"], tmp_path, exclude=set())
-    assert ctx is not None
-    assert "# simple_loss (losses.py:1-2)" in ctx and "square().sum()" in ctx
-    assert ctx.index("simple_loss") < ctx.index("# load")
+    spans = _callee_spans(session, train, files["runner.py"], tmp_path, exclude=set())
+    assert [(s.name, s.file_path, s.start_line) for s in spans][:2] == [
+        ("simple_loss", "losses.py", 1), ("load", "data.py", 1),
+    ]
+    assert "square().sum()" in spans[0].source

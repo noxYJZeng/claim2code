@@ -35,7 +35,7 @@ from openai import (
 
 from claim2code_api.llm.client import LLMClient
 from claim2code_api.papers.schemas import Claim, ClaimType, PaperEvidence
-from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch
+from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch, SourceSpan
 from claim2code_api.verification.exceptions import VerificationLLMError
 from claim2code_api.verification.schemas import (
     CodeEvidence,
@@ -152,11 +152,10 @@ def test_compose_takes_the_file_path_from_the_cited_candidate() -> None:
 
 
 @pytest.mark.parametrize("invalid", [
-    "unknown_symbol", "invented_quote", "wrong_lines", "reversed_lines",
-    "outside_symbol", "missing_source", "truncated_source", "context_only",
-    "blank_quote",
+    "invented_quote", "missing_source", "truncated_source", "context_only",
+    "blank_quote", "ambiguous",
 ])
-def test_compose_rejects_citations_not_grounded_at_the_cited_lines(invalid: str) -> None:
+def test_compose_rejects_citations_not_grounded_in_located_source(invalid: str) -> None:
     cand = _candidate().model_copy(update={
         "start_line": 10, "end_line": 12,
         "source": "def train():\n    lr = 5e-5\n    return lr",
@@ -165,16 +164,8 @@ def test_compose_rejects_citations_not_grounded_at_the_cited_lines(invalid: str)
         symbol_id=cand.symbol_id, file_path=cand.file_path,
         start_line=11, end_line=11, quote="lr = 5e-5",
     )
-    if invalid == "unknown_symbol":
-        citation.symbol_id = _sym_id()
-    elif invalid == "invented_quote":
+    if invalid == "invented_quote":
         citation.quote = "optimizer = ImaginaryOptimizer()"
-    elif invalid == "wrong_lines":
-        citation.start_line = citation.end_line = 10
-    elif invalid == "reversed_lines":
-        citation.start_line, citation.end_line = 12, 11
-    elif invalid == "outside_symbol":
-        citation.start_line, citation.end_line = 1, 999
     elif invalid == "missing_source":
         cand.source = None
     elif invalid == "truncated_source":
@@ -184,6 +175,11 @@ def test_compose_rejects_citations_not_grounded_at_the_cited_lines(invalid: str)
         cand.source = "def train():\n    pass\n    return None"
     elif invalid == "blank_quote":
         citation.quote = "   "
+    elif invalid == "ambiguous":
+        # Two equally near occurrences, neither at the stated line.
+        cand.end_line = 14
+        cand.source = "def train():\n    lr = 5e-5\n    pass\n    lr = 5e-5\n    return lr"
+        citation.start_line = citation.end_line = 12
     out = compose_verification(
         claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
         llm_verdict=_llm_verdict(code_evidence=[citation]),
@@ -191,6 +187,84 @@ def test_compose_rejects_citations_not_grounded_at_the_cited_lines(invalid: str)
     assert out.status == VerificationStatus.UNVERIFIED
     assert out.code_evidence == []
     assert out.confidence == 0.0
+
+
+@pytest.mark.parametrize("misplaced", ["unknown_symbol", "wrong_lines", "reversed_lines", "outside_symbol"])
+def test_compose_reanchors_real_code_cited_at_the_wrong_place(misplaced: str) -> None:
+    cand = _candidate().model_copy(update={
+        "start_line": 10, "end_line": 12,
+        "source": "def train():\n    lr = 5e-5\n    return lr",
+    })
+    citation = CodeEvidence(
+        symbol_id=cand.symbol_id, file_path=cand.file_path,
+        start_line=11, end_line=11, quote="lr = 5e-5",
+    )
+    if misplaced == "unknown_symbol":
+        citation.symbol_id = _sym_id()
+    elif misplaced == "wrong_lines":
+        citation.start_line = citation.end_line = 10
+    elif misplaced == "reversed_lines":
+        citation.start_line, citation.end_line = 12, 11
+    elif misplaced == "outside_symbol":
+        citation.start_line, citation.end_line = 1, 999
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[citation]),
+    )
+    assert out.status == VerificationStatus.VERIFIED
+    [kept] = out.code_evidence
+    assert (kept.symbol_id, kept.file_path, kept.start_line, kept.end_line) == (
+        cand.symbol_id, "m.py", 11, 11,
+    )
+
+
+def _span(name: str, file_path: str, start: int, source: str) -> SourceSpan:
+    return SourceSpan(
+        symbol_id=_sym_id(), file_path=file_path, start_line=start,
+        end_line=start + source.count("\n"), name=name, source=source,
+    )
+
+
+def test_compose_keeps_context_code_at_its_real_location() -> None:
+    """Code from a candidate's setup/callee context, cited under the
+    candidate's symbol_id, is kept with the context symbol's location."""
+    init = _span("__init__", "m.py", 589, "def __init__(self, h):\n    self.h = h\n    self.linears = clones(4)")
+    cand = _candidate().model_copy(update={
+        "start_line": 600, "end_line": 601, "source": "def forward(self, x):\n    return x",
+        "context_spans": [init],
+    })
+    at_lines = CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=591, end_line=591,
+        quote="self.linears = clones(4)",
+    )
+    elsewhere = at_lines.model_copy(update={"start_line": 700, "end_line": 702, "quote": "self.h = h"})
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[at_lines, elsewhere]),
+    )
+    assert [(e.symbol_id, e.start_line, e.end_line) for e in out.code_evidence] == [
+        (init.symbol_id, 591, 591), (init.symbol_id, 590, 590),
+    ]
+
+
+def test_compose_reanchors_to_the_nearest_occurrence_in_the_cited_file() -> None:
+    body = "def step():\n    loss.backward()\n    opt.step()"
+    near = _span("step", "a.py", 40, body)
+    far = _span("step", "a.py", 400, body)
+    other_file = _span("step", "b.py", 84, body)
+    cand = _candidate().model_copy(update={
+        "file_path": "a.py", "source": None, "context_spans": [far, near, other_file],
+    })
+    citation = CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="a.py:82-83", start_line=82, end_line=83,
+        quote="loss.backward()\n    opt.step()",
+    )
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[citation]),
+    )
+    [kept] = out.code_evidence
+    assert (kept.file_path, kept.start_line, kept.end_line) == ("a.py", 41, 42)
 
 
 def test_compose_rejects_invented_citation_when_no_candidates_exist() -> None:

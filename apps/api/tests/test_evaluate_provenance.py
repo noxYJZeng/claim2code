@@ -196,6 +196,29 @@ def test_nested_baseline_edits_change_identity_with_the_same_dirty_head(tmp_path
     assert provenance.measurement_identity(before) != provenance.measurement_identity(after)
 
 
+def test_rewritten_outputs_do_not_mark_the_code_dirty(tmp_path, monkeypatch) -> None:
+    import subprocess
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
+
+    (tmp_path / "evaluation" / "results").mkdir(parents=True)
+    (tmp_path / "evaluation" / "results" / "retrieval.json").write_text("{}")
+    (tmp_path / "evaluation" / "report.md").write_text("old")
+    (tmp_path / "evaluation" / "scoring.py").write_text("X = 1\n")
+    git("init", "-q")
+    git("add", ".")
+    git("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "init")
+    monkeypatch.setattr(provenance, "ROOT", tmp_path)
+
+    (tmp_path / "evaluation" / "results" / "retrieval.json").write_text('{"new": 1}')
+    (tmp_path / "evaluation" / "report.md").write_text("new")
+    assert provenance.capture("verification")["code"]["dirty"] is False
+
+    (tmp_path / "evaluation" / "scoring.py").write_text("X = 2\n")
+    assert provenance.capture("verification")["code"]["dirty"] is True
+
+
 def test_resume_refuses_a_changed_model_without_modifying_records(tmp_path, monkeypatch) -> None:
     previous = metadata(model="original-model")
     current = metadata(model="new-model")

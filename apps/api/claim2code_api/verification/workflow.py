@@ -56,7 +56,7 @@ from claim2code_api.indexing.indexer import _read_source_range
 from claim2code_api.llm.client import get_llm_client
 from claim2code_api.observability import get_tracer
 from claim2code_api.papers.schemas import Claim
-from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch
+from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch, SourceSpan
 from claim2code_api.retrieval.hybrid_ranker import HybridWeights, hybrid_ranker
 from claim2code_api.verification.exceptions import VerificationNotFoundError
 from claim2code_api.verification.schemas import (
@@ -393,6 +393,12 @@ def _hybrid_to_retrieve_matches(
             if clone_path is not None
             else None
         )
+        class_spans = _class_spans(db, sym, clone_path) if clone_path is not None else []
+        callee_spans = (
+            _callee_spans(db, sym, source, clone_path, exclude=set(by_id))
+            if clone_path is not None and source
+            else []
+        )
         out.append(
             RetrieveMatch(
                 symbol_id=sym.symbol_id,
@@ -408,16 +414,14 @@ def _hybrid_to_retrieve_matches(
                 docstring=sym.docstring,
                 similarity=m.final_score,
                 source=source,
-                class_context=(
-                    _class_context(db, sym, clone_path)
-                    if clone_path is not None
-                    else None
-                ),
-                callee_context=(
-                    _callee_context(db, sym, source, clone_path, exclude=set(by_id))
-                    if clone_path is not None and source
-                    else None
-                ),
+                class_context="\n\n".join(
+                    f"# {s.name} (lines {s.start_line}-{s.end_line})\n{s.source}" for s in class_spans
+                ) or None,
+                callee_context="\n\n".join(
+                    f"# {s.name} ({s.file_path}:{s.start_line}-{s.end_line})\n{s.source}"
+                    for s in callee_spans
+                ) or None,
+                context_spans=class_spans + callee_spans,
             )
         )
     return out
@@ -436,10 +440,17 @@ _SETUP_METHOD_NAMES = (
 )
 
 
-def _class_context(db: Session, sym: CodeSymbol, clone_path: Path) -> str | None:
+def _span(sym: CodeSymbol, source: str) -> SourceSpan:
+    return SourceSpan(
+        symbol_id=sym.symbol_id, file_path=sym.file_path,
+        start_line=sym.start_line, end_line=sym.end_line, name=sym.name, source=source,
+    )
+
+
+def _class_spans(db: Session, sym: CodeSymbol, clone_path: Path) -> list[SourceSpan]:
     """Return the source of ``sym``'s sibling setup methods, if any."""
     if sym.parent_symbol_id is None:
-        return None
+        return []
     siblings = (
         db.query(CodeSymbol)
         .filter(
@@ -450,7 +461,7 @@ def _class_context(db: Session, sym: CodeSymbol, clone_path: Path) -> str | None
         .order_by(CodeSymbol.start_line)
         .all()
     )
-    parts: list[str] = []
+    parts: list[SourceSpan] = []
     for sib in siblings:
         body = _read_source_range(
             clone_path=clone_path,
@@ -459,8 +470,8 @@ def _class_context(db: Session, sym: CodeSymbol, clone_path: Path) -> str | None
             end_line=sib.end_line,
         )
         if body:
-            parts.append(f"# {sib.name} (lines {sib.start_line}-{sib.end_line})\n{body}")
-    return "\n\n".join(parts) or None
+            parts.append(_span(sib, body))
+    return parts
 
 
 # A call site: an identifier followed by ``(``. Language-agnostic
@@ -473,14 +484,14 @@ _STRING_RE = re.compile(r"(\"[^\"\n]*\"|'[^'\n]*')")
 _MAX_CALLEES = 4
 
 
-def _callee_context(
+def _callee_spans(
     db: Session,
     sym: CodeSymbol,
     source: str,
     clone_path: Path,
     *,
     exclude: set[UUID],
-) -> str | None:
+) -> list[SourceSpan]:
     """Return the source of repo functions/methods that ``sym`` calls.
 
     The detail a claim names often sits one call away from the
@@ -499,7 +510,7 @@ def _callee_context(
     calls += _CALL_RE.findall(body)
     names = list(dict.fromkeys(n for n in calls if n != sym.name))
     if not names:
-        return None
+        return []
     defs = (
         db.query(CodeSymbol)
         .filter(
@@ -513,7 +524,7 @@ def _callee_context(
     by_name: dict[str, list[CodeSymbol]] = {}
     for d in defs:
         by_name.setdefault(d.name, []).append(d)
-    parts: list[str] = []
+    parts: list[SourceSpan] = []
     for name in names:
         callee = _nearest_definition(by_name.get(name, []), sym.file_path)
         if callee is None or callee.symbol_id in exclude:
@@ -525,12 +536,10 @@ def _callee_context(
             end_line=callee.end_line,
         )
         if text:
-            parts.append(
-                f"# {callee.name} ({callee.file_path}:{callee.start_line}-{callee.end_line})\n{text}"
-            )
+            parts.append(_span(callee, text))
         if len(parts) == _MAX_CALLEES:
             break
-    return "\n\n".join(parts) or None
+    return parts
 
 
 def _registry_members(

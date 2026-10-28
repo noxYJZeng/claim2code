@@ -18,6 +18,9 @@ from uuid import UUID, uuid4
 ROOT = Path(__file__).resolve().parents[1]
 _SHA = re.compile(r"[0-9a-fA-F]{40}\Z")
 _SHA256 = re.compile(r"[0-9a-fA-F]{64}\Z")
+# What the evaluators and the report write. Running the documented
+# sequence rewrites these, which must not mark the measured code dirty.
+_OUTPUTS = ("evaluation/results", "evaluation/results.json", "evaluation/report.md")
 
 
 def digest(value: Any) -> str:
@@ -99,7 +102,10 @@ def capture(
         "started_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "code": {"git_commit": _git(ROOT, "rev-parse", "HEAD"),
                  "source_sha256": source_digest,
-                 "dirty": _git(ROOT, "status", "--porcelain", "--untracked-files=no") != ""},
+                 "dirty": _git(
+                     ROOT, "status", "--porcelain", "--untracked-files=no", "--", ".",
+                     *(f":(exclude){p}" for p in _OUTPUTS),
+                 ) != ""},
         "parameters": parameters or {},
     }
     issues = []

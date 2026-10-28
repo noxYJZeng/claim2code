@@ -301,6 +301,24 @@ class RetrieveWeights(BaseModel):
     structural: float = Field(default=0.20, ge=0.0, le=1.0)
 
 
+class SourceSpan(BaseModel):
+    """Source of one symbol shown to the verifier as context.
+
+    ``class_context`` and ``callee_context`` are prompt text; these
+    spans record where each piece came from, so a citation of
+    context code can be checked against the real file location.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol_id: UUID
+    file_path: str
+    start_line: int
+    end_line: int
+    name: str
+    source: str
+
+
 class RetrieveMatch(BaseModel):
     """One hit in the returned retrieval list.
 
@@ -343,6 +361,8 @@ class RetrieveMatch(BaseModel):
     # The source of repo functions/methods this symbol calls, where a
     # claimed detail often lives one call away. Also verification-only.
     callee_context: str | None = None
+    # Where the class and callee context came from. Verification-only.
+    context_spans: list[SourceSpan] = Field(default_factory=list)
 
 
 class ScoreBreakdown(BaseModel):

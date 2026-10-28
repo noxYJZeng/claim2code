@@ -33,20 +33,21 @@ import OpenAnalysisForm from "./OpenAnalysisForm";
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [analysisId, setAnalysisId] = useState<string | null>(null);
+  const [analysisId, setAnalysisId] = useState<string | null>(() =>
+    new URLSearchParams(window.location.search).get("analysis"),
+  );
   const [nClaims, setNClaims] = useState<number>(0);
   const [repo, setRepo] = useState<RepoCreate | null>(null);
 
-  // Open the analysis named in the URL, if any.
+  // An analysis opened from the URL: count its claims for the summary,
+  // and fall back to the upload screen if the id is unknown.
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("analysis");
     if (!id) return;
     const controller = new AbortController();
     getClaims(id, controller.signal).then((result) => {
-      if (result.ok) {
-        setAnalysisId(id);
-        setNClaims(result.claims.claims.length);
-      }
+      if (result.ok) setNClaims(result.claims.claims.length);
+      else if (/^HTTP 4/.test(result.error)) setAnalysisId(null);
     });
     return () => controller.abort();
   }, []);

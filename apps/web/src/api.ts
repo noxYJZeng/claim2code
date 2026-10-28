@@ -183,6 +183,48 @@ export type Verification = {
 export type VerificationsResult =
   { ok: true; verifications: Verification[] } | { ok: false; error: string };
 
+export type ProviderPreset = {
+  id: string;
+  label: string;
+  kind: "openai_compat" | "anthropic";
+  base_url: string | null;
+  default_model: string;
+  models: string[];
+  needs_key: boolean;
+  key_env: string | null;
+  key_configured: boolean;
+  json_mode: "schema" | "object";
+  local: boolean;
+  note: string;
+};
+
+export type ProvidersView = {
+  active: { provider_id: string; label: string; model: string; base_url: string };
+  presets: ProviderPreset[];
+  embedding: { model: string; base_url: string; dim: number };
+};
+
+export type ProviderSelection = {
+  provider_id: string;
+  model: string;
+  base_url: string;
+  api_key: string;
+};
+
+export type ProviderTest = {
+  ok: boolean;
+  error: string | null;
+  latency_ms: number | null;
+  model: string;
+  base_url: string;
+};
+
+export type ProvidersResult =
+  { ok: true; view: ProvidersView } | { ok: false; error: string };
+
+export type ProviderTestResult =
+  { ok: true; test: ProviderTest } | { ok: false; error: string };
+
 export async function getHealth(signal?: AbortSignal): Promise<HealthResult> {
   try {
     const response = await fetch(`${API_BASE_URL}/health`, { signal });
@@ -428,6 +470,74 @@ export async function runVerification(
     }
     const json = (await response.json()) as { verifications: Verification[] };
     return { ok: true, verifications: json.verifications };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** Chat-model providers, which have a key, and the active choice.
+ *  GET /llm/providers — keys are never returned. */
+export async function getProviders(signal?: AbortSignal): Promise<ProvidersResult> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/llm/providers`, { signal });
+    if (!response.ok) {
+      return { ok: false, error: `HTTP ${response.status}` };
+    }
+    return { ok: true, view: (await response.json()) as ProvidersView };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+async function postJson(path: string, body: unknown): Promise<Response> {
+  return fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+async function errorDetail(response: Response): Promise<string> {
+  try {
+    const json = (await response.json()) as { detail?: unknown };
+    if (typeof json.detail === "string") return json.detail;
+  } catch {
+    // fall through to the status line
+  }
+  return `HTTP ${response.status}`;
+}
+
+/** Switch the chat model. POST /llm/provider — the next LLM call uses it. */
+export async function setProvider(selection: ProviderSelection): Promise<ProvidersResult> {
+  try {
+    const response = await postJson("/llm/provider", selection);
+    if (!response.ok) {
+      return { ok: false, error: await errorDetail(response) };
+    }
+    return { ok: true, view: (await response.json()) as ProvidersView };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** Check a selection reaches its server, without switching to it.
+ *  POST /llm/provider/test */
+export async function testProvider(selection: ProviderSelection): Promise<ProviderTestResult> {
+  try {
+    const response = await postJson("/llm/provider/test", selection);
+    if (!response.ok) {
+      return { ok: false, error: await errorDetail(response) };
+    }
+    return { ok: true, test: (await response.json()) as ProviderTest };
   } catch (err) {
     if (err instanceof Error) {
       return { ok: false, error: err.message };

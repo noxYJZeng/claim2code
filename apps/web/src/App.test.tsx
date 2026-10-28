@@ -541,6 +541,7 @@ describe("App", () => {
       "fetch",
       vi.fn().mockImplementation((url: string) => {
         if (url.endsWith("/health")) return respond({ status: "ok" });
+        if (url.includes("/llm/")) return respond({}, 404);
         if (url.includes("/analyses/missing/")) return respond({ detail: "nope" }, 404);
         if (url.endsWith("/claims")) {
           return respond({ analysis_id: analysisId, paper_status: "done", claims: [] });
@@ -572,6 +573,9 @@ describe("App", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/llm/")) {
+          return Promise.resolve(new Response("{}", { status: 404 }));
+        }
         const body = url.endsWith("/health")
           ? { status: "ok" }
           : url.endsWith("/claims")

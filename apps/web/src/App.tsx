@@ -7,6 +7,7 @@ import SymbolsList from "./SymbolsList";
 import ClaimRetrievalPanel from "./ClaimRetrievalPanel";
 import VerificationPanel from "./VerificationPanel";
 import OpenAnalysisForm from "./OpenAnalysisForm";
+import ModelProviderPanel from "./ModelProviderPanel";
 
 // Claim2Code — Phase 3 single-page UI.
 //
@@ -26,6 +27,9 @@ import OpenAnalysisForm from "./OpenAnalysisForm";
 // (<OpenAnalysisForm/>), since upload and indexing take minutes. The
 // open analysis is mirrored in the URL (?analysis=<id>), so a refresh
 // or a shared link lands on the same analysis.
+//
+// <ModelProviderPanel/> in the header picks the chat model the
+// backend uses (llm/providers.py).
 //
 // Phase 5+ will introduce react-router-dom when the repository page
 // becomes its own route; for now, the whole interaction is still
@@ -115,6 +119,7 @@ export default function App() {
               {error}
             </p>
           )}
+          {online && <ModelProviderPanel />}
         </header>
 
         {!analysisId ? (

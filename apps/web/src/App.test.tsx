@@ -5,6 +5,7 @@ import App from "./App";
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.history.replaceState(null, "", "/"); // App mirrors the analysis in the URL
 });
 
 describe("App", () => {
@@ -563,5 +564,31 @@ describe("App", () => {
     fireEvent.click(screen.getByTestId("open-analysis-button"));
     expect(await screen.findByTestId("upload-summary")).toHaveTextContent("0 claims");
     expect(await screen.findByTestId("verification-panel")).toBeInTheDocument();
+  });
+
+  it("opens the analysis named in the URL", async () => {
+    const analysisId = "44444444-4444-4444-4444-444444444444";
+    window.history.replaceState(null, "", `/?analysis=${analysisId}`);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        const body = url.endsWith("/health")
+          ? { status: "ok" }
+          : url.endsWith("/claims")
+            ? { analysis_id: analysisId, paper_status: "done", claims: [] }
+            : { analysis_id: analysisId, verifications: [] };
+        return Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      }),
+    );
+    render(<App />);
+
+    expect(await screen.findByTestId("verification-panel")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /upload another/i }));
+    expect(window.location.search).toBe("");
   });
 });

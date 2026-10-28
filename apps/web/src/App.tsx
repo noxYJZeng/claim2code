@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getHealth, type Health, type RepoCreate } from "./api";
+import { getClaims, getHealth, type Health, type RepoCreate } from "./api";
 import UploadSection from "./UploadSection";
 import ClaimsList from "./ClaimsList";
 import RepositorySection from "./RepositorySection";
@@ -23,7 +23,9 @@ import OpenAnalysisForm from "./OpenAnalysisForm";
 //
 // Phase 6 appends <VerificationPanel/>: per-claim verdicts against
 // the bound repository. An earlier analysis can be reopened by id
-// (<OpenAnalysisForm/>), since upload and indexing take minutes.
+// (<OpenAnalysisForm/>), since upload and indexing take minutes. The
+// open analysis is mirrored in the URL (?analysis=<id>), so a refresh
+// or a shared link lands on the same analysis.
 //
 // Phase 5+ will introduce react-router-dom when the repository page
 // becomes its own route; for now, the whole interaction is still
@@ -34,6 +36,27 @@ export default function App() {
   const [analysisId, setAnalysisId] = useState<string | null>(null);
   const [nClaims, setNClaims] = useState<number>(0);
   const [repo, setRepo] = useState<RepoCreate | null>(null);
+
+  // Open the analysis named in the URL, if any.
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("analysis");
+    if (!id) return;
+    const controller = new AbortController();
+    getClaims(id, controller.signal).then((result) => {
+      if (result.ok) {
+        setAnalysisId(id);
+        setNClaims(result.claims.claims.length);
+      }
+    });
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (analysisId) url.searchParams.set("analysis", analysisId);
+    else url.searchParams.delete("analysis");
+    window.history.replaceState(null, "", url);
+  }, [analysisId]);
 
   useEffect(() => {
     const controller = new AbortController();

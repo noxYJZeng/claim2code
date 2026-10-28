@@ -281,7 +281,9 @@ In the web UI: upload a PDF (or paste the `analysis_id` of an earlier
 upload under "Open an earlier analysis"), clone the paper's repository,
 then use the **Verification** panel to verify one claim or all of them.
 Verdicts render as each claim finishes (a few minutes per claim on a local
-model) and are saved, so reopening the analysis shows them again; "Show
+model) and are saved, so reopening the analysis shows them again. The open
+analysis is kept in the URL (`http://localhost:5173/?analysis=<id>`), so a
+refresh or a bookmarked link returns to it; "Show
 details" lists the explanation, discrepancies and cited code lines.
 
 ### 7. Run the test suite

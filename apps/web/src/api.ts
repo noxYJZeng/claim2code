@@ -152,6 +152,37 @@ export type RetrieveResponse = {
 export type RetrieveResult =
   { ok: true; response: RetrieveResponse } | { ok: false; error: string };
 
+export type VerificationStatus =
+  "VERIFIED" | "PARTIALLY_VERIFIED" | "CONTRADICTED" | "UNVERIFIED";
+
+export type CodeEvidence = {
+  symbol_id: string;
+  file_path: string;
+  start_line: number;
+  end_line: number;
+  quote: string;
+};
+
+export type Discrepancy = {
+  type: string;
+  severity: "LOW" | "MEDIUM" | "HIGH";
+  detail: string;
+  code_quote: string | null;
+};
+
+export type Verification = {
+  claim_id: string;
+  status: VerificationStatus;
+  confidence: number;
+  explanation: string;
+  paper_evidence: PaperEvidence;
+  code_evidence: CodeEvidence[];
+  discrepancies: Discrepancy[];
+};
+
+export type VerificationsResult =
+  { ok: true; verifications: Verification[] } | { ok: false; error: string };
+
 export async function getHealth(signal?: AbortSignal): Promise<HealthResult> {
   try {
     const response = await fetch(`${API_BASE_URL}/health`, { signal });
@@ -335,6 +366,68 @@ export async function retrieveSymbols(
     }
     const json = (await response.json()) as RetrieveResponse;
     return { ok: true, response: json };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** Fetch the stored verdicts for one analysis.
+ *  GET /analyses/{analysis_id}/verifications — empty list until a run. */
+export async function getVerifications(
+  analysisId: string,
+  signal?: AbortSignal,
+): Promise<VerificationsResult> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/verifications`,
+      { signal },
+    );
+    if (!response.ok) {
+      return { ok: false, error: `HTTP ${response.status}` };
+    }
+    const json = (await response.json()) as { verifications: Verification[] };
+    return { ok: true, verifications: json.verifications };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** Verify the given claims against the analysis's bound repository.
+ *
+ *  POST /analyses/{analysis_id}/verifications with body {claim_ids}.
+ *  Synchronous: one LLM call per claim, so the UI sends one claim per
+ *  request and renders each verdict as it lands. The server keeps the
+ *  stored verdicts of claims outside the request. */
+export async function runVerification(
+  analysisId: string,
+  claimIds: string[],
+  signal?: AbortSignal,
+): Promise<VerificationsResult> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/verifications`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ claim_ids: claimIds }),
+        signal,
+      },
+    );
+    if (!response.ok) {
+      const detail = await response.text();
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${detail.slice(0, 200)}`,
+      };
+    }
+    const json = (await response.json()) as { verifications: Verification[] };
+    return { ok: true, verifications: json.verifications };
   } catch (err) {
     if (err instanceof Error) {
       return { ok: false, error: err.message };

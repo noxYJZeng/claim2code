@@ -5,6 +5,8 @@ import ClaimsList from "./ClaimsList";
 import RepositorySection from "./RepositorySection";
 import SymbolsList from "./SymbolsList";
 import ClaimRetrievalPanel from "./ClaimRetrievalPanel";
+import VerificationPanel from "./VerificationPanel";
+import OpenAnalysisForm from "./OpenAnalysisForm";
 
 // Claim2Code — Phase 3 single-page UI.
 //
@@ -18,6 +20,10 @@ import ClaimRetrievalPanel from "./ClaimRetrievalPanel";
 // a repo is bound, the user can pick one of the extracted claims
 // and the panel POSTs it to /repositories/{id}/retrieve, rendering
 // the top-k matching symbols with similarity scores.
+//
+// Phase 6 appends <VerificationPanel/>: per-claim verdicts against
+// the bound repository. An earlier analysis can be reopened by id
+// (<OpenAnalysisForm/>), since upload and indexing take minutes.
 //
 // Phase 5+ will introduce react-router-dom when the repository page
 // becomes its own route; for now, the whole interaction is still
@@ -88,12 +94,20 @@ export default function App() {
         </header>
 
         {!analysisId ? (
-          <UploadSection
-            onUploaded={(result) => {
-              setAnalysisId(result.analysisId);
-              setNClaims(result.nClaims);
-            }}
-          />
+          <div className="space-y-6">
+            <UploadSection
+              onUploaded={(result) => {
+                setAnalysisId(result.analysisId);
+                setNClaims(result.nClaims);
+              }}
+            />
+            <OpenAnalysisForm
+              onOpened={(result) => {
+                setAnalysisId(result.analysisId);
+                setNClaims(result.nClaims);
+              }}
+            />
+          </div>
         ) : (
           <div className="space-y-6">
             <div className="flex items-baseline justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
@@ -128,6 +142,7 @@ export default function App() {
               </div>
             )}
             {repo && <SymbolsList repositoryId={repo.repository_id} />}
+            <VerificationPanel analysisId={analysisId} />
             {repo && (
               <ClaimRetrievalPanel
                 repositoryId={repo.repository_id}

@@ -277,6 +277,13 @@ Open:
 - API docs:        http://localhost:8000/docs
 - Web UI:          http://localhost:5173
 
+In the web UI: upload a PDF (or paste the `analysis_id` of an earlier
+upload under "Open an earlier analysis"), clone the paper's repository,
+then use the **Verification** panel to verify one claim or all of them.
+Verdicts render as each claim finishes (a few minutes per claim on a local
+model) and are saved, so reopening the analysis shows them again; "Show
+details" lists the explanation, discrepancies and cited code lines.
+
 ### 7. Run the test suite
 
 `apps/api/pyproject.toml` line 85 sets

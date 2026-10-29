@@ -43,24 +43,22 @@ configuration or accept uploads.
 
 ## Measured results
 
-Historical development benchmark from [`evaluation/report.md`](evaluation/report.md), measured locally with
-`qwen3.8-27b-mlx` (LM Studio) and `nomic-embed-text-v1.5` embeddings on 8
-annotated pairs (Attention Is All You Need, BERT, DDIM, DDPM, DPO, LoRA, MAE,
-Reflexion; 79 claims). These are historical results from before the stricter
-runtime citation checks in this revision; no new model run is claimed here.
-The legacy files do not contain complete per-run provenance. New evaluators
-record their execution metadata; see [evaluation instructions](evaluation/README.md)
-before running `make eval-all`.
+Development benchmark from [`evaluation/report.md`](evaluation/report.md), measured locally on
+2026-10-28 at commit `93cd752` with `qwen3.8-27b-mlx` (LM Studio) and
+`nomic-embed-text-v1.5` embeddings on 8 annotated pairs (Attention Is All You
+Need, BERT, DDIM, DDPM, DPO, LoRA, MAE, Reflexion; 79 claims), with the runtime
+citation check on. Each evaluator records its provenance in its results file;
+see [evaluation instructions](evaluation/README.md) before running `make eval-all`.
 
 | Area | Metric | Claim2Code | Baseline |
 |---|---|---|---|
 | Retrieval (top 5) | Recall@5, macro avg | **0.74** | 0.65 embedding-only · 0.52 lexical-only |
 | | MRR, macro avg | **0.529** | 0.462 embedding-only · 0.320 lexical-only |
-| Verification | Status accuracy on observed labels | 81.0% | 88.6% always-VERIFIED baseline |
-| | Support rate (claim judged VERIFIED / PARTIALLY_VERIFIED) | 87.3% | — |
-| | Discrepancy precision / recall (claim level) | 58.3% / 77.8% | — |
-| | Grounding rate (cited code exists in the cited file) | 99.5% of 191 citations | — |
-| | Line accuracy (cited code at the cited lines) | 92.1% | — |
+| Verification | Status accuracy on observed labels | 79.7% | 88.6% always-VERIFIED baseline |
+| | Support rate (claim judged VERIFIED / PARTIALLY_VERIFIED) | 88.6% | — |
+| | Discrepancy precision / recall (claim level) | 50.0% / 77.8% | — |
+| | Grounding rate (cited code exists in the cited file) | 100% of 200 citations | — |
+| | Line accuracy (cited code at the cited lines) | 100% | — |
 | Safety | Secrets protected, covered / held-out forms | 10/10 · 2/8 | — |
 | | Injections detected, covered / held-out forms | 6/6 · 0/6 | — |
 | | Clean text flagged | 3/12 | — |
@@ -70,8 +68,13 @@ The gold set contains 70 `VERIFIED` and 9 `PARTIALLY_VERIFIED` claims, with no
 classification quality. Evaluation supplies curated claims, using those texts
 as paper quotes; it does not measure PDF-to-claim extraction or paper-citation
 correctness. Code grounding measures quote existence, not verdict correctness.
-Hybrid retrieval improves the macro average by about 9 percentage points over
-embedding-only here, while some individual pairs regress.
+Grounding and line accuracy are 100% by construction: the runtime check keeps
+only quotes found in source shown to the model and moves each to its actual
+lines. Before that check the same pipeline scored 81.0% with 99.5% grounding
+and 92.1% line accuracy; a stricter first version, which dropped real code
+cited under the wrong symbol or a few lines off, scored 70.9%. Hybrid retrieval
+improves the macro average by about 9 percentage points over embedding-only
+here, while some individual pairs regress.
 
 Caveats: only 9 of the 79 claims carry an annotated discrepancy, so the
 discrepancy rates rest on few cases. The annotations were written during
@@ -83,11 +86,12 @@ labels, the earlier pipeline reached 63.6% accuracy on the first 5 pairs. The
 Attention, BERT and DDPM pairs were annotated afterwards against
 harvardnlp/annotated-transformer, google-research/bert and
 hojonathanho/diffusion; BERT's pre-training hyperparameters are absl flags,
-which the parser now indexes as config symbols. Of the 15 misses, 6 got no
+which the parser now indexes as config symbols. Of the 16 misses, 4 got no
 code evidence (3 in LoRA, whose `examples/NLU` is a vendored transformers
-checkout), 2 more are UNVERIFIED despite evidence, 5 are PARTIALLY_VERIFIED verdicts on claims annotated VERIFIED, and
-2 are CONTRADICTED where a PARTIALLY_VERIFIED mismatch was expected (the
-mismatch was caught but over-graded). The safety `held_out` cases (GitHub
+checkout), 3 more are UNVERIFIED despite evidence, 7 are PARTIALLY_VERIFIED
+verdicts on claims annotated VERIFIED, and 2 are CONTRADICTED where a
+PARTIALLY_VERIFIED mismatch was expected (the mismatch was caught but
+over-graded). The safety `held_out` cases (GitHub
 fine-grained / Slack / Hugging Face tokens, paraphrased injections) are coverage
 gaps of the regex gate, which matches only the forms listed in Phase 8.
 Injection detection records a match; it is not a guarantee that the input was

@@ -1,12 +1,14 @@
 # Claim2Code — Evaluation Report
 
-Report rendered 2026-10-28T03:06:58+00:00. Rendering does not run the models.
+Report rendered 2026-10-29T01:40:53+00:00. Rendering does not run the models.
 Measurement code and model identities below come only from stored evaluator provenance.
 
 Historical combined-report header (not verified per evaluator): commit `0aa09dc`, chat `qwen3.8-27b-mlx`, embeddings `text-embedding-nomic-embed-text-v1.5`.
 These archived numbers predate subsequent fixes and are not a new measurement of this checkout.
 
-Measurement `retrieval`: legacy artifact; inference provenance unknown.
+Measurement `retrieval`: run `81f0d74c-cd23-4564-8e37-a46878e71893`, code `93cd752e3a530aa86fc4cfb3524f362dad464b49`, started `2026-10-29T01:40:38+00:00`.
+
+Recorded chat `qwen3.8-27b-mlx`; embeddings `text-embedding-nomic-embed-text-v1.5`.
 
 ## Retrieval
 
@@ -84,7 +86,9 @@ Measurement `retrieval`: legacy artifact; inference provenance unknown.
 
 Aggregates are macro averages over datasets. Baselines: embedding_only, lexical_only, hybrid_claim2code.
 
-Measurement `verification`: legacy artifact; inference provenance unknown.
+Measurement `verification`: run `981af1fe-6a81-4090-8af4-c613554a4441`, code `93cd752e3a530aa86fc4cfb3524f362dad464b49`, started `2026-10-28T19:37:45+00:00`.
+
+Recorded chat `qwen3.8-27b-mlx`; embeddings `text-embedding-nomic-embed-text-v1.5`.
 
 ## Verification
 
@@ -94,16 +98,16 @@ The input is an annotation's claim text, also used as its paper quote. This does
 
 | Metric | Value |
 |---|---|
-| Status accuracy (exact, on observed labels) | 81.0% |
+| Status accuracy (exact, on observed labels) | 79.7% |
 | Majority-class baseline (always VERIFIED) | 88.6% |
-| Macro F1 (gold-present labels only) | 72.1% |
-| Balanced accuracy (gold-present labels only) | 69.9% |
-| Support rate (VERIFIED or PARTIALLY_VERIFIED) | 87.3% |
-| Discrepancy precision | 58.3% (12 flagged) |
+| Macro F1 (gold-present labels only) | 69.1% |
+| Balanced accuracy (gold-present labels only) | 69.2% |
+| Support rate (VERIFIED or PARTIALLY_VERIFIED) | 88.6% |
+| Discrepancy precision | 50.0% (14 flagged) |
 | Discrepancy recall | 77.8% (9 annotated) |
-| Grounding rate (cited code exists in the cited file) | 99.5% (191 citations) |
-| Line accuracy (cited code at the cited lines) | 92.1% |
-| Evidence hit rate (supported verdicts citing an annotated symbol) | 92.8% |
+| Grounding rate (cited code exists in the cited file) | 100.0% (200 citations) |
+| Line accuracy (cited code at the cited lines) | 100.0% |
+| Evidence hit rate (supported verdicts citing an annotated symbol) | 92.9% |
 | LLM errors | 0 |
 
 ### Per pair
@@ -112,10 +116,10 @@ The input is an annotation's claim text, also used as its paper quote. This does
 |---|---|---|---|---|---|---|
 | attention_is_all_you_need | 12 | 91.7% | 100.0% | 50.0% | 100.0% | 100.0% |
 | bert | 11 | 72.7% | 81.8% | 50.0% | 100.0% | 100.0% |
-| ddim | 8 | 75.0% | 87.5% | 0.0% | n/a | 100.0% |
-| ddpm | 12 | 91.7% | 91.7% | 100.0% | 100.0% | 96.6% |
+| ddim | 8 | 75.0% | 100.0% | 0.0% | n/a | 100.0% |
+| ddpm | 12 | 91.7% | 91.7% | 100.0% | 100.0% | 100.0% |
 | dpo | 9 | 77.8% | 77.8% | 100.0% | 100.0% | 100.0% |
-| lora | 10 | 70.0% | 70.0% | n/a | 0.0% | 100.0% |
+| lora | 10 | 60.0% | 70.0% | 0.0% | 0.0% | 100.0% |
 | mae | 9 | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
 | reflexion | 8 | 62.5% | 87.5% | 50.0% | 66.7% | 100.0% |
 
@@ -123,8 +127,8 @@ The input is an annotation's claim text, also used as its paper quote. This does
 
 | Gold label | Count | Precision | Recall | F1 |
 |---|---|---|---|---|
-| VERIFIED | 70 | 100.0% | 84.3% | 91.5% |
-| PARTIALLY_VERIFIED | 9 | 50.0% | 55.6% | 52.6% |
+| VERIFIED | 70 | 100.0% | 82.9% | 90.6% |
+| PARTIALLY_VERIFIED | 9 | 41.7% | 55.6% | 47.6% |
 | CONTRADICTED | 0 | 0.0% | n/a | n/a |
 | UNVERIFIED | 0 | 0.0% | n/a | n/a |
 
@@ -136,10 +140,10 @@ Code grounding measures whether a quote exists, not whether the verdict is corre
 
 | | VERIFIED | PARTIALLY_VERIFIED | CONTRADICTED | UNVERIFIED |
 |---|---|---|---|---|
-| VERIFIED | 59 | 5 | 0 | 6 |
+| VERIFIED | 58 | 7 | 0 | 5 |
 | PARTIALLY_VERIFIED | 0 | 5 | 2 | 2 |
 
-Measurement `safety`: legacy artifact; inference provenance unknown.
+Measurement `safety`: run `2df6a54e-57d1-4747-972c-f23010e29f49`, code `93cd752e3a530aa86fc4cfb3524f362dad464b49`, started `2026-10-29T01:40:52+00:00`.
 
 ## Safety
 
@@ -171,6 +175,35 @@ Measurement `safety`: legacy artifact; inference provenance unknown.
 
 ## Provenance and reproducibility warnings
 
-- retrieval: legacy output has no per-run measurement provenance
-- verification: legacy output has no per-run measurement provenance
-- safety: legacy output has no per-run measurement provenance
+- retrieval: attention_is_all_you_need: repository revision is not a full immutable commit SHA
+- retrieval: attention_is_all_you_need: paper SHA-256 is missing or a placeholder
+- retrieval: bert: repository revision is not a full immutable commit SHA
+- retrieval: bert: paper SHA-256 is missing or a placeholder
+- retrieval: ddim: repository revision is not a full immutable commit SHA
+- retrieval: ddim: paper SHA-256 is missing or a placeholder
+- retrieval: ddpm: repository revision is not a full immutable commit SHA
+- retrieval: ddpm: paper SHA-256 is missing or a placeholder
+- retrieval: dpo: repository revision is not a full immutable commit SHA
+- retrieval: dpo: paper SHA-256 is missing or a placeholder
+- retrieval: lora: repository revision is not a full immutable commit SHA
+- retrieval: lora: paper SHA-256 is missing or a placeholder
+- retrieval: mae: repository revision is not a full immutable commit SHA
+- retrieval: mae: paper SHA-256 is missing or a placeholder
+- retrieval: reflexion: repository revision is not a full immutable commit SHA
+- retrieval: reflexion: paper SHA-256 is missing or a placeholder
+- verification: attention_is_all_you_need: repository revision is not a full immutable commit SHA
+- verification: attention_is_all_you_need: paper SHA-256 is missing or a placeholder
+- verification: bert: repository revision is not a full immutable commit SHA
+- verification: bert: paper SHA-256 is missing or a placeholder
+- verification: ddim: repository revision is not a full immutable commit SHA
+- verification: ddim: paper SHA-256 is missing or a placeholder
+- verification: ddpm: repository revision is not a full immutable commit SHA
+- verification: ddpm: paper SHA-256 is missing or a placeholder
+- verification: dpo: repository revision is not a full immutable commit SHA
+- verification: dpo: paper SHA-256 is missing or a placeholder
+- verification: lora: repository revision is not a full immutable commit SHA
+- verification: lora: paper SHA-256 is missing or a placeholder
+- verification: mae: repository revision is not a full immutable commit SHA
+- verification: mae: paper SHA-256 is missing or a placeholder
+- verification: reflexion: repository revision is not a full immutable commit SHA
+- verification: reflexion: paper SHA-256 is missing or a placeholder

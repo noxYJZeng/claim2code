@@ -31,11 +31,11 @@ whose repository is not indexed is skipped and listed in the report.
 
 ## Measurement scope and reproducibility
 
-The checked-in numbers are historical **development-set measurements**,
-made before later citation-validation fixes. They are not a fresh test of
-the current checkout. The saved verification predictions have 70 VERIFIED
-and 9 PARTIALLY_VERIFIED gold labels, with no CONTRADICTED or UNVERIFIED
-gold examples. The 81.0% status accuracy should be compared with the 88.6%
+The checked-in numbers are **development-set measurements** of commit
+`93cd752` (2026-10-28), with provenance in each results file. The saved
+verification predictions have 70 VERIFIED and 9 PARTIALLY_VERIFIED gold
+labels, with no CONTRADICTED or UNVERIFIED gold examples. The 79.7% status
+accuracy should be compared with the 88.6%
 always-VERIFIED majority baseline. Reports now include that baseline,
 label counts, per-class metrics and macro F1 over gold-present classes;
 metrics for absent gold classes remain undefined.

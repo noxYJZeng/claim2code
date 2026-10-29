@@ -233,5 +233,156 @@
       "avg_recall_at_5": 0.7366477272727273,
       "avg_mrr": 0.5288589015151515
     }
+  },
+  "provenance": {
+    "schema_version": 1,
+    "evaluator": "retrieval",
+    "run_id": "81f0d74c-cd23-4564-8e37-a46878e71893",
+    "started_at": "2026-10-29T01:40:38+00:00",
+    "code": {
+      "git_commit": "93cd752e3a530aa86fc4cfb3524f362dad464b49",
+      "source_sha256": "33e898775a04e56e5de79cb2966a67f76a382756629e83ffbc7fc579c83c9958",
+      "dirty": false
+    },
+    "parameters": {
+      "top_k": 5,
+      "baselines": [
+        "embedding_only",
+        "lexical_only",
+        "hybrid_claim2code"
+      ]
+    },
+    "dataset": {
+      "annotations_sha256": "b1d815ef25c3e992f51b3cf840c1cd628983e4d7448423d2fa0a6da00ed05f7d",
+      "pairs": {
+        "attention_is_all_you_need": {
+          "annotation_sha256": "61448b5df40fad117dc4fdf0bd584e3cb3d5af1f60c8aa7cf0a191a783134e59",
+          "declared_repo_commit": "debc9fd",
+          "declared_paper_sha256": ""
+        },
+        "bert": {
+          "annotation_sha256": "b2de8e62738f9e78c116e795592771c5ae25d30a12825dc4dfc975a1646d971a",
+          "declared_repo_commit": "eedf571",
+          "declared_paper_sha256": ""
+        },
+        "ddim": {
+          "annotation_sha256": "7d18282e0988ddfec21feef5cc730f5fde9383043d80cb77ff4cb8d8de9fe045",
+          "declared_repo_commit": "main",
+          "declared_paper_sha256": "Song2021-placeholder"
+        },
+        "ddpm": {
+          "annotation_sha256": "adca92d8755a4b4ddb10e1853d9368929cd7d0a69923e2c69bb87f02d6184733",
+          "declared_repo_commit": "1e0dceb",
+          "declared_paper_sha256": ""
+        },
+        "dpo": {
+          "annotation_sha256": "0a6b52bb3529aa43256a02036b3a69142d3489f4b624193d3f05bbf63391dcfe",
+          "declared_repo_commit": "main",
+          "declared_paper_sha256": "Rafailov2023-placeholder"
+        },
+        "lora": {
+          "annotation_sha256": "fdc4ba94b8e69f19554fe96fd3865dbd473865b0e1324d4914385959a6cccbc1",
+          "declared_repo_commit": "main",
+          "declared_paper_sha256": "Hu2021-placeholder"
+        },
+        "mae": {
+          "annotation_sha256": "9aa93b6a933b7e05fadf57d24b740ba64d265c79aefe7fce386f60de64a16fed",
+          "declared_repo_commit": "main",
+          "declared_paper_sha256": "He2022-placeholder"
+        },
+        "reflexion": {
+          "annotation_sha256": "14577450fb82ea4eba400f10484d20a7c4ef01f73f9398df6bf7da6f0da4999b",
+          "declared_repo_commit": "main",
+          "declared_paper_sha256": "Shinn2023-placeholder"
+        }
+      },
+      "issues": [
+        "attention_is_all_you_need: repository revision is not a full immutable commit SHA",
+        "attention_is_all_you_need: paper SHA-256 is missing or a placeholder",
+        "bert: repository revision is not a full immutable commit SHA",
+        "bert: paper SHA-256 is missing or a placeholder",
+        "ddim: repository revision is not a full immutable commit SHA",
+        "ddim: paper SHA-256 is missing or a placeholder",
+        "ddpm: repository revision is not a full immutable commit SHA",
+        "ddpm: paper SHA-256 is missing or a placeholder",
+        "dpo: repository revision is not a full immutable commit SHA",
+        "dpo: paper SHA-256 is missing or a placeholder",
+        "lora: repository revision is not a full immutable commit SHA",
+        "lora: paper SHA-256 is missing or a placeholder",
+        "mae: repository revision is not a full immutable commit SHA",
+        "mae: paper SHA-256 is missing or a placeholder",
+        "reflexion: repository revision is not a full immutable commit SHA",
+        "reflexion: paper SHA-256 is missing or a placeholder"
+      ]
+    },
+    "repositories": {
+      "attention_is_all_you_need": {
+        "commit": "debc9fd747bb2123160a98046ad1c2d4da44a567",
+        "dirty": false
+      },
+      "bert": {
+        "commit": "eedf5716ce1268e56f0a50264a88cafad334ac61",
+        "dirty": false
+      },
+      "ddim": {
+        "commit": "e8df66cf02e457719930748b5c26e37e3126dfdd",
+        "dirty": false
+      },
+      "ddpm": {
+        "commit": "1e0dceb3b3495bbe19116a5e1b3596cd0706c543",
+        "dirty": false
+      },
+      "dpo": {
+        "commit": "f8b8c0f49dc92a430bae41585f9d467d3618fe2f",
+        "dirty": false
+      },
+      "lora": {
+        "commit": "c4593f060e6a368d7bb5af5273b8e42810cdef90",
+        "dirty": false
+      },
+      "mae": {
+        "commit": "efb2a8062c206524e35e47d04501ed4f544c0ae8",
+        "dirty": false
+      },
+      "reflexion": {
+        "commit": "218cf0ef1df84b05ce379dd4a8e47f17766733a0",
+        "dirty": false
+      }
+    },
+    "models": {
+      "chat_provider": "env",
+      "chat_model": "qwen3.8-27b-mlx",
+      "embedding_model": "text-embedding-nomic-embed-text-v1.5",
+      "embedding_dimensions": 768,
+      "chat_endpoint_sha256": "94afb24309b0b0eb1eb54b3b004a36b854220bdbedf1f65debdd6445df4668c6",
+      "embedding_endpoint_sha256": "94afb24309b0b0eb1eb54b3b004a36b854220bdbedf1f65debdd6445df4668c6",
+      "chat_model_revision": null,
+      "embedding_model_revision": null,
+      "quantization": null
+    },
+    "settings": {
+      "llm_request_timeout_seconds": 900.0,
+      "embed_batch_size": 128,
+      "embed_max_retries": 3
+    },
+    "reproducibility_issues": [
+      "attention_is_all_you_need: repository revision is not a full immutable commit SHA",
+      "attention_is_all_you_need: paper SHA-256 is missing or a placeholder",
+      "bert: repository revision is not a full immutable commit SHA",
+      "bert: paper SHA-256 is missing or a placeholder",
+      "ddim: repository revision is not a full immutable commit SHA",
+      "ddim: paper SHA-256 is missing or a placeholder",
+      "ddpm: repository revision is not a full immutable commit SHA",
+      "ddpm: paper SHA-256 is missing or a placeholder",
+      "dpo: repository revision is not a full immutable commit SHA",
+      "dpo: paper SHA-256 is missing or a placeholder",
+      "lora: repository revision is not a full immutable commit SHA",
+      "lora: paper SHA-256 is missing or a placeholder",
+      "mae: repository revision is not a full immutable commit SHA",
+      "mae: paper SHA-256 is missing or a placeholder",
+      "reflexion: repository revision is not a full immutable commit SHA",
+      "reflexion: paper SHA-256 is missing or a placeholder"
+    ],
+    "completed_at": "2026-10-29T01:40:52+00:00"
   }
 }

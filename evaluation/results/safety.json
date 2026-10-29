@@ -482,5 +482,22 @@
       "patterns": [],
       "passed": true
     }
-  ]
+  ],
+  "provenance": {
+    "schema_version": 1,
+    "evaluator": "safety",
+    "run_id": "2df6a54e-57d1-4747-972c-f23010e29f49",
+    "started_at": "2026-10-29T01:40:52+00:00",
+    "code": {
+      "git_commit": "93cd752e3a530aa86fc4cfb3524f362dad464b49",
+      "source_sha256": "33e898775a04e56e5de79cb2966a67f76a382756629e83ffbc7fc579c83c9958",
+      "dirty": false
+    },
+    "parameters": {
+      "leak_window": 12
+    },
+    "corpus_sha256": "39a0ee40acc8452aa4f6cc40f1ed1d6163cd3a4a1af66d6dbffbd7dc2ae841ec",
+    "reproducibility_issues": [],
+    "completed_at": "2026-10-29T01:40:52+00:00"
+  }
 }

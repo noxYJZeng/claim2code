@@ -1,0 +1,398 @@
+{
+  "schema_version": 1,
+  "scope": "pinned_source_index_only",
+  "parse_only": true,
+  "n_repositories": 15,
+  "n_pytorch_repositories": 12,
+  "n_claims": 114,
+  "n_symbols": 27981,
+  "n_resolved_annotation_symbols": 178,
+  "pairs": {
+    "attention_is_all_you_need": {
+      "framework": "pytorch",
+      "commit": "debc9fd747bb2123160a98046ad1c2d4da44a567",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 16,
+      "n_symbols": 122,
+      "n_resolved_annotation_symbols": 15,
+      "n_implementation_symbols": 100,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "bert": {
+      "framework": "tensorflow",
+      "commit": "eedf5716ce1268e56f0a50264a88cafad334ac61",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 21,
+      "n_symbols": 364,
+      "n_resolved_annotation_symbols": 18,
+      "n_implementation_symbols": 297,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "clip": {
+      "framework": "pytorch",
+      "commit": "d05afc436d78f1c48dc0dbf8e5980a9d471f35f6",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 20,
+      "n_symbols": 95,
+      "n_resolved_annotation_symbols": 8,
+      "n_implementation_symbols": 60,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "ddim": {
+      "framework": "pytorch",
+      "commit": "e8df66cf02e457719930748b5c26e37e3126dfdd",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 22,
+      "n_symbols": 198,
+      "n_resolved_annotation_symbols": 13,
+      "n_implementation_symbols": 125,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "ddpm": {
+      "framework": "tensorflow",
+      "commit": "1e0dceb3b3495bbe19116a5e1b3596cd0706c543",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 20,
+      "n_symbols": 248,
+      "n_resolved_annotation_symbols": 19,
+      "n_implementation_symbols": 170,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "deit": {
+      "framework": "pytorch",
+      "commit": "7e160fe43f0252d17191b71cbb5826254114ea5b",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 36,
+      "n_symbols": 391,
+      "n_resolved_annotation_symbols": 5,
+      "n_implementation_symbols": 294,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "detr": {
+      "framework": "pytorch",
+      "commit": "29901c51d7fe8712168b8d0d64351170bc0f83e0",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 43,
+      "n_symbols": 517,
+      "n_resolved_annotation_symbols": 7,
+      "n_implementation_symbols": 322,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "dino": {
+      "framework": "pytorch",
+      "commit": "7c446df5b9f45747937fb0d72314eb9f7b66930a",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 16,
+      "n_symbols": 448,
+      "n_resolved_annotation_symbols": 6,
+      "n_implementation_symbols": 295,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "dpo": {
+      "framework": "pytorch",
+      "commit": "f8b8c0f49dc92a430bae41585f9d467d3618fe2f",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 17,
+      "n_symbols": 119,
+      "n_resolved_annotation_symbols": 12,
+      "n_implementation_symbols": 59,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "lora": {
+      "framework": "pytorch",
+      "commit": "c4593f060e6a368d7bb5af5273b8e42810cdef90",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 1168,
+      "n_symbols": 23646,
+      "n_resolved_annotation_symbols": 15,
+      "n_implementation_symbols": 18096,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "mae": {
+      "framework": "pytorch",
+      "commit": "efb2a8062c206524e35e47d04501ed4f544c0ae8",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 23,
+      "n_symbols": 353,
+      "n_resolved_annotation_symbols": 19,
+      "n_implementation_symbols": 229,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "moco": {
+      "framework": "pytorch",
+      "commit": "132aea9da9bb995a411c915c0420be3db62052f3",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 17,
+      "n_symbols": 165,
+      "n_resolved_annotation_symbols": 8,
+      "n_implementation_symbols": 110,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "reflexion": {
+      "framework": "agent",
+      "commit": "218cf0ef1df84b05ce379dd4a8e47f17766733a0",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 414,
+      "n_symbols": 668,
+      "n_resolved_annotation_symbols": 17,
+      "n_implementation_symbols": 427,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "sam": {
+      "framework": "pytorch",
+      "commit": "dca509fe793f601edb92606367a655c15ac00fdf",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 52,
+      "n_symbols": 283,
+      "n_resolved_annotation_symbols": 8,
+      "n_implementation_symbols": 169,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    },
+    "whisper": {
+      "framework": "pytorch",
+      "commit": "86098128c0b4f24f0e2aa2994de830614b474227",
+      "source_checked": true,
+      "indexed": true,
+      "n_files": 40,
+      "n_symbols": 364,
+      "n_resolved_annotation_symbols": 8,
+      "n_implementation_symbols": 247,
+      "n_embeddings": 0,
+      "n_embedded_implementation_symbols": 0,
+      "embedding_model": null
+    }
+  },
+  "provenance": {
+    "schema_version": 1,
+    "evaluator": "benchmark_preparation",
+    "run_id": "ac7fbb34-820f-4678-b57d-edfb0b10d705",
+    "started_at": "2026-10-29T07:02:38+00:00",
+    "code": {
+      "git_commit": "4ec860a598dc704f1b4a7a5737e228424f78d80c",
+      "source_sha256": "73afa4285a24e77cffc716ca619f2d19ee552393b58c1b78f3250d1c283d17e0",
+      "dirty": false
+    },
+    "parameters": {
+      "parse_only": true
+    },
+    "dataset": {
+      "annotations_sha256": "ce24db1e8970979dc45b022433cfba350c80a031b65d1a38ccb1041ce921140f",
+      "pairs": {
+        "attention_is_all_you_need": {
+          "annotation_sha256": "1b029390291459ce2f8b89153e6959ec30ae07a6279afe7fd595d8b4c8b47d25",
+          "declared_repo_commit": "debc9fd747bb2123160a98046ad1c2d4da44a567",
+          "declared_paper_sha256": ""
+        },
+        "bert": {
+          "annotation_sha256": "aaababdcf5d25fbecd956e23cc0a8f49138329b1ab8021327b3310d5626b1a7e",
+          "declared_repo_commit": "eedf5716ce1268e56f0a50264a88cafad334ac61",
+          "declared_paper_sha256": ""
+        },
+        "clip": {
+          "annotation_sha256": "9980e7f60f0f1d3be7986f149ebec7801e8d165a855689179d464ee3855e244c",
+          "declared_repo_commit": "d05afc436d78f1c48dc0dbf8e5980a9d471f35f6",
+          "declared_paper_sha256": ""
+        },
+        "ddim": {
+          "annotation_sha256": "72b88d13a6bded63dc3c5438a3f171aa5c705da9935e6780a934bf18db97b9c4",
+          "declared_repo_commit": "e8df66cf02e457719930748b5c26e37e3126dfdd",
+          "declared_paper_sha256": ""
+        },
+        "ddpm": {
+          "annotation_sha256": "385fefd382e0a77a2f525f96d41171afc5f09666094472cd09c3cea0801301cb",
+          "declared_repo_commit": "1e0dceb3b3495bbe19116a5e1b3596cd0706c543",
+          "declared_paper_sha256": ""
+        },
+        "deit": {
+          "annotation_sha256": "7e5d1ea8b7bdeae992b83b89f704edc98b910317f1327bc43b2fea98e7a6fb09",
+          "declared_repo_commit": "7e160fe43f0252d17191b71cbb5826254114ea5b",
+          "declared_paper_sha256": ""
+        },
+        "detr": {
+          "annotation_sha256": "c216af4b4642770890c4c049dfd868fb6e085e0d617f48862c1cd3c00a7fccd4",
+          "declared_repo_commit": "29901c51d7fe8712168b8d0d64351170bc0f83e0",
+          "declared_paper_sha256": ""
+        },
+        "dino": {
+          "annotation_sha256": "878059bbab8eff21f614ab24bf847da33168a0e53d3fea6eba06cbaacd0bffbf",
+          "declared_repo_commit": "7c446df5b9f45747937fb0d72314eb9f7b66930a",
+          "declared_paper_sha256": ""
+        },
+        "dpo": {
+          "annotation_sha256": "a2a38e74a771ae45da853386cda6b2f0db0d692fd1cecb7696d5dd8b64d23296",
+          "declared_repo_commit": "f8b8c0f49dc92a430bae41585f9d467d3618fe2f",
+          "declared_paper_sha256": ""
+        },
+        "lora": {
+          "annotation_sha256": "59b3515b1ad21038330168a48076be139b43c5a8871208a1d23495470111876a",
+          "declared_repo_commit": "c4593f060e6a368d7bb5af5273b8e42810cdef90",
+          "declared_paper_sha256": ""
+        },
+        "mae": {
+          "annotation_sha256": "65ac4cf1f361cf9ac684239985c7a98200b2b758b74776cf7c9e023d0eda9668",
+          "declared_repo_commit": "efb2a8062c206524e35e47d04501ed4f544c0ae8",
+          "declared_paper_sha256": ""
+        },
+        "moco": {
+          "annotation_sha256": "96f5c371ed761edfb3823d32bc894acf9abc523db588ecbf9b459f5498095725",
+          "declared_repo_commit": "132aea9da9bb995a411c915c0420be3db62052f3",
+          "declared_paper_sha256": ""
+        },
+        "reflexion": {
+          "annotation_sha256": "49188b89191ad1f1d1cfa471a457b136e7b877bfc813f3bc0b98a316e9e46fd0",
+          "declared_repo_commit": "218cf0ef1df84b05ce379dd4a8e47f17766733a0",
+          "declared_paper_sha256": ""
+        },
+        "sam": {
+          "annotation_sha256": "826506fdba2a3118d6d0b586dba07c8ec10004f4dd87b45a1515bf3e0fb68e34",
+          "declared_repo_commit": "dca509fe793f601edb92606367a655c15ac00fdf",
+          "declared_paper_sha256": ""
+        },
+        "whisper": {
+          "annotation_sha256": "3e7fe03d76f0c5d4989e0b45a6e6d8bffd56defd110f686d3130ecdb073a9263",
+          "declared_repo_commit": "86098128c0b4f24f0e2aa2994de830614b474227",
+          "declared_paper_sha256": ""
+        }
+      },
+      "issues": [
+        "attention_is_all_you_need: paper SHA-256 is missing or a placeholder",
+        "bert: paper SHA-256 is missing or a placeholder",
+        "clip: paper SHA-256 is missing or a placeholder",
+        "ddim: paper SHA-256 is missing or a placeholder",
+        "ddpm: paper SHA-256 is missing or a placeholder",
+        "deit: paper SHA-256 is missing or a placeholder",
+        "detr: paper SHA-256 is missing or a placeholder",
+        "dino: paper SHA-256 is missing or a placeholder",
+        "dpo: paper SHA-256 is missing or a placeholder",
+        "lora: paper SHA-256 is missing or a placeholder",
+        "mae: paper SHA-256 is missing or a placeholder",
+        "moco: paper SHA-256 is missing or a placeholder",
+        "reflexion: paper SHA-256 is missing or a placeholder",
+        "sam: paper SHA-256 is missing or a placeholder",
+        "whisper: paper SHA-256 is missing or a placeholder"
+      ]
+    },
+    "repositories": {
+      "attention_is_all_you_need": {
+        "commit": "debc9fd747bb2123160a98046ad1c2d4da44a567",
+        "dirty": false
+      },
+      "bert": {
+        "commit": "eedf5716ce1268e56f0a50264a88cafad334ac61",
+        "dirty": false
+      },
+      "clip": {
+        "commit": "d05afc436d78f1c48dc0dbf8e5980a9d471f35f6",
+        "dirty": false
+      },
+      "ddim": {
+        "commit": "e8df66cf02e457719930748b5c26e37e3126dfdd",
+        "dirty": false
+      },
+      "ddpm": {
+        "commit": "1e0dceb3b3495bbe19116a5e1b3596cd0706c543",
+        "dirty": false
+      },
+      "deit": {
+        "commit": "7e160fe43f0252d17191b71cbb5826254114ea5b",
+        "dirty": false
+      },
+      "detr": {
+        "commit": "29901c51d7fe8712168b8d0d64351170bc0f83e0",
+        "dirty": false
+      },
+      "dino": {
+        "commit": "7c446df5b9f45747937fb0d72314eb9f7b66930a",
+        "dirty": false
+      },
+      "dpo": {
+        "commit": "f8b8c0f49dc92a430bae41585f9d467d3618fe2f",
+        "dirty": false
+      },
+      "lora": {
+        "commit": "c4593f060e6a368d7bb5af5273b8e42810cdef90",
+        "dirty": false
+      },
+      "mae": {
+        "commit": "efb2a8062c206524e35e47d04501ed4f544c0ae8",
+        "dirty": false
+      },
+      "moco": {
+        "commit": "132aea9da9bb995a411c915c0420be3db62052f3",
+        "dirty": false
+      },
+      "reflexion": {
+        "commit": "218cf0ef1df84b05ce379dd4a8e47f17766733a0",
+        "dirty": false
+      },
+      "sam": {
+        "commit": "dca509fe793f601edb92606367a655c15ac00fdf",
+        "dirty": false
+      },
+      "whisper": {
+        "commit": "86098128c0b4f24f0e2aa2994de830614b474227",
+        "dirty": false
+      }
+    },
+    "reproducibility_issues": [
+      "attention_is_all_you_need: paper SHA-256 is missing or a placeholder",
+      "bert: paper SHA-256 is missing or a placeholder",
+      "clip: paper SHA-256 is missing or a placeholder",
+      "ddim: paper SHA-256 is missing or a placeholder",
+      "ddpm: paper SHA-256 is missing or a placeholder",
+      "deit: paper SHA-256 is missing or a placeholder",
+      "detr: paper SHA-256 is missing or a placeholder",
+      "dino: paper SHA-256 is missing or a placeholder",
+      "dpo: paper SHA-256 is missing or a placeholder",
+      "lora: paper SHA-256 is missing or a placeholder",
+      "mae: paper SHA-256 is missing or a placeholder",
+      "moco: paper SHA-256 is missing or a placeholder",
+      "reflexion: paper SHA-256 is missing or a placeholder",
+      "sam: paper SHA-256 is missing or a placeholder",
+      "whisper: paper SHA-256 is missing or a placeholder"
+    ],
+    "completed_at": "2026-10-29T07:02:38+00:00"
+  }
+}

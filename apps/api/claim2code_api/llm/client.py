@@ -276,6 +276,29 @@ _AUTH_ERRORS = (AuthenticationError, anthropic.AuthenticationError)
 _STATUS_ERRORS = (APIStatusError, anthropic.APIStatusError)
 
 
+class RerankLLMError(RuntimeError):
+    """The rerank call failed; callers keep the retrieval order."""
+
+
+_RERANK_SYSTEM_PROMPT = """\
+You rank code symbols from one repository by how directly each implements a claim from a machine-learning paper.
+
+The best match is the symbol whose own code carries out what the claim describes: the function computing the claimed loss or operation, the class defining the claimed module, or the place that sets the claimed value or configuration. Rank callers, tests, demos, generic utilities and unrelated code below it. Judge only from the code shown, never from what you know about the paper.
+
+Return JSON {"ranking": [candidate numbers]} listing up to 10 candidates, most direct implementation first."""
+
+# Candidates the model may name in its ranking.
+_RERANK_SHOWN = 10
+_RERANK_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "ranking": {"type": "array", "items": {"type": "integer"}, "maxItems": _RERANK_SHOWN},
+    },
+    "required": ["ranking"],
+    "additionalProperties": False,
+}
+
+
 class LLMClient:
     """OpenAI wrapper that exposes a typed ``extract_claims`` method."""
 
@@ -770,6 +793,64 @@ class LLMClient:
             self._on_violations("compare", gate_result.violations)
 
         return comparison
+
+    def rank_candidates(self, *, claim: str, candidates: str, n_candidates: int) -> list[int]:
+        """Ask the model which numbered candidates implement ``claim``.
+
+        ``candidates`` is the numbered listing built by
+        :mod:`claim2code_api.retrieval.reranker`. Returns up to
+        ``_RERANK_SHOWN`` distinct 1-based candidate numbers, most
+        direct implementation first; numbers outside
+        ``1..n_candidates`` are dropped.
+
+        :raises RerankLLMError: on any LLM / parse failure.
+        """
+        messages = [
+            {"role": "system", "content": _RERANK_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Claim: {claim}\n\nCandidates:\n\n{candidates}"},
+        ]
+        tracer = get_tracer(__name__)
+        with tracer.start_as_current_span(
+            "llm.rerank",
+            attributes={
+                "llm.method": "rerank",
+                "llm.model": self._model,
+                "llm.rerank.n_candidates": n_candidates,
+            },
+        ) as span:
+            gate_result = self._gate.wrap_messages(messages, kind="rerank")
+            start = time.monotonic()
+            try:
+                response = self._client.chat.completions.create(
+                    model=self._model,
+                    messages=gate_result.messages,  # type: ignore[call-overload]
+                    temperature=0,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {"name": "ranking", "strict": True, "schema": _RERANK_SCHEMA},
+                    },
+                )
+            except (*_CONNECTION_ERRORS, *_AUTH_ERRORS, *_STATUS_ERRORS) as exc:
+                span.record_exception(exc)
+                raise RerankLLMError(f"{exc.__class__.__name__}: {exc}") from exc
+            self._record_llm_metrics(
+                span=span, response=response, kind="rerank",
+                duration_seconds=time.monotonic() - start,
+            )
+        raw = response.choices[0].message.content if response.choices else None
+        try:
+            ranking = json.loads(raw or "")["ranking"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise RerankLLMError(f"LLM returned no ranking: {exc}") from exc
+        if not isinstance(ranking, list):
+            raise RerankLLMError("LLM ranking is not a list")
+        if gate_result.violations and self._on_violations is not None:
+            self._on_violations("rerank", gate_result.violations)
+        out: list[int] = []
+        for n in ranking:
+            if isinstance(n, int) and 1 <= n <= n_candidates and n not in out:
+                out.append(n)
+        return out[:_RERANK_SHOWN]
 
     # ------------------------------------------------------------------
     # Readiness probe

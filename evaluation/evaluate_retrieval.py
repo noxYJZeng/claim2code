@@ -70,6 +70,7 @@ from claim2code_api.db.models import Base
 
 # Baselines are imported AFTER sys.path setup.
 from evaluation.baselines import (
+    claim2code_rerank,
     embedding_only,
     hybrid_claim2code,
     lexical_only,
@@ -88,6 +89,7 @@ BASELINES = [
     embedding_only,
     lexical_only,
     hybrid_claim2code,
+    claim2code_rerank,
 ]
 
 

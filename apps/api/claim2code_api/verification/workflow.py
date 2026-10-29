@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from claim2code_api.app.config import get_settings
 from claim2code_api.db.models import AnalysisState, CodeSymbol, Repository
 from claim2code_api.indexing.embedding_client import get_embedding_client
 from claim2code_api.indexing.indexer import _read_source_range
@@ -56,6 +57,8 @@ from claim2code_api.observability import get_tracer
 from claim2code_api.papers.schemas import Claim
 from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch, SourceSpan
 from claim2code_api.retrieval.hybrid_ranker import HybridWeights, hybrid_ranker
+from claim2code_api.retrieval.reranker import POOL_SIZE as RERANK_POOL_SIZE
+from claim2code_api.retrieval.reranker import rerank
 from claim2code_api.verification.context import prepare_candidates
 from claim2code_api.verification.exceptions import VerificationNotFoundError
 from claim2code_api.verification.schemas import (
@@ -282,14 +285,7 @@ def _verify_one_claim(
     retrieve_matches: list[RetrieveMatch] = []
     if repository_id is not None:
         try:
-            hybrid_matches = hybrid_ranker(
-                db=db,
-                repository_id=repository_id,
-                claim=claim.text,
-                top_k=top_k,
-                weights=HybridWeights(),
-                embedding_client=get_embedding_client(),
-            )
+            hybrid_matches = _retrieve(db, repository_id, claim.text, top_k=top_k)
         except Exception:
             hybrid_matches = []
         retrieve_matches = _hybrid_to_retrieve_matches(
@@ -346,6 +342,20 @@ def _verify_one_claim(
     return verification, llm_error
 
 
+def _retrieve(db: Session, repository_id: UUID, text: str, *, top_k: int) -> list:
+    """Hybrid candidates, reranked by the chat model when enabled."""
+    if not get_settings().retrieval_rerank:
+        return hybrid_ranker(
+            db=db, repository_id=repository_id, claim=text, top_k=top_k,
+            weights=HybridWeights(), embedding_client=get_embedding_client(),
+        )
+    pool = hybrid_ranker(
+        db=db, repository_id=repository_id, claim=text, top_k=max(top_k, RERANK_POOL_SIZE),
+        weights=HybridWeights(), embedding_client=get_embedding_client(),
+    )
+    return rerank(db, repository_id, text, pool, ranker=get_llm_client())[:top_k]
+
+
 def _expanded_candidates(
     *, db: Session, repository_id: UUID, claim: Claim,
     previous: list[RetrieveMatch], top_k: int,
@@ -358,11 +368,7 @@ def _expanded_candidates(
     transport failures or repeated sampling until a preferred verdict.
     """
     try:
-        matches = hybrid_ranker(
-            db=db, repository_id=repository_id, claim=claim.text,
-            top_k=min(max(top_k * 2, 12), 24), weights=HybridWeights(),
-            embedding_client=get_embedding_client(),
-        )
+        matches = _retrieve(db, repository_id, claim.text, top_k=min(max(top_k * 2, 12), 24))
         expanded = _hybrid_to_retrieve_matches(
             db=db, matches=matches, repository_id=repository_id,
         )

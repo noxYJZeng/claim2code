@@ -20,6 +20,18 @@ Settings.model_config["env_file"] = None
 get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def _hybrid_order_by_default(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Workflow tests script the LLM per call; the rerank call is opt-in.
+
+    tests/test_reranker.py enables it explicitly.
+    """
+    monkeypatch.setenv("RETRIEVAL_RERANK", "false")
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def client() -> TestClient:
     """A TestClient bound to a fresh FastAPI app instance."""

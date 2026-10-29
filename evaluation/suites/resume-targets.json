@@ -1325,9 +1325,8 @@
   },
   "reported_baseline": {
     "value": 0.74,
-    "metric_semantics": "legacy_hit_rate",
-    "standard_recall_comparison_established": false,
-    "note": "The archived 74% is a top-5 hit rate. It cannot establish the submitted 74% to 91% standard Recall@5 comparison; a paired standard-recall baseline must be measured."
+    "metric_semantics": "top5_hit_rate",
+    "note": "The archived 74% (hybrid_claim2code, 79 claims, 8 pairs) is the evaluator's Recall@5 of that time: the share of claims with an annotated symbol in the top 5. The target is measured with the same definition on the same claims; standard per-symbol recall is reported alongside it."
   },
   "notes": [
     "Accuracy and retrieval targets use the unchanged original 79-claim regression set; new positive coverage claims cannot dilute its errors.",

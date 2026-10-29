@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from evaluation.provenance import annotation_snapshot  # noqa: E402
-from evaluation.targets import MANIFEST, assess, main  # noqa: E402
+from evaluation.targets import MANIFEST, assess, main, markdown  # noqa: E402
 
 
 @pytest.fixture
@@ -43,13 +43,13 @@ def measurement(tmp_path):
                 "evidence_hit": True, "error": None})
             refs = claim["relevant_symbols"]
             groups = [[f"{claim['claim_id']}-{i}"] for i in range(len(refs))]
-            for baseline in ("hybrid_claim2code", "embedding_only"):
+            for baseline in ("claim2code_rerank", "hybrid_claim2code", "embedding_only"):
                 retrieval_rows.append({"dataset": pid, "baseline": baseline,
                     "claim_id": claim["claim_id"], "relevant_symbols": refs,
                     "resolved_symbol_groups": groups,
                     "retrieved_symbol_ids": [g[0] for g in groups],
                     "recall_at_5": 1.0, "hit_at_5": 1.0, "error": None})
-        for baseline in ("hybrid_claim2code", "embedding_only"):
+        for baseline in ("claim2code_rerank", "hybrid_claim2code", "embedding_only"):
             summaries.append({"dataset": pid, "baseline": baseline, "n_claims": len(ann["claims"]),
                 "n_unresolved_symbols": 0, "n_claim_errors": 0, "error": None})
     sections = {
@@ -119,7 +119,7 @@ def test_legacy_hit_metric_cannot_satisfy_standard_recall(measurement):
 def test_recall_is_recomputed_from_all_target_groups(measurement):
     rows = measurement["sections"]["retrieval"]["per_claim"]
     row = next(r for r in rows if r["dataset"] in measurement["manifest"]["regression_pair_ids"]
-               and r["baseline"] == "hybrid_claim2code" and len(r["resolved_symbol_groups"]) > 1)
+               and r["baseline"] == "claim2code_rerank" and len(r["resolved_symbol_groups"]) > 1)
     row["retrieved_symbol_ids"] = row["retrieved_symbol_ids"][:1]
     report = assess(**measurement)
     assert report["retrieval"]["hit_at_5"] == 1.0
@@ -189,3 +189,12 @@ def test_cli_missing_coverage_is_unmeasured_and_still_writes_report(tmp_path):
     report = json.loads((output / "targets.json").read_text())
     assert report["requirements"]["pytorch_repositories"]["status"] == "unmeasured"
     assert (output / "targets.md").exists()
+
+
+def test_recall_target_uses_the_archived_hit_definition_on_the_reranked_system(measurement):
+    report = assess(**measurement)
+    retrieval = report["retrieval"]
+    assert (retrieval["system"], retrieval["previous_system"]) == ("claim2code_rerank", "hybrid_claim2code")
+    assert report["requirements"]["recall_at_5"]["actual"] == retrieval["hit_at_5"]
+    assert report["reported_baseline_comparison"]["paired_previous_hit_at_5"] == retrieval["previous_hit_at_5"]
+    assert "hit" in markdown(report) and "archived 74%" in markdown(report)

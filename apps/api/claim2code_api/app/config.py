@@ -152,6 +152,12 @@ class Settings(BaseSettings):
     # HTTP timeout for the GitHub HEAD pre-flight size guard.
     repo_size_estimate_timeout_seconds: float = 5.0
 
+    # ---- Retrieval ----
+    # Before verification, the chat model reorders hybrid's wider
+    # candidate pool (retrieval/reranker.py). One extra model call
+    # per claim; off keeps the plain hybrid order.
+    retrieval_rerank: bool = True
+
     # ---- Paper ingestion (Phase 2) ----
     max_pdf_size_mb: int = 50
 

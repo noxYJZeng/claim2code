@@ -97,6 +97,8 @@ class HybridMatch:
     score_lexical: float | None = None
     rank_structural: int | None = None
     struct_boost: float = 1.0
+    # Set by retrieval/reranker.py when the chat model picked this match.
+    rank_rerank: int | None = None
 
 
 def hybrid_ranker(

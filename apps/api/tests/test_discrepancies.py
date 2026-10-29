@@ -13,6 +13,8 @@ Coverage:
 """
 from __future__ import annotations
 
+import pytest
+
 from claim2code_api.verification.discrepancies import (
     determine_status,
     merge_discrepancies,
@@ -81,7 +83,7 @@ def test_determine_status_high_severity_is_contradicted() -> None:
         determine_status(
             has_code_evidence=True,
             discrepancies=[
-                _disc(DiscrepancyType.HYPERPARAMETER_MISMATCH, DiscrepancySeverity.HIGH)
+                _disc(DiscrepancyType.OBJECTIVE_MISMATCH, DiscrepancySeverity.HIGH)
             ],
             llm_status=VerificationStatus.VERIFIED,
         )
@@ -97,6 +99,47 @@ def test_determine_status_llm_contradicted_wins_over_partial() -> None:
             discrepancies=[
                 _disc(DiscrepancyType.METRIC_MISMATCH, DiscrepancySeverity.LOW)
             ],
+            llm_status=VerificationStatus.CONTRADICTED,
+        )
+        == VerificationStatus.CONTRADICTED
+    )
+
+
+@pytest.mark.parametrize("llm_status", [VerificationStatus.VERIFIED, VerificationStatus.CONTRADICTED])
+def test_determine_status_setting_mismatches_are_partial(llm_status: VerificationStatus) -> None:
+    """A differing default or initialisation is a detail, even when sent as HIGH."""
+    assert (
+        determine_status(
+            has_code_evidence=True,
+            discrepancies=[
+                _disc(DiscrepancyType.HYPERPARAMETER_MISMATCH, DiscrepancySeverity.HIGH),
+                _disc(DiscrepancyType.CONFIGURATION_MISMATCH, DiscrepancySeverity.HIGH),
+            ],
+            llm_status=llm_status,
+        )
+        == VerificationStatus.PARTIALLY_VERIFIED
+    )
+
+
+def test_determine_status_setting_mismatch_does_not_mask_a_central_one() -> None:
+    assert (
+        determine_status(
+            has_code_evidence=True,
+            discrepancies=[
+                _disc(DiscrepancyType.HYPERPARAMETER_MISMATCH, DiscrepancySeverity.MEDIUM),
+                _disc(DiscrepancyType.OBJECTIVE_MISMATCH, DiscrepancySeverity.HIGH),
+            ],
+            llm_status=VerificationStatus.PARTIALLY_VERIFIED,
+        )
+        == VerificationStatus.CONTRADICTED
+    )
+
+
+def test_determine_status_llm_contradicted_without_discrepancies_stays() -> None:
+    assert (
+        determine_status(
+            has_code_evidence=True,
+            discrepancies=[],
             llm_status=VerificationStatus.CONTRADICTED,
         )
         == VerificationStatus.CONTRADICTED

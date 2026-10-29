@@ -314,9 +314,9 @@ def test_compose_contradicted_when_high_severity_and_code_evidence() -> None:
         quote=cand.signature,
     )]
     high = Discrepancy(
-        type=DiscrepancyType.HYPERPARAMETER_MISMATCH,
+        type=DiscrepancyType.OBJECTIVE_MISMATCH,
         severity=DiscrepancySeverity.HIGH,
-        detail="lr mismatch",
+        detail="different loss",
     )
     out = compose_verification(
         claim=_claim(),
@@ -454,8 +454,8 @@ def test_compose_synthesises_explanation_when_llm_skipped() -> None:
 
 
 def test_extract_verdict_runs_deterministic_checkers() -> None:
-    """A high-severity hp mismatch in the deterministic checkers
-    turns a VERIFIED LLM verdict into CONTRADICTED."""
+    """A deterministic hp mismatch demotes a VERIFIED LLM verdict;
+    a differing setting is PARTIALLY_VERIFIED, not CONTRADICTED."""
     cand = _grounded_candidate(signature="def train(learning_rate=1e-3): ...")
     ce = [CodeEvidence(
         symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
@@ -468,7 +468,7 @@ def test_extract_verdict_runs_deterministic_checkers() -> None:
         llm_verdict=_llm_verdict(code_evidence=ce),
     )
     assert any(d.severity == DiscrepancySeverity.HIGH for d in out.discrepancies)
-    assert out.status == VerificationStatus.CONTRADICTED
+    assert out.status == VerificationStatus.PARTIALLY_VERIFIED
 
 
 # ============================================================

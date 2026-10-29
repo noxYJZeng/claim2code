@@ -1,0 +1,190 @@
+{
+  "pair_id": "detr",
+  "paper": {
+    "title": "End-to-End Object Detection with Transformers",
+    "authors": [
+      "Carion",
+      "Massa",
+      "Synnaeve",
+      "Usunier",
+      "Kirillov",
+      "Zagoruyko"
+    ],
+    "year": 2020,
+    "venue": "ECCV",
+    "arxiv_id": "2005.12872",
+    "url": "https://arxiv.org/abs/2005.12872",
+    "pdf_url": "https://www.ecva.net/papers/eccv_2020/papers_ECCV/papers/123460205.pdf"
+  },
+  "repo": {
+    "url": "https://github.com/facebookresearch/detr",
+    "commit": "29901c51d7fe8712168b8d0d64351170bc0f83e0",
+    "description": "Official PyTorch DETR object-detection implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "start_line": 5,
+        "end_line": 5,
+        "quote": "import torch",
+        "file_path": "models/detr.py"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "development",
+    "review_scope": "Claims written 2026-10-29 for tuning verdict calibration; labels checked against the pinned repository source. Not part of the regression or coverage sets.",
+    "paper_evidence_verified": false
+  },
+  "claims": [
+    {
+      "claim_id": "detr_dev1",
+      "text": "DETR is trained with AdamW using a learning rate of 1e-4 for the transformer, 1e-5 for the backbone, and weight decay 1e-4.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 123
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main.py",
+          "name": "--lr",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--lr_backbone",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--weight_decay",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "main.py defaults lr=1e-4, lr_backbone=1e-5, weight_decay=1e-4; AdamW optimizer."
+    },
+    {
+      "claim_id": "detr_dev2",
+      "text": "DETR's long schedule trains for 500 epochs, dropping the learning rate by a factor of 10 after 400 epochs.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 106
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main.py",
+          "name": "--epochs",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--lr_drop",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "StepLR(optimizer, lr_drop) with default gamma 0.1 implements the drop, but defaults are epochs=300, lr_drop=200."
+    },
+    {
+      "claim_id": "detr_dev3",
+      "text": "DETR uses 6 encoder layers, 6 decoder layers, 8 attention heads, a hidden size of 256, and 100 object queries.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 110
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main.py",
+          "name": "--enc_layers",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--dec_layers",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--nheads",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--hidden_dim",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--num_queries",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "All five defaults match."
+    },
+    {
+      "claim_id": "detr_dev4",
+      "text": "Both the Hungarian matching cost and the training loss weight the L1 box term by 5 and the generalized IoU term by 2.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 117
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main.py",
+          "name": "--set_cost_bbox",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--set_cost_giou",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--bbox_loss_coef",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--giou_loss_coef",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "set_cost_bbox=5, set_cost_giou=2, bbox_loss_coef=5, giou_loss_coef=2."
+    },
+    {
+      "claim_id": "detr_dev5",
+      "text": "DETR uses dropout 0.1 in the transformer and clips gradients to a maximum norm of 0.1.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 86
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main.py",
+          "name": "--dropout",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--clip_max_norm",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "Defaults dropout=0.1, clip_max_norm=0.1."
+    }
+  ]
+}

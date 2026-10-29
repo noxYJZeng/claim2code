@@ -1,0 +1,175 @@
+{
+  "pair_id": "deit",
+  "paper": {
+    "title": "Training data-efficient image transformers & distillation through attention",
+    "authors": [
+      "Touvron",
+      "Cord",
+      "Douze",
+      "Massa",
+      "Sablayrolles",
+      "J\u00e9gou"
+    ],
+    "year": 2021,
+    "venue": "ICML",
+    "arxiv_id": "2012.12877",
+    "pdf_url": "https://proceedings.mlr.press/v139/touvron21a/touvron21a.pdf",
+    "sha256": null
+  },
+  "repo": {
+    "url": "https://github.com/facebookresearch/deit",
+    "commit": "7e160fe43f0252d17191b71cbb5826254114ea5b",
+    "description": "Official PyTorch DEIT implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "models.py",
+        "start_line": 3,
+        "end_line": 3,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "development",
+    "review_scope": "Claims written 2026-10-29 for tuning verdict calibration; labels checked against the pinned repository source. Not part of the regression or coverage sets.",
+    "paper_evidence_verified": false
+  },
+  "claims": [
+    {
+      "claim_id": "deit_dev1",
+      "text": "DeiT scales its base learning rate of 5e-4 linearly with the batch size as lr x batchsize / 512.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 96
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main.py",
+          "name": "--lr",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "main",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "linear_scaled_lr = args.lr * args.batch_size * world_size / 512.0; default lr 5e-4."
+    },
+    {
+      "claim_id": "deit_dev2",
+      "text": "For soft distillation DeiT uses a temperature of 3 and a weight of 0.1 on the Kullback-Leibler term.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 100
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "losses.py",
+          "name": "forward",
+          "kind": "function"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--distillation-tau",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--distillation-alpha",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "Soft KL distillation with T*T scaling and alpha weighting is implemented, but defaults are tau=1.0, alpha=0.5."
+    },
+    {
+      "claim_id": "deit_dev3",
+      "text": "At test time DeiT adds the softmax outputs of the class and distillation classifiers to make its prediction.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 108
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "models.py",
+          "name": "forward",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "Both heads are combined at inference, but as the mean of logits ((x + x_dist) / 2), not a sum of softmax outputs."
+    },
+    {
+      "claim_id": "deit_dev4",
+      "text": "DeiT training uses label smoothing 0.1, Mixup 0.8, CutMix 1.0, random erasing 0.25 and stochastic depth 0.1.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 108
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main.py",
+          "name": "--smoothing",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--mixup",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--cutmix",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--reprob",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--drop-path",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "All five defaults match."
+    },
+    {
+      "claim_id": "deit_dev5",
+      "text": "DeiT trains its distilled models with hard distillation from a RegNetY-16GF teacher by default.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 95
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main.py",
+          "name": "--teacher-model",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--distillation-type",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "teacher-model defaults to regnety_160 and hard distillation exists, but distillation-type defaults to 'none'."
+    }
+  ]
+}

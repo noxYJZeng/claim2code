@@ -139,7 +139,7 @@ def test_deterministic_mismatch_can_obtain_real_citations(monkeypatch) -> None:
     )
     llm.verdict_for_claim.assert_called_once()
     assert error is None
-    assert result.status == VerificationStatus.CONTRADICTED
+    assert result.status == VerificationStatus.PARTIALLY_VERIFIED
     assert result.code_evidence[0].quote == "def train(learning_rate=1e-3):"
 
 

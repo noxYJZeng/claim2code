@@ -8,11 +8,9 @@ The pipeline for one claim:
      looking up the underlying ``CodeSymbol`` row.
   2. **Deterministic checks** (commits 3 + 4) — hyperparameter
      + 3 name normalizers.
-  3. **Skip LLM if decisive** — when the deterministic
-     checkers produced a HIGH-severity discrepancy, the
-     verdict is already CONTRADICTED; skip the OpenAI call
-     to save the round-trip + cost.
-  4. **LLM verdict** (commit 5) — reuses the same
+  3. **Prepare located source** — retain bounded prefixes and
+     claim-focused implementation windows with their real lines.
+  4. **LLM verdict** — reuses the same
      ``LLMClient`` as Phase 2's ``extract_claims``.
   5. **Compose** the final ``Verification`` via
      :func:`claim2code_api.verification.verifier.compose_verification`.
@@ -58,8 +56,10 @@ from claim2code_api.observability import get_tracer
 from claim2code_api.papers.schemas import Claim
 from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch, SourceSpan
 from claim2code_api.retrieval.hybrid_ranker import HybridWeights, hybrid_ranker
+from claim2code_api.verification.context import prepare_candidates
 from claim2code_api.verification.exceptions import VerificationNotFoundError
 from claim2code_api.verification.schemas import (
+    Discrepancy,
     Verification,
     VerificationStatus,
 )
@@ -263,12 +263,14 @@ def _verify_one_claim(
 
       2. Deterministic checkers produce discrepancies.
 
-      3. Skip the LLM call if any HIGH-severity discrepancy
-         was produced (the verdict is already CONTRADICTED).
+      3. Prepare source windows shared by the LLM and validator.
 
-      4. Otherwise call LLMClient.verdict_for_claim.
+      4. Call LLMClient.verdict_for_claim to obtain source citations.
 
       5. Compose the final Verification.
+
+      6. If evidence is insufficient, expand retrieval once and ask
+         again only when additional source symbols were found.
 
     :returns: ``(verification, llm_error_or_none)``. The
         ``llm_error`` string is ``None`` unless the LLM call
@@ -294,43 +296,18 @@ def _verify_one_claim(
             db=db, matches=hybrid_matches, repository_id=repository_id,
         )
 
-    # 2 + 3. Deterministic checkers; skip LLM on HIGH-severity.
+    retrieve_matches = prepare_candidates(retrieve_matches, claim.text)
+
+    # A deterministic mismatch alone does not provide a source citation.
+    # Still obtain a verdict: skipping here used to force a decisive
+    # discrepancy through compose's no-evidence -> UNVERIFIED guard.
     from claim2code_api.verification.verifier import run_deterministic_checkers
     deterministic_discrepancies = run_deterministic_checkers(
         claim=claim, candidates=retrieve_matches,
     )
-    has_high = any(d.severity == "HIGH" for d in deterministic_discrepancies)
-
-    # 4. LLM verdict (or None if HIGH-severity already decided).
-    llm_verdict: Verification | None = None
-    llm_error: str | None = None
-    if not has_high:
-        # Phase 8: arm the safety violation callback so any secrets /
-        # injection patterns detected in the claim / candidate
-        # signatures are logged on ``state.errors``. The callback is
-        # scoped to this single LLM call (cleared in the finally).
-        from claim2code_api.llm.safety_bridge import make_violation_callback
-        llm_client = get_llm_client()
-        llm_client._on_violations = make_violation_callback(
-            db, analysis_id=analysis_id,
-        )
-        try:
-            llm_verdict = llm_client.verdict_for_claim(
-                claim=claim,
-                paper_evidence=claim.paper_evidence,
-                candidates=retrieve_matches,
-                deterministic_discrepancies=deterministic_discrepancies,
-            )
-        except Exception as exc:  # noqa: BLE001 — per-claim isolation
-            logger.warning(
-                "LLM verdict failed for claim=%s: %s", claim.claim_id, exc,
-            )
-            # Don't abort the workflow; the composition step will
-            # treat llm_verdict=None and default to UNVERIFIED if
-            # there are no code evidence or HIGH discrepancies.
-            llm_error = f"{exc.__class__.__name__}: {exc}"
-        finally:
-            llm_client._on_violations = None
+    llm_verdict, llm_error = _obtain_verdict(
+        db, analysis_id, claim, retrieve_matches, deterministic_discrepancies,
+    )
 
     # 5. Compose.
     verification = compose_verification(
@@ -339,7 +316,86 @@ def _verify_one_claim(
         deterministic_discrepancies=deterministic_discrepancies,
         llm_verdict=llm_verdict,
     )
+    if (
+        verification.status == VerificationStatus.UNVERIFIED
+        and repository_id is not None and llm_error is None and top_k < 24
+    ):
+        expanded = _expanded_candidates(
+            db=db, repository_id=repository_id, claim=claim,
+            previous=retrieve_matches, top_k=top_k,
+        )
+        if expanded:
+            with get_tracer(__name__).start_as_current_span(
+                "verification.evidence_retry",
+                attributes={"verification.candidate_count": len(expanded)},
+            ):
+                retry_discrepancies = run_deterministic_checkers(claim=claim, candidates=expanded)
+                retry_verdict, retry_error = _obtain_verdict(
+                    db, analysis_id, claim, expanded, retry_discrepancies,
+                )
+                if retry_error is None:
+                    verification = compose_verification(
+                        claim=claim, candidates=expanded,
+                        deterministic_discrepancies=retry_discrepancies,
+                        llm_verdict=retry_verdict,
+                    )
+                else:
+                    # Preserve the first assessment when the additional
+                    # request fails, while exposing its model error.
+                    llm_error = retry_error
     return verification, llm_error
+
+
+def _expanded_candidates(
+    *, db: Session, repository_id: UUID, claim: Claim,
+    previous: list[RetrieveMatch], top_k: int,
+) -> list[RetrieveMatch]:
+    """One larger retrieval pass, with at most four new source candidates.
+
+    Search uses the original claim; model explanations and benchmark labels
+    never become retrieval instructions. An unchanged shortlist is not sent
+    to the model again. This pass is used for insufficient evidence, not
+    transport failures or repeated sampling until a preferred verdict.
+    """
+    try:
+        matches = hybrid_ranker(
+            db=db, repository_id=repository_id, claim=claim.text,
+            top_k=min(max(top_k * 2, 12), 24), weights=HybridWeights(),
+            embedding_client=get_embedding_client(),
+        )
+        expanded = _hybrid_to_retrieve_matches(
+            db=db, matches=matches, repository_id=repository_id,
+        )
+    except Exception as exc:  # noqa: BLE001 — optional recovery pass
+        logger.warning("Evidence expansion failed for claim=%s: %s", claim.claim_id, exc)
+        return []
+    known = {c.symbol_id for c in previous}
+    additions = [c for c in expanded if c.symbol_id not in known and (c.source or c.context_spans)]
+    if not additions:
+        return []
+    # Existing candidates are already bounded and remain in the same order.
+    return prepare_candidates([*previous, *additions[:4]], claim.text)
+
+
+def _obtain_verdict(
+    db: Session, analysis_id: UUID, claim: Claim,
+    candidates: list[RetrieveMatch], discrepancies: list[Discrepancy],
+) -> tuple[Verification | None, str | None]:
+    """Scope safety reporting and isolate a single model request failure."""
+    from claim2code_api.llm.safety_bridge import make_violation_callback
+
+    client = get_llm_client()
+    client._on_violations = make_violation_callback(db, analysis_id=analysis_id)
+    try:
+        return client.verdict_for_claim(
+            claim=claim, paper_evidence=claim.paper_evidence,
+            candidates=candidates, deterministic_discrepancies=discrepancies,
+        ), None
+    except Exception as exc:  # noqa: BLE001 — per-claim isolation
+        logger.warning("LLM verdict failed for claim=%s: %s", claim.claim_id, exc)
+        return None, f"{exc.__class__.__name__}: {exc}"
+    finally:
+        client._on_violations = None
 
 
 def _hybrid_to_retrieve_matches(
@@ -506,7 +562,8 @@ def _callee_spans(
     body = source.split("\n", 1)[1] if "\n" in source else ""
     # Registry targets go first: a direct callee's name is at least
     # visible in ``source``, a dispatched one is not.
-    calls = _registry_members(db, sym, _DISPATCH_RE.findall(body), clone_path)
+    registries = _DISPATCH_RE.findall(body)
+    calls = _registry_members(db, sym, registries, clone_path)
     calls += _CALL_RE.findall(body)
     names = list(dict.fromkeys(n for n in calls if n != sym.name))
     if not names:
@@ -539,7 +596,39 @@ def _callee_spans(
             parts.append(_span(callee, text))
         if len(parts) == _MAX_CALLEES:
             break
+    # Show the dispatch table itself as well as its targets. Otherwise
+    # the model can see a helper's body but cannot establish that a
+    # selected configuration key actually calls it.
+    parts.extend(_registry_spans(db, sym, registries, clone_path))
     return parts
+
+
+def _registry_spans(
+    db: Session, sym: CodeSymbol, registries: list[str], clone_path: Path,
+) -> list[SourceSpan]:
+    if not registries:
+        return []
+    consts = (
+        db.query(CodeSymbol)
+        .filter(
+            CodeSymbol.repository_id == sym.repository_id,
+            CodeSymbol.kind == "constant",
+            CodeSymbol.name.in_(registries),
+        )
+        .all()
+    )
+    spans: list[SourceSpan] = []
+    for name in dict.fromkeys(registries):
+        const = _nearest_definition([c for c in consts if c.name == name], sym.file_path)
+        if const is None:
+            continue
+        text = _read_source_range(
+            clone_path=clone_path, rel_path=const.file_path,
+            start_line=const.start_line, end_line=const.end_line,
+        )
+        if text:
+            spans.append(_span(const, text))
+    return spans
 
 
 def _registry_members(

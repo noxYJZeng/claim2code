@@ -1,75 +1,17 @@
-"""Hybrid retrieval — Reciprocal Rank Fusion over (semantic, lexical, structural).
+"""Fuse semantic, lexical and identifier retrieval with repository structure.
 
-Phase 5 orchestrator. Given a paper claim, this is the **default**
-read path. The endpoint (``POST /repositories/{id}/retrieve``)
-dispatches to :func:`hybrid_ranker` when ``mode="hybrid"`` (the
-default).
+Each leg contributes a bounded ranked candidate set. Semantic similarity
+finds paraphrases; PostgreSQL full-text search finds prose in docstrings
+and signatures; identifier search splits snake_case, CamelCase and acronym
+names so undocumented implementations also enter the pool. Reciprocal
+Rank Fusion uses default weights 0.40 / 0.40 / 0.20 and k=60, followed by
+import/path relevance multipliers.
 
-Algorithm
----------
-
-Three legs each return their own top-``top_k * 3`` candidates
-(more than ``top_k`` so each leg has room to surface its
-long-tail picks):
-
-  1. **Semantic** — :func:`retrieve_semantic` (Phase 4 pgvector
-     cosine).
-  2. **Lexical** — :func:`lexical_search` (Postgres tsvector +
-     ts_rank_cd).
-  3. **Structural** — :func:`structural_boost` (a multiplier,
-     not a ranker; applied after fusion — see below).
-
-The union of (semantic, lexical) candidate ``symbol_id``s
-forms the candidate pool. For each candidate we compute the
-Reciprocal Rank Fusion score:
-
-    rrf(d) = Σ_i  w_i / (k + rank_i(d))
-
-  - ``k = 60`` (Cormack et al. 2009 default; the standard
-    ElasticSearch / OpenSearch RRF constant).
-  - ``w_i ∈ {0.40, 0.40, 0.20}`` for ``{semantic, lexical,
-    structural}``. Semantic and lexical weigh the same: with
-    the pre-declared ``0.55 / 0.25`` a lexical rank-1 hit
-    (``0.25 / 61``) scored below a semantic rank-15 one
-    (``0.55 / 75``), so a symbol only the lexical leg found —
-    the one sharing the claim's exact terms — could never
-    reach the top-k. Overridable via the ``weights`` parameter
-    (Phase 5 eval uses this to study per-leg contribution).
-  - ``rank_i(d)`` is the 1-indexed rank of ``d`` in leg ``i``'s
-    result. Symbols **not** in leg ``i``'s result contribute
-    ``0`` (we omit them from the sum).
-
-Then:
-
-  - Drop ``kind='import'`` symbols: an import line is not an
-    implementation of anything, yet its one-line text matches
-    library names in the claim and crowds real code out.
-  - Apply the structural multiplier (``>= 1.0``) to ``rrf(d)``.
-  - Normalise to ``[0, 1]`` by multiplying by ``(k + 1)`` — the
-    maximum theoretical RRF with all three legs ranking ``d`` at
-    position 1 is ``Σ w_i / (k + 1) = 1 / (k + 1)`` (weights
-    sum to 1); we multiply so the surface value lands in
-    ``[0, 1]`` for the UI.
-
-Why RRF over weighted-sum
--------------------------
-
-Semantic returns ``0..1``, lexical returns unbounded ts_rank_cd,
-structural returns ``1.0..2.2``. Weighted-sum requires score
-normalisation before fusion, which is brittle (each leg would
-need its own normaliser, calibrated against the same corpus).
-RRF operates on **ranks** so the legs' score scales don't
-matter. Standard multi-leg fusion pattern in Elasticsearch,
-OpenSearch, Vespa, Weaviate.
-
-Why structural is multiplicative, not a leg
---------------------------------------------
-
-The structural scorer returns **multipliers**, not ranks —
-it's not a retrieval leg, it's a re-ranker. We apply it after
-RRF so the rank ordering from the ranker-fusion survives; only
-scores within the top-k are nudged. (Multiplicative re-ranking
-is the Elasticsearch ``function_score`` / Vespa pattern.)
+Declared vendored dependencies are searched both with and without their
+paths. First-party code can enter even when a copied library fills the
+unfiltered pool; copied code remains eligible because authors may adapt it.
+The final cut retains each active leg's best implementation when space
+allows. All signals come from the query and repository, never annotations.
 """
 from __future__ import annotations
 
@@ -84,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from claim2code_api.db.models import CodeSymbol, RepositoryDependency
 from claim2code_api.indexing.embedding_client import EmbeddingClient
-from claim2code_api.indexing.lexical import lexical_search
+from claim2code_api.indexing.lexical import identifier_search, lexical_search
 from claim2code_api.indexing.retriever import retrieve_semantic
 from claim2code_api.indexing.structural import structural_boost
 from claim2code_api.observability import get_tracer
@@ -166,7 +108,7 @@ def hybrid_ranker(
     weights: HybridWeights | None = None,
     embedding_client: EmbeddingClient | None = None,
 ) -> list[HybridMatch]:
-    """Return top-``top_k`` symbols fused from semantic + lexical + structural.
+    """Return top-``top_k`` semantic / lexical / identifier-fused symbols.
 
     :param db: a SQLAlchemy session (caller owns the lifecycle).
     :param repository_id: scope the search to this repository.
@@ -256,6 +198,18 @@ def hybrid_ranker(
             time.monotonic() - leg_start, {"leg": "lexical"},
         )
 
+        # Undocumented snake_case / CamelCase implementations may miss
+        # both the embedding and raw-name tsvector legs. A bounded
+        # identifier/path pass expands the pool independently of those
+        # rankings, over both the full repo and first-party code.
+        identifier_passes = [
+            identifier_search(
+                db, repository_id, claim, top_k=leg_top_k,
+                exclude_path_pattern=exclude,
+            )
+            for exclude in exclusions
+        ] if weights.structural > 0 else []
+
         # ---- Build rank + score maps per leg ----
         # Ranks are 1-indexed; not-in-leg → omit from sum.
         sem_ranks = _best_ranks(
@@ -264,10 +218,10 @@ def hybrid_ranker(
         lex_ranks = _best_ranks(
             [[(sid, float(score)) for sid, score in results] for results in lex_passes]
         )
+        identifier_ranks = _best_ranks(identifier_passes)
 
-        # Union of (sem,lex) candidates is the pool — structural
-        # isn't a ranker, so it doesn't expand the candidate set.
-        candidate_ids = list({*sem_ranks.keys(), *lex_ranks.keys()})
+        # Identifier matching independently expands the semantic / lexical pool.
+        candidate_ids = list({*sem_ranks.keys(), *lex_ranks.keys(), *identifier_ranks.keys()})
         if not candidate_ids:
             root_span.set_attribute("retrieval.result_count", 0)
             return []
@@ -292,7 +246,9 @@ def hybrid_ranker(
             if sid in lex_ranks:
                 rank, _ = lex_ranks[sid]
                 raw_rrf[sid] += weights.lexical / (_RRF_K + rank)
-            # Structural is a multiplier, not a ranker; no RRF contribution.
+            if sid in identifier_ranks:
+                rank, _ = identifier_ranks[sid]
+                raw_rrf[sid] += weights.structural / (_RRF_K + rank)
 
         # ---- Apply structural boost (multiplicative) ----
         weight_sum = weights.semantic + weights.lexical + weights.structural
@@ -320,14 +276,13 @@ def hybrid_ranker(
                     score_semantic=sem_ranks[sid][1] if sid in sem_ranks else None,
                     rank_lexical=lex_ranks[sid][0] if sid in lex_ranks else None,
                     score_lexical=lex_ranks[sid][1] if sid in lex_ranks else None,
-                    rank_structural=None,  # structural isn't a ranker in v1
+                    rank_structural=identifier_ranks[sid][0] if sid in identifier_ranks else None,
                     struct_boost=boost,
                 )
             )
 
-        # Bulk-fetch the pool's CodeSymbol rows (at most
-        # ``2 * leg_top_k``) so imports can be dropped before the
-        # top_k cut.
+        # Bulk-fetch the candidate rows so imports and orphaned hits can
+        # be dropped before the final top_k cut.
         symbols = (
             db.query(CodeSymbol)
             .filter(CodeSymbol.symbol_id.in_([m.symbol_id for m in matches]))
@@ -372,7 +327,7 @@ def _reserve_leg_tops(eligible: list[HybridMatch], top_k: int) -> list[HybridMat
     if len(eligible) <= top_k:
         return top
     reserved: list[HybridMatch] = []
-    for leg_rank in ("rank_semantic", "rank_lexical"):
+    for leg_rank in ("rank_semantic", "rank_lexical", "rank_structural"):
         ranked = [m for m in eligible if getattr(m, leg_rank) is not None]
         if ranked:
             best = min(ranked, key=lambda m: getattr(m, leg_rank))

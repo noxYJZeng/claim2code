@@ -164,6 +164,10 @@ def score(records: list[dict[str, Any]]) -> dict[str, Any]:
             sum(r.get("n_line_accurate", 0) for r in records) / n_evidence
             if n_evidence else None
         ),
+        "exact_line_accuracy": (
+            sum(r["n_line_exact"] for r in records) / n_evidence
+            if n_evidence and all("n_line_exact" in r for r in records) else None
+        ),
         "n_code_evidence": n_evidence,
         "evidence_hit_rate": (
             sum(bool(r["evidence_hit"]) for r in supported) / len(supported)
@@ -212,12 +216,23 @@ def _normalise(text: str) -> str:
     return " ".join(t for t in text.split() if t != "\\")
 
 
+def quote_at_exact_lines(quote: str, file_text: str | None, start: int, end: int) -> bool:
+    """Match the runtime citation guard: contiguous text at its actual lines."""
+    if file_text is None or not quote.strip() or start < 1 or end < start:
+        return False
+    lines = file_text.splitlines()
+    if end > len(lines):
+        return False
+    return " ".join(quote.split()) in " ".join("\n".join(lines[start - 1:end]).split())
+
+
 def grade_evidence(evidence: list[dict[str, Any]], read_file: Any) -> None:
     """Set ``grounded`` / ``line_accurate`` on each stored citation in place."""
     for e in evidence:
         text = read_file(e["file_path"])
         e["grounded"] = quote_is_grounded(e["quote"], text)
         e["line_accurate"] = quote_is_grounded(e["quote"], text, e["start_line"], e["end_line"])
+        e["line_exact"] = quote_at_exact_lines(e["quote"], text, e["start_line"], e["end_line"])
 
 
 def _read_clone_file(clone: Path, relative_path: str) -> str | None:
@@ -321,6 +336,7 @@ def verify_pair(
             "n_evidence": len(evidence),
             "n_grounded": grounded,
             "n_line_accurate": sum(bool(c["line_accurate"]) for c in cited),
+            "n_line_exact": sum(bool(c["line_exact"]) for c in cited),
             "evidence_hit": hit,
             "evidence": cited,
             "discrepancies": [
@@ -351,18 +367,20 @@ def _run(
     *,
     resume: bool,
     run_id: str | None = None,
+    claims_path: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Verify every pending claim, streaming records to ``CLAIMS_JSONL``."""
-    records = _read_jsonl(CLAIMS_JSONL) if resume else []
+    claims_path = claims_path or CLAIMS_JSONL
+    records = _read_jsonl(claims_path) if resume else []
     if not resume:
-        CLAIMS_JSONL.write_text("")
+        claims_path.write_text("")
     finished = {(r["pair_id"], r["claim_id"]) for r in records}
     for annotation in annotations:
         pair_id = annotation["pair_id"]
         if pair_id not in repo_ids:
             continue
         skip = {cid for pid, cid in finished if pid == pair_id}
-        with session_factory() as db, CLAIMS_JSONL.open("a") as sink:
+        with session_factory() as db, claims_path.open("a") as sink:
             for record in verify_pair(db, annotation, UUID(repo_ids[pair_id]), skip=skip):
                 if run_id is not None:
                     record["inference_run_id"] = run_id
@@ -406,6 +424,7 @@ def _regrade(
         grade_evidence(r["evidence"], _file)
         r["n_grounded"] = sum(e["grounded"] for e in r["evidence"])
         r["n_line_accurate"] = sum(e["line_accurate"] for e in r["evidence"])
+        r["n_line_exact"] = sum(e["line_exact"] for e in r["evidence"])
     return records
 
 
@@ -413,6 +432,10 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--pairs", help="comma-separated pair_ids (default: every indexed pair)")
+    parser.add_argument("--annotations-dir", type=Path, default=None)
+    parser.add_argument("--output-dir", type=Path, default=None)
+    parser.add_argument("--require-all-pairs", action="store_true",
+                        help="fail if any selected pair is missing instead of measuring a subset")
     parser.add_argument("--resume", action="store_true", help="keep finished claims from the last run")
     parser.add_argument("--require-reproducible", action="store_true",
                         help="require frozen annotation/clone inputs; does not verify model weight revisions")
@@ -422,14 +445,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    annotations = _load_annotations()
+    annotations = _load_annotations(args.annotations_dir) if args.annotations_dir else _load_annotations()
     if args.pairs:
         wanted = set(args.pairs.split(","))
+        missing = wanted - {a["pair_id"] for a in annotations}
+        if missing:
+            logger.error("unknown pair IDs: %s", ", ".join(sorted(missing)))
+            return 2
         annotations = [a for a in annotations if a["pair_id"] in wanted]
+    results_dir = args.output_dir or RESULTS_DIR
+    results_json = results_dir / RESULTS_JSON.name if args.output_dir else RESULTS_JSON
+    claims_jsonl = results_dir / CLAIMS_JSONL.name if args.output_dir else CLAIMS_JSONL
+    run_json = results_dir / RUN_JSON.name if args.output_dir else RUN_JSON
     session_factory = _build_session_factory()
     try:
         with session_factory() as db:
             repo_ids = resolve_repo_ids(db, annotations)
+            if args.require_all_pairs and any(a["pair_id"] not in repo_ids for a in annotations):
+                raise ValueError("selected repositories are not all indexed; prepare the benchmark first")
             repositories = repository_snapshot(db, annotations, repo_ids)
         current = capture(
             "verification_grading" if args.regrade else "verification",
@@ -444,45 +477,46 @@ def main(argv: list[str] | None = None) -> int:
     for issue in current["reproducibility_issues"]:
         logger.warning("development evaluation: %s", issue)
 
-    RESULTS_DIR.mkdir(exist_ok=True)
+    results_dir.mkdir(parents=True, exist_ok=True)
     skipped_pairs = [a["pair_id"] for a in annotations if a["pair_id"] not in repo_ids]
     for pair_id in skipped_pairs:
         logger.warning("skipping pair_id=%s (repository not indexed)", pair_id)
     if args.regrade:
-        previous = json.loads(RESULTS_JSON.read_text()) if RESULTS_JSON.exists() else {}
-        stored = _read_jsonl(CLAIMS_JSONL)
+        previous = json.loads(results_json.read_text()) if results_json.exists() else {}
+        stored = _read_jsonl(claims_jsonl)
         ids = {r.get("inference_run_id") for r in stored}
-        original = json.loads(RUN_JSON.read_text()) if RUN_JSON.exists() else previous.get("provenance")
+        original = json.loads(run_json.read_text()) if run_json.exists() else previous.get("provenance")
         inference = original if original and ids == {original.get("run_id")} else None
         if inference is None:
             logger.warning("original inference provenance unknown; regrading will not invent it")
         records = _regrade(session_factory, repo_ids, stored, annotations)
         for record in records:
             record["grading_run_id"] = current["run_id"]
-        CLAIMS_JSONL.write_text("".join(json.dumps(r) + "\n" for r in records))
+        claims_jsonl.write_text("".join(json.dumps(r) + "\n" for r in records))
     else:
-        if args.resume and _read_jsonl(CLAIMS_JSONL):
-            if not RUN_JSON.exists():
+        if args.resume and _read_jsonl(claims_jsonl):
+            if not run_json.exists():
                 logger.error("cannot resume legacy records without inference provenance; start a new run")
                 return 2
-            inference = json.loads(RUN_JSON.read_text())
+            inference = json.loads(run_json.read_text())
             if measurement_identity(inference) != measurement_identity(current):
                 logger.error("resume inputs, code or model differ from the original measurement")
                 return 2
         else:
             inference = current
-            RUN_JSON.write_text(json.dumps(inference, indent=2))
-        records = _run(session_factory, annotations, repo_ids, resume=args.resume, run_id=inference["run_id"])
+            run_json.write_text(json.dumps(inference, indent=2))
+        records = _run(session_factory, annotations, repo_ids, resume=args.resume,
+                       run_id=inference["run_id"], claims_path=claims_jsonl)
         for record in records:
             record.setdefault("inference_run_id", inference["run_id"])
-        CLAIMS_JSONL.write_text("".join(json.dumps(r) + "\n" for r in records))
+        claims_jsonl.write_text("".join(json.dumps(r) + "\n" for r in records))
 
     if not records:
         logger.error("no annotated pair has an indexed repository")
         return 2
     if not args.regrade and inference is not None:
         inference = finish(inference)
-        RUN_JSON.write_text(json.dumps(inference, indent=2))
+        run_json.write_text(json.dumps(inference, indent=2))
     by_pair: dict[str, list[dict[str, Any]]] = {}
     for r in records:
         by_pair.setdefault(r["pair_id"], []).append(r)
@@ -498,8 +532,8 @@ def main(argv: list[str] | None = None) -> int:
     }
     if args.regrade:
         out["grading_provenance"] = finish(current)
-    RESULTS_JSON.write_text(json.dumps(out, indent=2))
-    logger.info("wrote %s", RESULTS_JSON)
+    results_json.write_text(json.dumps(out, indent=2))
+    logger.info("wrote %s", results_json)
     return 0
 
 

@@ -1,69 +1,18 @@
-"""Structural boosters — import-graph proximity + file-name token match.
+"""Repository-scoped import and path relevance multipliers.
 
-The Phase 5 *structural* leg. Given a set of candidate symbol_ids
-(typically the union of semantic + lexical top-k candidates from
-the hybrid ranker), compute a per-symbol **multiplier** that the
-hybrid ranker applies after RRF fusion.
-
-Returns ``dict[symbol_id, multiplier]`` where ``1.0`` means "no
-boost". Values range ``1.0..2.2`` (max + 0.9 from import-graph,
-max + 0.3 from file-name).
-
-Why "weak" structural in v1
----------------------------
-
-The Phase 5 roadmap calls for ``called-from-training-loop
-boost``, ``loss-metric boost``, ``dependency-graph proximity``.
-None of these are implementable today:
-
-  - **Call graph** doesn't exist. ``caller_symbol_id`` is a
-    docstring-only placeholder; no column, no migration, no
-    resolver. The parser emits parent → method edges in
-    *name only* — ``parent_symbol_id`` is always NULL in
-    practice.
-  - **Training-loop / loss-metric** both require understanding
-    which symbols are *called from the training loop*. Without
-    a call graph, we can't tell.
-
-What v1 *can* do with real data:
-
-  - **Import-graph proximity** — the parser already emits
-    ``kind='import'`` rows with the imported target in
-    ``signature``. Files that import a lib the claim mentions
-    are likely the file containing that code.
-  - **File-name token match** — the file path's tokens
-    (``pkg/attention.py`` → ``pkg``, ``attention``, ``py``)
-    overlap with claim tokens often enough to be useful
-    signal ("the model uses attention" → attention.py).
-
-The full struct leg (call graph + loss-metric) lands in Phase
-5.5 once ``caller_symbol_id`` is wired in.
-
-Why "multiplier" not "additive score"
--------------------------------------
-
-The hybrid ranker applies RRF over the three legs' *ranks*.
-After rank fusion it normalises and applies structural as a
-multiplier:
-
-  - RRF produces the candidate ordering.
-  - The multiplier nudges scores within the top-k without
-    breaking the ordering.
-
-Additive would change rank order in ways that depend on the
-RRF score scale, which is brittle. Multiplicative is the
-standard pattern (Elasticsearch function_score, Vespa
-ranking expressions).
+The hybrid ranker separately retrieves identifier candidates. This module
+boosts its resulting pool using imports mentioned in the claim and split
+snake/camel words from file paths. Multipliers remain bounded to 1..2.2.
 """
 from __future__ import annotations
 
 import logging
-import re
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from claim2code_api.db.models import CodeSymbol
+from claim2code_api.indexing.identifiers import identifier_words
 
 logger = logging.getLogger(__name__)
 
@@ -87,17 +36,11 @@ _FILE_PER_MATCH = 0.05
 # matching to avoid noise.
 _FILE_TOKEN_MIN_LEN = 3
 
-# Pattern: alphanumeric runs (Unicode letters + digits +
-# underscore). Used to split file paths and import targets
-# into tokens.
-_TOKEN_RE = re.compile(r"\w+", flags=re.UNICODE)
-
-
 def _tokens(text: str, min_len: int = 1) -> set[str]:
     """Lower-cased alphanumeric tokens of ``text`` with length >= ``min_len``."""
     if not text:
         return set()
-    return {t.lower() for t in _TOKEN_RE.findall(text) if len(t) >= min_len}
+    return identifier_words(text, min_length=min_len)
 
 
 def structural_boost(
@@ -142,16 +85,21 @@ def structural_boost(
     file_paths = sorted({s.file_path for s in symbols if s.file_path})
 
     # 2. Load the file's import targets in one query.
-    import_rows = (
+    import_query = (
         db.query(CodeSymbol)
         .filter(
             CodeSymbol.file_path.in_(file_paths),
             CodeSymbol.kind == "import",
         )
-        .all()
     )
-    # file_path -> set of imported-target tokens (any length).
-    file_import_tokens: dict[str, set[str]] = {}
+    repository_ids = {getattr(s, "repository_id", None) for s in symbols} - {None}
+    if repository_ids:
+        import_query = import_query.filter(CodeSymbol.repository_id.in_(repository_ids))
+    import_rows = import_query.all()
+    # A same-named path may exist in several indexed repositories.
+    # Keep imports scoped to the candidate's repository, including when
+    # callers intentionally score candidates from multiple repositories.
+    file_import_tokens: dict[tuple[UUID | None, str], set[str]] = {}
     for imp in import_rows:
         # ``signature`` is the dotted import path (e.g.
         # ``"numpy as np"``); fall back to ``name`` if absent.
@@ -160,13 +108,15 @@ def structural_boost(
             continue
         toks = _tokens(target, min_len=1)
         if toks:
-            file_import_tokens.setdefault(imp.file_path, set()).update(toks)
+            key = (getattr(imp, "repository_id", None), imp.file_path)
+            file_import_tokens.setdefault(key, set()).update(toks)
 
     # 3. Compute per-symbol boost.
     for sym in symbols:
         # (a) Import-graph proximity — claim tokens that
         # appear in the file's imported targets.
-        file_tokens = file_import_tokens.get(sym.file_path, set())
+        key = (getattr(sym, "repository_id", None), sym.file_path)
+        file_tokens = file_import_tokens.get(key, set())
         matched_libs = len(claim_tokens & file_tokens)
         import_boost = min(_IMPORT_PER_MATCH * matched_libs, _MAX_IMPORT_BOOST)
 

@@ -1,0 +1,241 @@
+{
+  "pair_id": "sam",
+  "paper": {
+    "title": "Segment Anything",
+    "authors": [
+      "Kirillov",
+      "Mintun",
+      "Ravi",
+      "Mao",
+      "Rolland",
+      "Gustafson",
+      "Xiao",
+      "Whitehead",
+      "Berg",
+      "Lo",
+      "Dollár",
+      "Girshick"
+    ],
+    "year": 2023,
+    "venue": "ICCV",
+    "arxiv_id": "2304.02643",
+    "url": "https://arxiv.org/abs/2304.02643",
+    "pdf_url": "https://openaccess.thecvf.com/content/ICCV2023/papers/Kirillov_Segment_Anything_ICCV_2023_paper.pdf"
+  },
+  "repo": {
+    "url": "https://github.com/facebookresearch/segment-anything",
+    "commit": "dca509fe793f601edb92606367a655c15ac00fdf",
+    "description": "Official PyTorch Segment Anything Model (SAM) implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "start_line": 7,
+        "end_line": 7,
+        "quote": "import torch",
+        "file_path": "segment_anything/modeling/sam.py"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "created_at": "2026-10-29",
+    "selection": "Additional PyTorch architecture coverage selected before any model predictions on these claims.",
+    "label_method": "Architecture paraphrases checked against the pinned official repository source, without executing repository code or consulting model predictions.",
+    "paper_evidence_status": "unverified_pdf; curated paraphrases only",
+    "paper_download_status": "HTTP 403 from the official PDF endpoint in this environment; SHA-256 intentionally absent.",
+    "independent_annotation": false,
+    "measurement_status": "not_run"
+  },
+  "claims": [
+    {
+      "claim_id": "sam_c1",
+      "text": "SAM combines an image encoder, a prompt encoder, and a mask decoder to predict segmentation masks from images and prompts.",
+      "evidence_span": {
+        "section": "Model architecture",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "segment_anything/modeling/sam.py",
+          "name": "Sam",
+          "kind": "class"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "Sam stores all three components and its forward method feeds image and prompt embeddings into the mask decoder. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "segment_anything/modeling/sam.py",
+          "start_line": 43,
+          "end_line": 47,
+          "quote": "        self.image_encoder = image_encoder\n        self.prompt_encoder = prompt_encoder\n        self.mask_decoder = mask_decoder\n        self.register_buffer(\"pixel_mean\", torch.Tensor(pixel_mean).view(-1, 1, 1), False)\n        self.register_buffer(\"pixel_std\", torch.Tensor(pixel_std).view(-1, 1, 1), False)"
+        },
+        {
+          "file_path": "segment_anything/modeling/sam.py",
+          "start_line": 98,
+          "end_line": 101,
+          "quote": "        image_embeddings = self.image_encoder(input_images)\n\n        outputs = []\n        for image_record, curr_embedding in zip(batched_input, image_embeddings):"
+        }
+      ]
+    },
+    {
+      "claim_id": "sam_c2",
+      "text": "SAM represents point prompts with positional encodings and distinct learned embeddings for foreground and background points, and represents boxes using embeddings of their two corners.",
+      "evidence_span": {
+        "section": "Prompt encoder",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "segment_anything/modeling/prompt_encoder.py",
+          "name": "_embed_points",
+          "kind": "method",
+          "parent_name": "PromptEncoder"
+        },
+        {
+          "file_path": "segment_anything/modeling/prompt_encoder.py",
+          "name": "_embed_boxes",
+          "kind": "method",
+          "parent_name": "PromptEncoder"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "PromptEncoder assigns separate nn.Embedding weights by point label and by box corner; coordinates pass through the positional encoder. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "segment_anything/modeling/prompt_encoder.py",
+          "start_line": 88,
+          "end_line": 92,
+          "quote": "        point_embedding[labels == -1] += self.not_a_point_embed.weight\n        point_embedding[labels == 0] += self.point_embeddings[0].weight\n        point_embedding[labels == 1] += self.point_embeddings[1].weight\n        return point_embedding\n"
+        },
+        {
+          "file_path": "segment_anything/modeling/prompt_encoder.py",
+          "start_line": 96,
+          "end_line": 101,
+          "quote": "        coords = boxes.reshape(-1, 2, 2)\n        corner_embedding = self.pe_layer.forward_with_coords(coords, self.input_image_size)\n        corner_embedding[:, 0, :] += self.point_embeddings[2].weight\n        corner_embedding[:, 1, :] += self.point_embeddings[3].weight\n        return corner_embedding\n"
+        }
+      ]
+    },
+    {
+      "claim_id": "sam_c3",
+      "text": "SAM encodes an input mask with a convolutional downscaling network and adds its dense embedding to the image embedding before mask decoding.",
+      "evidence_span": {
+        "section": "Prompt encoder and mask decoder",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "segment_anything/modeling/prompt_encoder.py",
+          "name": "PromptEncoder",
+          "kind": "class"
+        },
+        {
+          "file_path": "segment_anything/modeling/mask_decoder.py",
+          "name": "predict_masks",
+          "kind": "method",
+          "parent_name": "MaskDecoder"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "PromptEncoder downsamples masks through stride-two convolutions and projects to embed_dim; MaskDecoder adds dense_prompt_embeddings directly to image_embeddings. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "segment_anything/modeling/prompt_encoder.py",
+          "start_line": 51,
+          "end_line": 61,
+          "quote": "        self.mask_downscaling = nn.Sequential(\n            nn.Conv2d(1, mask_in_chans // 4, kernel_size=2, stride=2),\n            LayerNorm2d(mask_in_chans // 4),\n            activation(),\n            nn.Conv2d(mask_in_chans // 4, mask_in_chans, kernel_size=2, stride=2),\n            LayerNorm2d(mask_in_chans),\n            activation(),\n            nn.Conv2d(mask_in_chans, embed_dim, kernel_size=1),\n        )\n        self.no_mask_embed = nn.Embedding(1, embed_dim)\n"
+        },
+        {
+          "file_path": "segment_anything/modeling/mask_decoder.py",
+          "start_line": 126,
+          "end_line": 130,
+          "quote": "        src = torch.repeat_interleave(image_embeddings, tokens.shape[0], dim=0)\n        src = src + dense_prompt_embeddings\n        pos_src = torch.repeat_interleave(image_pe, tokens.shape[0], dim=0)\n        b, c, h, w = src.shape\n"
+        }
+      ]
+    },
+    {
+      "claim_id": "sam_c4",
+      "text": "For ambiguous prompts, SAM can return three candidate masks together with a predicted quality score for each mask.",
+      "evidence_span": {
+        "section": "Ambiguity-aware mask decoder",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "segment_anything/modeling/mask_decoder.py",
+          "name": "MaskDecoder",
+          "kind": "class"
+        },
+        {
+          "file_path": "segment_anything/build_sam.py",
+          "name": "_build_sam",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "The official builder sets num_multimask_outputs=3. In multimask mode forward selects mask tokens 1 onward and returns matching iou_pred values; the separate first token serves single-mask mode. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "segment_anything/build_sam.py",
+          "start_line": 88,
+          "end_line": 92,
+          "quote": "            num_multimask_outputs=3,\n            transformer=TwoWayTransformer(\n                depth=2,\n                embedding_dim=prompt_embed_dim,\n                mlp_dim=2048,"
+        },
+        {
+          "file_path": "segment_anything/modeling/mask_decoder.py",
+          "start_line": 102,
+          "end_line": 110,
+          "quote": "        if multimask_output:\n            mask_slice = slice(1, None)\n        else:\n            mask_slice = slice(0, 1)\n        masks = masks[:, mask_slice, :, :]\n        iou_pred = iou_pred[:, mask_slice]\n\n        # Prepare output\n        return masks, iou_pred"
+        },
+        {
+          "file_path": "segment_anything/modeling/mask_decoder.py",
+          "start_line": 146,
+          "end_line": 150,
+          "quote": "        # Generate mask quality predictions\n        iou_pred = self.iou_prediction_head(iou_token_out)\n\n        return masks, iou_pred\n"
+        }
+      ]
+    },
+    {
+      "claim_id": "sam_c5",
+      "text": "SAM uses a two-way Transformer block that applies self-attention to prompt tokens and cross-attention in both directions between prompt tokens and image features.",
+      "evidence_span": {
+        "section": "Mask decoder",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "segment_anything/modeling/transformer.py",
+          "name": "TwoWayAttentionBlock",
+          "kind": "class"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "TwoWayAttentionBlock contains prompt self-attention, token-to-image attention, an MLP, and image-to-token attention, with residual updates to both streams. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "segment_anything/modeling/transformer.py",
+          "start_line": 136,
+          "end_line": 139,
+          "quote": "        self.cross_attn_token_to_image = Attention(\n            embedding_dim, num_heads, downsample_rate=attention_downsample_rate\n        )\n        self.norm2 = nn.LayerNorm(embedding_dim)"
+        },
+        {
+          "file_path": "segment_anything/modeling/transformer.py",
+          "start_line": 145,
+          "end_line": 148,
+          "quote": "        self.cross_attn_image_to_token = Attention(\n            embedding_dim, num_heads, downsample_rate=attention_downsample_rate\n        )\n"
+        },
+        {
+          "file_path": "segment_anything/modeling/transformer.py",
+          "start_line": 176,
+          "end_line": 181,
+          "quote": "        q = queries + query_pe\n        k = keys + key_pe\n        attn_out = self.cross_attn_image_to_token(q=k, k=q, v=queries)\n        keys = keys + attn_out\n        keys = self.norm4(keys)\n"
+        }
+      ]
+    }
+  ]
+}

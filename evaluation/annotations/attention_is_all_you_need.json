@@ -2,15 +2,41 @@
   "pair_id": "attention_is_all_you_need",
   "paper": {
     "title": "Attention Is All You Need",
-    "authors": ["Vaswani", "Shazeer", "Parmar", "Uszkoreit", "Jones", "Gomez", "Kaiser", "Polosukhin"],
+    "authors": [
+      "Vaswani",
+      "Shazeer",
+      "Parmar",
+      "Uszkoreit",
+      "Jones",
+      "Gomez",
+      "Kaiser",
+      "Polosukhin"
+    ],
     "year": 2017,
     "venue": "NeurIPS",
-    "arxiv_id": "1706.03762"
+    "arxiv_id": "1706.03762",
+    "pdf_url": "https://arxiv.org/pdf/1706.03762",
+    "pdf_verified": false
   },
   "repo": {
     "url": "https://github.com/harvardnlp/annotated-transformer",
-    "commit": "debc9fd",
-    "description": "Harvard NLP's annotated 'Attention Is All You Need' implementation."
+    "commit": "debc9fd747bb2123160a98046ad1c2d4da44a567",
+    "description": "Harvard NLP's annotated 'Attention Is All You Need' implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "the_annotated_transformer.py",
+        "start_line": 112,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "review_scope": "Repository revision, PyTorch import, and all annotated symbol locations checked against pinned source; existing claim text and labels preserved.",
+    "paper_evidence_verified": false,
+    "paper_evidence_note": "Original PDF bytes have not been verified for this metadata review. Claim text is curated; existing section/page/character spans must not be treated as verified PDF quotations.",
+    "legacy_claims_sha256": "77aa80b806f9151b6fa738ee369ad87853b71233a067efc90ec0b7f3eb4f19b9"
   },
   "claims": [
     {

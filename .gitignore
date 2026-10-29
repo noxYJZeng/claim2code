@@ -100,3 +100,6 @@ api/generated/
 scripts/_local/
 # Per-claim progress log of evaluate_verification.py (the summary lands in results/verification.json)
 evaluation/results/*.jsonl
+# Independent local benchmark runs and source clones.
+evaluation/runs/
+data/benchmark/

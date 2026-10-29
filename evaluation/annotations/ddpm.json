@@ -2,51 +2,97 @@
   "pair_id": "ddpm",
   "paper": {
     "title": "Denoising Diffusion Probabilistic Models",
-    "authors": ["Ho", "Jain", "Abbeel"],
+    "authors": [
+      "Ho",
+      "Jain",
+      "Abbeel"
+    ],
     "year": 2020,
     "venue": "NeurIPS",
-    "arxiv_id": "2006.11239"
+    "arxiv_id": "2006.11239",
+    "pdf_verified": false
   },
   "repo": {
     "url": "https://github.com/hojonathanho/diffusion",
-    "commit": "1e0dceb",
-    "description": "Official TensorFlow DDPM code (TPU training and sampling)."
+    "commit": "1e0dceb3b3495bbe19116a5e1b3596cd0706c543",
+    "description": "Official TensorFlow DDPM code (TPU training and sampling).",
+    "framework": "tensorflow"
   },
   "claims": [
     {
       "claim_id": "ddpm_c1",
       "text": "We set T = 1000 and use a linear variance schedule increasing from beta_1 = 1e-4 to beta_T = 0.02.",
-      "evidence_span": {"section": "4", "page": 5, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "4",
+        "page": 5,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "diffusion_tf/diffusion_utils_2.py", "name": "get_beta_schedule", "kind": "function"},
-        {"file_path": "scripts/run_cifar.py", "name": "train", "kind": "function"}
+        {
+          "file_path": "diffusion_tf/diffusion_utils_2.py",
+          "name": "get_beta_schedule",
+          "kind": "function"
+        },
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "train",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "ddpm_c2",
       "text": "The simplified objective L_simple trains the network to predict the noise epsilon with an unweighted mean squared error.",
-      "evidence_span": {"section": "3.4", "page": 5, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "3.4",
+        "page": 5,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "diffusion_tf/diffusion_utils_2.py", "name": "training_losses", "kind": "method"}
+        {
+          "file_path": "diffusion_tf/diffusion_utils_2.py",
+          "name": "training_losses",
+          "kind": "method"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "ddpm_c3",
       "text": "Sampling computes x_{t-1} from the predicted mean plus sigma_t z with z ~ N(0, I), adding no noise at the final step.",
-      "evidence_span": {"section": "3.2", "page": 4, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "3.2",
+        "page": 4,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "diffusion_tf/diffusion_utils_2.py", "name": "p_sample", "kind": "method"}
+        {
+          "file_path": "diffusion_tf/diffusion_utils_2.py",
+          "name": "p_sample",
+          "kind": "method"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "ddpm_c4",
       "text": "The reverse process variances are set to untrained time-dependent constants sigma_t^2 = beta_t.",
-      "evidence_span": {"section": "3.2", "page": 3, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "3.2",
+        "page": 3,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "diffusion_tf/diffusion_utils_2.py", "name": "p_mean_variance", "kind": "method"}
+        {
+          "file_path": "diffusion_tf/diffusion_utils_2.py",
+          "name": "p_mean_variance",
+          "kind": "method"
+        }
       ],
       "expected_verification": "PARTIALLY_VERIFIED",
       "notes": "model_var_type 'fixedlarge' uses betas but replaces the first variance with posterior_variance[1]; the code comment says this is done to get a better decoder log likelihood."
@@ -54,78 +100,174 @@
     {
       "claim_id": "ddpm_c5",
       "text": "The U-Net backbone uses group normalization throughout.",
-      "evidence_span": {"section": "B", "page": 5, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "B",
+        "page": 5,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "diffusion_tf/models/unet.py", "name": "normalize", "kind": "function"}
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "name": "normalize",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "ddpm_c6",
       "text": "Self-attention blocks are used at the 16 x 16 resolution.",
-      "evidence_span": {"section": "B", "page": 14, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "B",
+        "page": 14,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "diffusion_tf/models/unet.py", "name": "model", "kind": "function"},
-        {"file_path": "scripts/run_cifar.py", "name": "_denoise", "kind": "method"}
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "name": "model",
+          "kind": "function"
+        },
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "_denoise",
+          "kind": "method"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "ddpm_c7",
       "text": "Diffusion time t is specified by adding the Transformer sinusoidal position embedding into each residual block.",
-      "evidence_span": {"section": "B", "page": 14, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "B",
+        "page": 14,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "diffusion_tf/nn.py", "name": "get_timestep_embedding", "kind": "function"},
-        {"file_path": "diffusion_tf/models/unet.py", "name": "resnet_block", "kind": "function"}
+        {
+          "file_path": "diffusion_tf/nn.py",
+          "name": "get_timestep_embedding",
+          "kind": "function"
+        },
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "name": "resnet_block",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "ddpm_c8",
       "text": "The 32 x 32 models use four feature map resolutions with two convolutional residual blocks per resolution level.",
-      "evidence_span": {"section": "B", "page": 14, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "B",
+        "page": 14,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "scripts/run_cifar.py", "name": "_denoise", "kind": "method"},
-        {"file_path": "diffusion_tf/models/unet.py", "name": "model", "kind": "function"}
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "_denoise",
+          "kind": "method"
+        },
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "name": "model",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "ddpm_c9",
       "text": "We set the dropout rate on CIFAR10 to 0.1 and use random horizontal flips during training.",
-      "evidence_span": {"section": "B", "page": 14, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "B",
+        "page": 14,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "scripts/run_cifar.py", "name": "train", "kind": "function"},
-        {"file_path": "scripts/run_cifar.py", "name": "train_fn", "kind": "method"}
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "train",
+          "kind": "function"
+        },
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "train_fn",
+          "kind": "method"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "ddpm_c10",
       "text": "CIFAR10 is trained with Adam at a learning rate of 2e-4 and a batch size of 128.",
-      "evidence_span": {"section": "B", "page": 14, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "B",
+        "page": 14,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "scripts/run_cifar.py", "name": "train", "kind": "function"}
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "train",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "ddpm_c11",
       "text": "We use EMA on model parameters with a decay factor of 0.9999.",
-      "evidence_span": {"section": "B", "page": 15, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "B",
+        "page": 15,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "diffusion_tf/tpu_utils/tpu_utils.py", "name": "make_ema", "kind": "function"},
-        {"file_path": "diffusion_tf/tpu_utils/tpu_utils.py", "name": "run_training", "kind": "function"}
+        {
+          "file_path": "diffusion_tf/tpu_utils/tpu_utils.py",
+          "name": "make_ema",
+          "kind": "function"
+        },
+        {
+          "file_path": "diffusion_tf/tpu_utils/tpu_utils.py",
+          "name": "run_training",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "ddpm_c12",
       "text": "For the 256 x 256 datasets the learning rate is lowered to 2e-5, the batch size is 64 and dropout is zero.",
-      "evidence_span": {"section": "B", "page": 14, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "B",
+        "page": 14,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "scripts/run_lsun.py", "name": "train", "kind": "function"},
-        {"file_path": "scripts/run_celebahq.py", "name": "train", "kind": "function"}
+        {
+          "file_path": "scripts/run_lsun.py",
+          "name": "train",
+          "kind": "function"
+        },
+        {
+          "file_path": "scripts/run_celebahq.py",
+          "name": "train",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     }

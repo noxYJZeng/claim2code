@@ -1,0 +1,1337 @@
+{
+  "schema_version": 1,
+  "suite_id": "resume-targets",
+  "pair_ids": [
+    "attention_is_all_you_need",
+    "bert",
+    "clip",
+    "ddim",
+    "ddpm",
+    "deit",
+    "detr",
+    "dino",
+    "dpo",
+    "lora",
+    "mae",
+    "moco",
+    "reflexion",
+    "sam",
+    "whisper"
+  ],
+  "pytorch_pair_ids": [
+    "attention_is_all_you_need",
+    "ddim",
+    "dpo",
+    "lora",
+    "mae",
+    "clip",
+    "deit",
+    "detr",
+    "dino",
+    "moco",
+    "sam",
+    "whisper"
+  ],
+  "regression_pair_ids": [
+    "attention_is_all_you_need",
+    "bert",
+    "ddim",
+    "ddpm",
+    "dpo",
+    "lora",
+    "mae",
+    "reflexion"
+  ],
+  "regression_source_commit": "77e2e974f937df364c74280a735ab6b138284ed0",
+  "regression_claims": [
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c1",
+      "expected": "VERIFIED",
+      "text_sha256": "61f9adcc7e2dc38eb776e852a6ac1d37d6cae08cfa90de74c0a7b32b654885c1",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "attention",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c2",
+      "expected": "VERIFIED",
+      "text_sha256": "c2129acc16592c0abd16c4972cc5f698e98ea21b9391f7bc2dafaa819d3622ba",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "MultiHeadedAttention",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c3",
+      "expected": "VERIFIED",
+      "text_sha256": "b331fd4b585402b7446eaac7576606a209401e96aa1877393f6068591c551db4",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "PositionalEncoding",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c4",
+      "expected": "VERIFIED",
+      "text_sha256": "abea0eaacd6f8d04da6d410e6bed5e0eb7b3422cc6138cc32564311636d48c99",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "PositionwiseFeedForward",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c5",
+      "expected": "VERIFIED",
+      "text_sha256": "7d4e911b4b7bb3c17cd4ce5dc8174e7c9120c1968a1f2a84a8dce3d3c4bbbdeb",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "EncoderLayer",
+          "kind": "class"
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "Encoder",
+          "kind": "class"
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "make_model",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c6",
+      "expected": "PARTIALLY_VERIFIED",
+      "text_sha256": "5ce927cac2a1d1c7918007085d842f3ddd59ed5a6ae9e98b24d6d74e3a8e63eb",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "SublayerConnection",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c7",
+      "expected": "VERIFIED",
+      "text_sha256": "ad51e3451afccdd35927096ee685d6d7fe1ad3303cbdab0e2e06500d71e75bbf",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "DecoderLayer",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c8",
+      "expected": "VERIFIED",
+      "text_sha256": "8661ada55029e6d16fe3ca20f230ae369d6df7463aa84c86a5465db5b2f7e14a",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "Embeddings",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c9",
+      "expected": "VERIFIED",
+      "text_sha256": "18f380e491fa034be4d8bf2420428d7fa03ef80a7347ed777efecf1dad145f6b",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "LabelSmoothing",
+          "kind": "class"
+        },
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "train_worker",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c10",
+      "expected": "VERIFIED",
+      "text_sha256": "432b18253b58f432cd620f68ea55bfae5a7f1801284c584bcf0e91ea6494cc97",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "train_worker",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c11",
+      "expected": "VERIFIED",
+      "text_sha256": "77545df94ff92c878a9dbd5d3a1a37f58b3bfae747b698a8ac44c56db3a2a1d1",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "rate",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "attention_is_all_you_need",
+      "claim_id": "aiayn_c12",
+      "expected": "VERIFIED",
+      "text_sha256": "6204ea907e9283cfc7be2551312eba8253b6197ad2c029d6da1dcace4be220f5",
+      "relevant_symbols": [
+        {
+          "file_path": "the_annotated_transformer.py",
+          "name": "make_model",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c1",
+      "expected": "VERIFIED",
+      "text_sha256": "f65c5152881377c88631d63afe89d66aca7b188d0c689026824ef3767242312e",
+      "relevant_symbols": [
+        {
+          "file_path": "create_pretraining_data.py",
+          "name": "create_masked_lm_predictions",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c2",
+      "expected": "VERIFIED",
+      "text_sha256": "8265ed15c39df908bd5c5990ec229c0d05ebcd29dfcc4b8ad3507bec07bf47fc",
+      "relevant_symbols": [
+        {
+          "file_path": "create_pretraining_data.py",
+          "name": "create_masked_lm_predictions",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c3",
+      "expected": "VERIFIED",
+      "text_sha256": "dc8498c8ccd806f8c475ddec26472e73f4c1d0f44be78cc11e382f36227ecdc4",
+      "relevant_symbols": [
+        {
+          "file_path": "create_pretraining_data.py",
+          "name": "create_instances_from_document",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c4",
+      "expected": "VERIFIED",
+      "text_sha256": "2afc620ca5e1f05aad9a9f6c3d2e3a7a634857d57f4d5261b39f7a68b21c9f52",
+      "relevant_symbols": [
+        {
+          "file_path": "modeling.py",
+          "name": "BertConfig",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c5",
+      "expected": "VERIFIED",
+      "text_sha256": "d109b9731f5aca034d3623934eab1acb900c7a713cb74e8375968d15c0b894b1",
+      "relevant_symbols": [
+        {
+          "file_path": "modeling.py",
+          "name": "embedding_postprocessor",
+          "kind": "function"
+        },
+        {
+          "file_path": "modeling.py",
+          "name": "embedding_lookup",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c6",
+      "expected": "VERIFIED",
+      "text_sha256": "57c71badf4bdc86f562226d52a8a2d72173caaa893b5e30c310c640a5b44927a",
+      "relevant_symbols": [
+        {
+          "file_path": "modeling.py",
+          "name": "gelu",
+          "kind": "function"
+        },
+        {
+          "file_path": "modeling.py",
+          "name": "BertConfig",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c7",
+      "expected": "VERIFIED",
+      "text_sha256": "f3eef593b2014cef442c5bac506612906951a0504b0a50df5bdea99f440ea9ec",
+      "relevant_symbols": [
+        {
+          "file_path": "modeling.py",
+          "name": "BertConfig",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c8",
+      "expected": "VERIFIED",
+      "text_sha256": "01e1d3356978e60c20ca172ed76a4e9be155ee79edab03501ecad7d9263027d8",
+      "relevant_symbols": [
+        {
+          "file_path": "optimization.py",
+          "name": "create_optimizer",
+          "kind": "function"
+        },
+        {
+          "file_path": "run_pretraining.py",
+          "name": "num_warmup_steps",
+          "kind": "config_schema"
+        }
+      ]
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c9",
+      "expected": "PARTIALLY_VERIFIED",
+      "text_sha256": "686bb412e33ed932cded9d50c79e371ab4525f81d37a2d7628763737407d5fa9",
+      "relevant_symbols": [
+        {
+          "file_path": "run_pretraining.py",
+          "name": "learning_rate",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "run_pretraining.py",
+          "name": "train_batch_size",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "run_pretraining.py",
+          "name": "num_train_steps",
+          "kind": "config_schema"
+        }
+      ]
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c10",
+      "expected": "VERIFIED",
+      "text_sha256": "2a14400b3166e533b9202d321307797c3f774233d32696fdc9508cfbe14c1390",
+      "relevant_symbols": [
+        {
+          "file_path": "modeling.py",
+          "name": "BertModel",
+          "kind": "class"
+        },
+        {
+          "file_path": "run_classifier.py",
+          "name": "create_model",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "bert",
+      "claim_id": "bert_c11",
+      "expected": "VERIFIED",
+      "text_sha256": "854a08ac78a8090f0ec114400c7c9aebadb51d122bd0e5e7d493b0f29856fffb",
+      "relevant_symbols": [
+        {
+          "file_path": "modeling.py",
+          "name": "BertConfig",
+          "kind": "class"
+        },
+        {
+          "file_path": "modeling.py",
+          "name": "embedding_postprocessor",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddim",
+      "claim_id": "ddim_c1",
+      "expected": "VERIFIED",
+      "text_sha256": "d90a70f358639b183a09ff38ace8aa6f0ddf7702f7d7076dd3d15be525a79237",
+      "relevant_symbols": [
+        {
+          "file_path": "functions/denoising.py",
+          "name": "generalized_steps",
+          "kind": "function"
+        },
+        {
+          "file_path": "functions/losses.py",
+          "name": "noise_estimation_loss",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddim",
+      "claim_id": "ddim_c2",
+      "expected": "VERIFIED",
+      "text_sha256": "2508c1b0caf07d96608b463ca13ca3a4401f5222ae9189ff7874c279cf8eec2c",
+      "relevant_symbols": [
+        {
+          "file_path": "functions/denoising.py",
+          "name": "generalized_steps",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddim",
+      "claim_id": "ddim_c3",
+      "expected": "VERIFIED",
+      "text_sha256": "2b03a8a8a4527f172d96f7163dce5313a1775f206ef9c05783daf063d5a8f7ff",
+      "relevant_symbols": [
+        {
+          "file_path": "runners/diffusion.py",
+          "name": "sample_image",
+          "kind": "method"
+        },
+        {
+          "file_path": "functions/denoising.py",
+          "name": "generalized_steps",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddim",
+      "claim_id": "ddim_c4",
+      "expected": "VERIFIED",
+      "text_sha256": "3e3a21fd574fcf33b237cb66c777deed75a3cbde71f4dfb419fcfdfd2d496f9a",
+      "relevant_symbols": [
+        {
+          "file_path": "configs/cifar10.yml",
+          "name": "configs/cifar10.yml",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "configs/celeba.yml",
+          "name": "configs/celeba.yml",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "functions/losses.py",
+          "name": "noise_estimation_loss",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddim",
+      "claim_id": "ddim_c5",
+      "expected": "VERIFIED",
+      "text_sha256": "07dca08d7461010e29aee60cbea760ff8a5423b586161eb0e5dd4f2ecffeaa04",
+      "relevant_symbols": [
+        {
+          "file_path": "runners/diffusion.py",
+          "name": "sample_interpolation",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddim",
+      "claim_id": "ddim_c6",
+      "expected": "VERIFIED",
+      "text_sha256": "d52dfec3f2f08e037e7a7a36aad8dc59e0febd9e78193d515eaf328a91dd02a8",
+      "relevant_symbols": [
+        {
+          "file_path": "functions/denoising.py",
+          "name": "ddpm_steps",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddim",
+      "claim_id": "ddim_c7",
+      "expected": "VERIFIED",
+      "text_sha256": "bdea6a5d41d203f2511d97a94b094c824f0a05e4f505c2c11556f3a85c614e8c",
+      "relevant_symbols": [
+        {
+          "file_path": "runners/diffusion.py",
+          "name": "sample_image",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddim",
+      "claim_id": "ddim_c8",
+      "expected": "VERIFIED",
+      "text_sha256": "8bb39c502ff74856c2257f36f11a143fc64ba06df14622eb9c683ae30701edc5",
+      "relevant_symbols": [
+        {
+          "file_path": "runners/diffusion.py",
+          "name": "get_beta_schedule",
+          "kind": "function"
+        },
+        {
+          "file_path": "configs/cifar10.yml",
+          "name": "configs/cifar10.yml",
+          "kind": "config_schema"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c1",
+      "expected": "VERIFIED",
+      "text_sha256": "0108a770fec6e74e3048c6674706735a0a5c3eccad246d1a8bcd17aca451a18d",
+      "relevant_symbols": [
+        {
+          "file_path": "diffusion_tf/diffusion_utils_2.py",
+          "name": "get_beta_schedule",
+          "kind": "function"
+        },
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "train",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c2",
+      "expected": "VERIFIED",
+      "text_sha256": "ddb2e551e608464ac4da9143dc3bbb56594ca4c7ea4d76d3340805b7e07346a3",
+      "relevant_symbols": [
+        {
+          "file_path": "diffusion_tf/diffusion_utils_2.py",
+          "name": "training_losses",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c3",
+      "expected": "VERIFIED",
+      "text_sha256": "48453c33350dd0d73a83cad14ca2f8d0509c9abc44c9df94ea77321a08138fd6",
+      "relevant_symbols": [
+        {
+          "file_path": "diffusion_tf/diffusion_utils_2.py",
+          "name": "p_sample",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c4",
+      "expected": "PARTIALLY_VERIFIED",
+      "text_sha256": "b9b379cb0ac6fb8770cf0c50ace38ba692ef519a4f64e7f9643ebc8e10be5e96",
+      "relevant_symbols": [
+        {
+          "file_path": "diffusion_tf/diffusion_utils_2.py",
+          "name": "p_mean_variance",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c5",
+      "expected": "VERIFIED",
+      "text_sha256": "532a5cde34ecb7f94d0a182bf79b6f5380d0e83f7977b05d8ff104ace00f124c",
+      "relevant_symbols": [
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "name": "normalize",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c6",
+      "expected": "VERIFIED",
+      "text_sha256": "b83d8c8905893684223389429ac10654f837e0ba12db5a31c7b0ad7c596a67b1",
+      "relevant_symbols": [
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "name": "model",
+          "kind": "function"
+        },
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "_denoise",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c7",
+      "expected": "VERIFIED",
+      "text_sha256": "a4da18ca3293a4ab98a316d8c50bc35be655cf624ae8f3bcc7718b587f5355f8",
+      "relevant_symbols": [
+        {
+          "file_path": "diffusion_tf/nn.py",
+          "name": "get_timestep_embedding",
+          "kind": "function"
+        },
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "name": "resnet_block",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c8",
+      "expected": "VERIFIED",
+      "text_sha256": "aab4a929542bf579c8f5b7c2adf616def388d9d63c3f2737cf29feceed4c0828",
+      "relevant_symbols": [
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "_denoise",
+          "kind": "method"
+        },
+        {
+          "file_path": "diffusion_tf/models/unet.py",
+          "name": "model",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c9",
+      "expected": "VERIFIED",
+      "text_sha256": "b1bc65d52154ad92f80203097ae797c69f44c95c42d000999c668685e1896fce",
+      "relevant_symbols": [
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "train",
+          "kind": "function"
+        },
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "train_fn",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c10",
+      "expected": "VERIFIED",
+      "text_sha256": "5b4221b383ce40e99c5a007554e3ed5b10a9f92920fc9ba0259d243f11cc5c4d",
+      "relevant_symbols": [
+        {
+          "file_path": "scripts/run_cifar.py",
+          "name": "train",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c11",
+      "expected": "VERIFIED",
+      "text_sha256": "9e8eaab7d893552997066266413d5a95f2c56a5af9704497a2115f3929137324",
+      "relevant_symbols": [
+        {
+          "file_path": "diffusion_tf/tpu_utils/tpu_utils.py",
+          "name": "make_ema",
+          "kind": "function"
+        },
+        {
+          "file_path": "diffusion_tf/tpu_utils/tpu_utils.py",
+          "name": "run_training",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "ddpm",
+      "claim_id": "ddpm_c12",
+      "expected": "VERIFIED",
+      "text_sha256": "cba9e1a73bf4e2da9e0595326d972524ad5cb25e1d6a466cb66ed7ecffac8876",
+      "relevant_symbols": [
+        {
+          "file_path": "scripts/run_lsun.py",
+          "name": "train",
+          "kind": "function"
+        },
+        {
+          "file_path": "scripts/run_celebahq.py",
+          "name": "train",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "dpo",
+      "claim_id": "dpo_c1",
+      "expected": "VERIFIED",
+      "text_sha256": "af97da4b8bb55de3f4604c548731f4ae2b4b20219e9e7e3f3de203a8202c47ee",
+      "relevant_symbols": [
+        {
+          "file_path": "trainers.py",
+          "name": "preference_loss",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "dpo",
+      "claim_id": "dpo_c2",
+      "expected": "VERIFIED",
+      "text_sha256": "66e51424534db93a8770b4a2c0129b034bec3d66bdf51626f21ea4566a044abc",
+      "relevant_symbols": [
+        {
+          "file_path": "trainers.py",
+          "name": "preference_loss",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "dpo",
+      "claim_id": "dpo_c3",
+      "expected": "PARTIALLY_VERIFIED",
+      "text_sha256": "d24a6e7c0c3cf77dc6ecacde5433e1663310cf964c38d7668dc25bd0e708e6a4",
+      "relevant_symbols": [
+        {
+          "file_path": "config/config.yaml",
+          "name": "config/config.yaml",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "config/loss/dpo.yaml",
+          "name": "config/loss/dpo.yaml",
+          "kind": "config_schema"
+        }
+      ]
+    },
+    {
+      "pair_id": "dpo",
+      "claim_id": "dpo_c4",
+      "expected": "VERIFIED",
+      "text_sha256": "1297fdd527ee97c9b6a8662abded70b8545436b082a5d50d68a723198b583646",
+      "relevant_symbols": [
+        {
+          "file_path": "trainers.py",
+          "name": "_get_batch_logps",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "dpo",
+      "claim_id": "dpo_c5",
+      "expected": "VERIFIED",
+      "text_sha256": "a7744af5fab72721ff2ee767ebb92bc41b33ca1974ee3cd3adc4ddd066a59f63",
+      "relevant_symbols": [
+        {
+          "file_path": "trainers.py",
+          "name": "concatenated_inputs",
+          "kind": "function"
+        },
+        {
+          "file_path": "trainers.py",
+          "name": "concatenated_forward",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "dpo",
+      "claim_id": "dpo_c6",
+      "expected": "VERIFIED",
+      "text_sha256": "77b658440189bb6e3198cc43fb1388dd7d301580976ebd28be4fe5584e8e85fb",
+      "relevant_symbols": [
+        {
+          "file_path": "preference_datasets.py",
+          "name": "get_hh",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "dpo",
+      "claim_id": "dpo_c7",
+      "expected": "VERIFIED",
+      "text_sha256": "841c9d584cdec2b539fe333415c19b9aa57589fe56a7dc3e1ea1d6b42bca6fa2",
+      "relevant_symbols": [
+        {
+          "file_path": "config/model/pythia28.yaml",
+          "name": "config/model/pythia28.yaml",
+          "kind": "config_schema"
+        }
+      ]
+    },
+    {
+      "pair_id": "dpo",
+      "claim_id": "dpo_c8",
+      "expected": "VERIFIED",
+      "text_sha256": "22159ee55e7a010bb56dc7b02837e49b53473bfc6baef58fb47a2274d29c8f38",
+      "relevant_symbols": [
+        {
+          "file_path": "train.py",
+          "name": "main",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "dpo",
+      "claim_id": "dpo_c9",
+      "expected": "VERIFIED",
+      "text_sha256": "3d0f792a0f5862fb591ec012c128ec4ecd47a1de6947ab94ea5b06b2d963424f",
+      "relevant_symbols": [
+        {
+          "file_path": "trainers.py",
+          "name": "concatenated_forward",
+          "kind": "method"
+        },
+        {
+          "file_path": "trainers.py",
+          "name": "get_batch_metrics",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "lora",
+      "claim_id": "lora_c1",
+      "expected": "VERIFIED",
+      "text_sha256": "724c5f8630c4c4cc8dae49738fd47323fe27148e40b69aea2207459b0c94b3fa",
+      "relevant_symbols": [
+        {
+          "file_path": "loralib/layers.py",
+          "name": "LoRALayer",
+          "kind": "class"
+        },
+        {
+          "file_path": "loralib/layers.py",
+          "name": "Linear",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "lora",
+      "claim_id": "lora_c2",
+      "expected": "VERIFIED",
+      "text_sha256": "07174afb23cfd857d2626fc6ae2a907c748cb0ad42ec29046da7885193838bf2",
+      "relevant_symbols": [
+        {
+          "file_path": "loralib/layers.py",
+          "name": "Linear",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "lora",
+      "claim_id": "lora_c3",
+      "expected": "PARTIALLY_VERIFIED",
+      "text_sha256": "4a841ac1773e788a0dae61203638e96ad0a80c77aa7414d685b3f45aaa3a917e",
+      "relevant_symbols": [
+        {
+          "file_path": "loralib/layers.py",
+          "name": "Linear",
+          "kind": "class"
+        },
+        {
+          "file_path": "loralib/layers.py",
+          "name": "MergedLinear",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "lora",
+      "claim_id": "lora_c4",
+      "expected": "VERIFIED",
+      "text_sha256": "cefcefa2ecb9e8bdf4e61be6b5065c788a9141fed7b924339f3b7a3acf07d574",
+      "relevant_symbols": [
+        {
+          "file_path": "loralib/layers.py",
+          "name": "MergedLinear",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "lora",
+      "claim_id": "lora_c5",
+      "expected": "VERIFIED",
+      "text_sha256": "f7521fb6819bb9fded70bfa9d36af25b5506cf0bc4a65468dfaf17f61a74fbda",
+      "relevant_symbols": [
+        {
+          "file_path": "loralib/layers.py",
+          "name": "Linear",
+          "kind": "class"
+        },
+        {
+          "file_path": "loralib/utils.py",
+          "name": "mark_only_lora_as_trainable",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "lora",
+      "claim_id": "lora_c6",
+      "expected": "VERIFIED",
+      "text_sha256": "70a57458833027a534ebe4c085db595ab81a20e8e0d96cdd2a2db9d4c11d8c11",
+      "relevant_symbols": [
+        {
+          "file_path": "loralib/utils.py",
+          "name": "mark_only_lora_as_trainable",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "lora",
+      "claim_id": "lora_c7",
+      "expected": "VERIFIED",
+      "text_sha256": "ae344f38723d2a38ba52561d243bc0eaf6dd0904623ac065ccd644582c02d34b",
+      "relevant_symbols": [
+        {
+          "file_path": "examples/NLG/src/model.py",
+          "name": "Attention",
+          "kind": "class"
+        },
+        {
+          "file_path": "examples/NLG/src/gpt2_ft.py",
+          "name": "train_validate",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "lora",
+      "claim_id": "lora_c8",
+      "expected": "VERIFIED",
+      "text_sha256": "ab8302e9d24b0790da23bbe153ae853e99bf057d2f2816b44a134a17b22d646a",
+      "relevant_symbols": [
+        {
+          "file_path": "examples/NLU/src/transformers/models/roberta/modeling_roberta.py",
+          "name": "RobertaSelfAttention",
+          "kind": "class"
+        },
+        {
+          "file_path": "examples/NLU/src/transformers/models/roberta/modeling_roberta.py",
+          "name": "RobertaForSequenceClassification",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "lora",
+      "claim_id": "lora_c9",
+      "expected": "VERIFIED",
+      "text_sha256": "cf45cc2285d5cf4969e4c289f7a3e2b8b38c3e64dc25f974a82c1f567e6de7bf",
+      "relevant_symbols": [
+        {
+          "file_path": "loralib/utils.py",
+          "name": "lora_state_dict",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "lora",
+      "claim_id": "lora_c10",
+      "expected": "VERIFIED",
+      "text_sha256": "d8354f1ca220bf640e6fd495e1b92c562ab86a20320a82b0ed024ea768acc8ae",
+      "relevant_symbols": [
+        {
+          "file_path": "loralib/layers.py",
+          "name": "Linear",
+          "kind": "class"
+        }
+      ]
+    },
+    {
+      "pair_id": "mae",
+      "claim_id": "mae_c1",
+      "expected": "VERIFIED",
+      "text_sha256": "24cbe85bfb9c337bd31cdc937348954a562e7871b479a75d67f887dab0808039",
+      "relevant_symbols": [
+        {
+          "file_path": "models_mae.py",
+          "name": "forward_encoder",
+          "kind": "method"
+        },
+        {
+          "file_path": "models_mae.py",
+          "name": "forward_decoder",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "mae",
+      "claim_id": "mae_c2",
+      "expected": "VERIFIED",
+      "text_sha256": "b8760221a6018300d1374242402e5a4c969723e788aea14125fec219417b9964",
+      "relevant_symbols": [
+        {
+          "file_path": "main_pretrain.py",
+          "name": "--mask_ratio",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "models_mae.py",
+          "name": "forward",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "mae",
+      "claim_id": "mae_c3",
+      "expected": "VERIFIED",
+      "text_sha256": "131dc0914a369d08ee5ea1cec41a75e582139961b7118f834ffb7b6c579aa807",
+      "relevant_symbols": [
+        {
+          "file_path": "models_mae.py",
+          "name": "mae_vit_large_patch16_dec512d8b",
+          "kind": "function"
+        },
+        {
+          "file_path": "models_mae.py",
+          "name": "mae_vit_base_patch16_dec512d8b",
+          "kind": "function"
+        },
+        {
+          "file_path": "models_mae.py",
+          "name": "__init__",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "mae",
+      "claim_id": "mae_c4",
+      "expected": "VERIFIED",
+      "text_sha256": "4f336ba1ace87d20c9f900595bf1fab2b5dd5015562f971a94074e8697cc4c19",
+      "relevant_symbols": [
+        {
+          "file_path": "models_mae.py",
+          "name": "forward_loss",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "mae",
+      "claim_id": "mae_c5",
+      "expected": "VERIFIED",
+      "text_sha256": "fd5acee822c423891ab4250b2a4a4459f01987d59145b9bae8a317c83eea40ae",
+      "relevant_symbols": [
+        {
+          "file_path": "models_mae.py",
+          "name": "forward_loss",
+          "kind": "method"
+        },
+        {
+          "file_path": "main_pretrain.py",
+          "name": "--norm_pix_loss",
+          "kind": "config_schema"
+        }
+      ]
+    },
+    {
+      "pair_id": "mae",
+      "claim_id": "mae_c6",
+      "expected": "VERIFIED",
+      "text_sha256": "8f3a277f30e9282342449855efd26a91f4a348f08e0bf5e3cb4f24bd8617662f",
+      "relevant_symbols": [
+        {
+          "file_path": "models_mae.py",
+          "name": "random_masking",
+          "kind": "method"
+        }
+      ]
+    },
+    {
+      "pair_id": "mae",
+      "claim_id": "mae_c7",
+      "expected": "PARTIALLY_VERIFIED",
+      "text_sha256": "fef110cd39eab1f2d3cf36660147c0f9e41abd51d1566221db170bd42d4914ed",
+      "relevant_symbols": [
+        {
+          "file_path": "main_pretrain.py",
+          "name": "--blr",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_pretrain.py",
+          "name": "main",
+          "kind": "function"
+        },
+        {
+          "file_path": "main_pretrain.py",
+          "name": "--weight_decay",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_pretrain.py",
+          "name": "--warmup_epochs",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "util/lr_sched.py",
+          "name": "adjust_learning_rate",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "mae",
+      "claim_id": "mae_c8",
+      "expected": "VERIFIED",
+      "text_sha256": "993f268c1e011e101b812ce58b75eb552610fe55c6b2d47a90369d272ba92586",
+      "relevant_symbols": [
+        {
+          "file_path": "main_pretrain.py",
+          "name": "main",
+          "kind": "function"
+        },
+        {
+          "file_path": "main_pretrain.py",
+          "name": "--blr",
+          "kind": "config_schema"
+        }
+      ]
+    },
+    {
+      "pair_id": "mae",
+      "claim_id": "mae_c9",
+      "expected": "VERIFIED",
+      "text_sha256": "72fc3848acbf12c0733917bdb211187b3649c69f36ba8217273b8611cc7c72e1",
+      "relevant_symbols": [
+        {
+          "file_path": "util/lr_sched.py",
+          "name": "adjust_learning_rate",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "reflexion",
+      "claim_id": "refl_c1",
+      "expected": "VERIFIED",
+      "text_sha256": "d4ffdfc6c97ee714eac0139885caa41a89dc67a7691a771d3a0ec4dacc8fb8a9",
+      "relevant_symbols": [
+        {
+          "file_path": "alfworld_runs/alfworld_trial.py",
+          "name": "alfworld_run",
+          "kind": "function"
+        },
+        {
+          "file_path": "alfworld_runs/generate_reflections.py",
+          "name": "update_memory",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "reflexion",
+      "claim_id": "refl_c2",
+      "expected": "PARTIALLY_VERIFIED",
+      "text_sha256": "c4cbfd9b6922c1e79b471239b1ac2c31a26da8e041c72f0d3a3b6a4a6a9a947a",
+      "relevant_symbols": [
+        {
+          "file_path": "alfworld_runs/env_history.py",
+          "name": "add",
+          "kind": "method"
+        },
+        {
+          "file_path": "alfworld_runs/env_history.py",
+          "name": "check_is_exhausted",
+          "kind": "method"
+        },
+        {
+          "file_path": "alfworld_runs/alfworld_trial.py",
+          "name": "alfworld_run",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "reflexion",
+      "claim_id": "refl_c3",
+      "expected": "PARTIALLY_VERIFIED",
+      "text_sha256": "de99cbc246ba2f664b8df5994d517262e6c0b7e167a9c7c2db4ada892ec80a20",
+      "relevant_symbols": [
+        {
+          "file_path": "programming_runs/reflexion.py",
+          "name": "run_reflexion",
+          "kind": "function"
+        },
+        {
+          "file_path": "programming_runs/generators/generator_utils.py",
+          "name": "generic_generate_internal_tests",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "reflexion",
+      "claim_id": "refl_c4",
+      "expected": "VERIFIED",
+      "text_sha256": "0740b0cd530e3d6ebcd8b60a7293d37c851099e781452148abaa859af371dc39",
+      "relevant_symbols": [
+        {
+          "file_path": "programming_runs/generators/generator_utils.py",
+          "name": "generic_generate_internal_tests",
+          "kind": "function"
+        },
+        {
+          "file_path": "programming_runs/generators/py_generate.py",
+          "name": "py_is_syntax_valid",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "reflexion",
+      "claim_id": "refl_c5",
+      "expected": "VERIFIED",
+      "text_sha256": "32e557a37bda4d8e83f39d26cbb63aa11e0792e5627031610356ff4c9f2e478e",
+      "relevant_symbols": [
+        {
+          "file_path": "programming_runs/reflexion.py",
+          "name": "run_reflexion",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "reflexion",
+      "claim_id": "refl_c6",
+      "expected": "PARTIALLY_VERIFIED",
+      "text_sha256": "9653561c7ea1a589ca412e428016dbbfd1fa8477e8ddd6ee490899e54039acd2",
+      "relevant_symbols": [
+        {
+          "file_path": "hotpotqa_runs/agents.py",
+          "name": "reflect",
+          "kind": "method"
+        },
+        {
+          "file_path": "hotpotqa_runs/agents.py",
+          "name": "format_reflections",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "reflexion",
+      "claim_id": "refl_c7",
+      "expected": "VERIFIED",
+      "text_sha256": "f03ef4f637fcdbf86fb96f7bd228f4461725c5a57df9ec2f1ae26406afc8eeb4",
+      "relevant_symbols": [
+        {
+          "file_path": "hotpotqa_runs/agents.py",
+          "name": "reflect",
+          "kind": "method"
+        },
+        {
+          "file_path": "alfworld_runs/generate_reflections.py",
+          "name": "update_memory",
+          "kind": "function"
+        },
+        {
+          "file_path": "programming_runs/generators/generator_utils.py",
+          "name": "generic_generate_self_reflection",
+          "kind": "function"
+        }
+      ]
+    },
+    {
+      "pair_id": "reflexion",
+      "claim_id": "refl_c8",
+      "expected": "VERIFIED",
+      "text_sha256": "6268458e9d8496d2428a2a59d7bf5795bcb762bb9b3330ce9c121a69fe8a9bf0",
+      "relevant_symbols": [
+        {
+          "file_path": "hotpotqa_runs/agents.py",
+          "name": "EM",
+          "kind": "function"
+        },
+        {
+          "file_path": "hotpotqa_runs/agents.py",
+          "name": "normalize_answer",
+          "kind": "function"
+        }
+      ]
+    }
+  ],
+  "targets": {
+    "pytorch_repositories": 12,
+    "recall_at_5": 0.91,
+    "status_accuracy": 0.87,
+    "grounding_rate": 0.97
+  },
+  "reported_baseline": {
+    "value": 0.74,
+    "metric_semantics": "legacy_hit_rate",
+    "standard_recall_comparison_established": false,
+    "note": "The archived 74% is a top-5 hit rate. It cannot establish the submitted 74% to 91% standard Recall@5 comparison; a paired standard-recall baseline must be measured."
+  },
+  "notes": [
+    "Accuracy and retrieval targets use the unchanged original 79-claim regression set; new positive coverage claims cannot dilute its errors.",
+    "Source/index coverage of 12 PyTorch repositories is reported separately from actual model-based verification coverage.",
+    "No numeric target is marked met without current compatible evaluator provenance and complete per-claim measurements."
+  ]
+}

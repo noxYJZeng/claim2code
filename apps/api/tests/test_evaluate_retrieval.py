@@ -50,13 +50,14 @@ from evaluation.evaluate_retrieval import (  # noqa: E402
 
 
 def test_claim_result_recall_at_1_hit() -> None:
-    """The first retrieved symbol is in the relevant set → R@1 = 1.0."""
+    """One of two relevant symbols is retrieved → Recall@1 = 0.5."""
     cr = ClaimResult(
         claim_id="c1",
         relevant_symbol_ids={"a", "b"},
         retrieved_symbol_ids=["a", "x", "y", "z", "w"],
     )
-    assert cr.recall_at_1 == 1.0
+    assert cr.recall_at_1 == 0.5
+    assert cr.hit_at_1 == 1.0
 
 
 def test_claim_result_recall_at_1_miss() -> None:
@@ -119,15 +120,16 @@ def test_claim_result_mrr_no_match() -> None:
     assert cr.mrr == 0.0
 
 
-def test_claim_result_multiple_relevant_uses_union() -> None:
-    """Multiple relevant symbols → any hit counts."""
+def test_claim_result_multiple_relevant_separates_recall_from_hit_rate() -> None:
+    """One of three targets is recall 1/3 while still a successful hit."""
     cr = ClaimResult(
         claim_id="c1",
         relevant_symbol_ids={"a", "b", "c"},
         retrieved_symbol_ids=["x", "b", "y"],
     )
     assert cr.recall_at_1 == 0.0  # first one is "x", miss
-    assert cr.recall_at_5 == 1.0  # "b" is in the top 5
+    assert cr.recall_at_5 == pytest.approx(1 / 3)
+    assert cr.hit_at_5 == 1.0
     assert cr.mrr == pytest.approx(0.5)  # "b" at position 2
 
 
@@ -342,16 +344,18 @@ def test_render_results_json_is_json_serialisable() -> None:
 
 
 def test_annotation_files_load_with_labelled_claims() -> None:
-    """Every annotation file loads, with at least 8 labelled claims."""
+    """The historical suite remains present alongside source-backed extensions."""
     from evaluation.evaluate_retrieval import _load_annotations
 
     annotations = _load_annotations()
     by_id = {a["pair_id"]: a for a in annotations}
-    assert set(by_id) == {
+    legacy = {
         "attention_is_all_you_need", "bert", "lora", "mae", "ddim", "ddpm", "reflexion", "dpo",
     }
+    assert legacy <= set(by_id)
     for ann in annotations:
-        assert len(ann["claims"]) >= 8, f"{ann['pair_id']} should have >= 8 claims"
+        minimum = 8 if ann["pair_id"] in legacy else 4
+        assert len(ann["claims"]) >= minimum
         # Every claim has text + relevant_symbols.
         for c in ann["claims"]:
             assert "text" in c

@@ -26,7 +26,7 @@ What we deliberately don't test here:
 """
 from __future__ import annotations
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import create_engine, delete, text
@@ -34,7 +34,7 @@ from sqlalchemy.orm import sessionmaker
 
 from claim2code_api.app.config import get_settings
 from claim2code_api.db.models import Base, CodeSymbol
-from claim2code_api.indexing.lexical import lexical_search
+from claim2code_api.indexing.lexical import identifier_search, lexical_search
 
 pytestmark = pytest.mark.integration
 
@@ -216,6 +216,26 @@ def test_lexical_search_stems_running_to_run(seeded_session) -> None:
     )
     symbol_ids = [sid for sid, _score in rows]
     assert ids["run_training_loop"] in symbol_ids
+
+
+@pytest.mark.parametrize(("name", "claim"), [
+    ("compute_attention_weights", "compute attention weights"),
+    ("MultiHeadAttention", "multi head attention"),
+    ("LoRALayer", "LoRA"),
+])
+def test_identifier_leg_finds_undocumented_implementation(seeded_session, name, claim) -> None:
+    session, repo_id, _ = seeded_session
+    sym = CodeSymbol(
+        repository_id=repo_id, kind="function", language="python",
+        file_path="pkg/undocumented.py", start_line=1, start_col=0,
+        end_line=3, end_col=0, name=name, signature="()", docstring=None,
+    )
+    session.add(sym)
+    session.commit()
+    results = identifier_search(session, repo_id, claim)
+    assert sym.symbol_id in [sid for sid, _ in results]
+    # A matching name in another indexed repository cannot leak in.
+    assert identifier_search(session, uuid4(), claim) == []
 
 
 def test_lexical_search_field_weights_name_above_docstring(seeded_session) -> None:

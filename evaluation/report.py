@@ -59,10 +59,14 @@ def render_retrieval(data: dict[str, Any]) -> list[str]:
             recall_at_5=row["recall_at_5"],
             mrr=row["mrr"],
             error=row.get("error"),
+            hit_at_1=row.get("hit_at_1"),
+            hit_at_5=row.get("hit_at_5"),
         )
         for row in data["per_dataset"]
     ]
-    body = _render_report_md(metrics).splitlines()
+    body = _render_report_md(
+        metrics, metric_semantics=data.get("metric_semantics", "legacy_hit_rate"),
+    ).splitlines()
     # Demote the evaluator's own headings one level under "## Retrieval".
     lines = ["## Retrieval"]
     lines += [("#" + ln) if ln.startswith("## ") else ln for ln in body[1:]]
@@ -71,6 +75,14 @@ def render_retrieval(data: dict[str, Any]) -> list[str]:
         "",
         "Aggregates are macro averages over datasets. Baselines: " + ", ".join(names) + ".",
     ]
+    unresolved = sum(row.get("n_unresolved_symbols", 0) for row in data["per_dataset"])
+    failed = sum(row.get("n_claim_errors", 0) for row in data["per_dataset"])
+    if unresolved:
+        lines += [f"Unresolved annotation targets across baseline runs: {unresolved}; these remain misses."]
+    if failed:
+        lines += [f"Failed claim/baseline requests: {failed}; these remain misses."]
+    if data.get("skipped_pairs"):
+        lines += ["Skipped (repository not indexed): " + ", ".join(data["skipped_pairs"]) + "."]
     return lines + [""]
 
 
@@ -101,7 +113,7 @@ def render_verification(data: dict[str, Any]) -> list[str]:
         f"({agg['n_expected_discrepancy']} annotated) |"),
         (f"| Grounding rate (cited code exists in the cited file) | {_pct(agg['grounding_rate'])} "
         f"({agg['n_code_evidence']} citations) |"),
-        f"| Line accuracy (cited code at the cited lines) | {_pct(agg.get('line_accuracy'))} |",
+        f"| Line accuracy (±2-line grading tolerance) | {_pct(agg.get('line_accuracy'))} |",
         (f"| Evidence hit rate (supported verdicts citing an annotated symbol) "
         f"| {_pct(agg['evidence_hit_rate'])} |"),
         f"| LLM errors | {agg['n_llm_errors']} |",
@@ -111,6 +123,11 @@ def render_verification(data: dict[str, Any]) -> list[str]:
         "| Pair | Claims | Accuracy | Support | Disc. P | Disc. R | Grounding |",
         "|---|---|---|---|---|---|---|",
     ]
+    if "exact_line_accuracy" in agg:
+        # This value must be measured/stored by the evaluator. Rendering
+        # never upgrades an old tolerant score into an exact one.
+        index = next(i for i, line in enumerate(lines) if line.startswith("| Evidence hit rate"))
+        lines.insert(index, f"| Exact line accuracy (no tolerance) | {_pct(agg['exact_line_accuracy'])} |")
     for pid, m in data["per_pair"].items():
         lines.append(
             f"| {pid} | {m['n_claims']} | {_pct(m['status_accuracy'])} | {_pct(m['support_rate'])} "
@@ -183,8 +200,11 @@ RENDERERS = {
 }
 
 
-def build(*, require_provenance: bool = False) -> tuple[dict[str, Any], str]:
+def build(
+    *, require_provenance: bool = False, results_dir: Path | None = None,
+) -> tuple[dict[str, Any], str]:
     """Load the per-evaluator results and render the combined outputs."""
+    directory = RESULTS_DIR if results_dir is None else results_dir
     env = {"report_generated_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds")}
     combined: dict[str, Any] = {"environment": env}
     lines = [
@@ -196,7 +216,7 @@ def build(*, require_provenance: bool = False) -> tuple[dict[str, Any], str]:
     ]
     # Preserve the old header as an unverified historical declaration,
     # never upgrade it into missing per-evaluator inference provenance.
-    previous = RESULTS_DIR.parent / "results.json"
+    previous = directory.parent / "results.json"
     if previous.exists():
         old = json.loads(previous.read_text())
         legacy = old.get("legacy_reported_environment")
@@ -213,7 +233,7 @@ def build(*, require_provenance: bool = False) -> tuple[dict[str, Any], str]:
                 "",
             ]
     for name in SECTIONS:
-        path = RESULTS_DIR / f"{name}.json"
+        path = directory / f"{name}.json"
         if not path.exists():
             combined[name] = None
             lines += [f"## {name.capitalize()}", "", f"Not run (`{path.name}` missing).", ""]
@@ -251,15 +271,23 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--require-provenance", action="store_true",
                         help="require compatible recorded source/input metadata; model weights are not verified")
+    parser.add_argument("--results-dir", type=Path,
+                        help="per-evaluator JSON directory (default: evaluation/results)")
+    parser.add_argument("--output-dir", type=Path,
+                        help="directory for combined results.json/report.md (default: evaluation)")
     args = parser.parse_args(argv)
     try:
-        combined, md = build(require_provenance=args.require_provenance)
+        combined, md = build(require_provenance=args.require_provenance, results_dir=args.results_dir)
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
         return 2
-    RESULTS_JSON.write_text(json.dumps(combined, indent=2))
-    REPORT_MD.write_text(md)
-    print(f"wrote {RESULTS_JSON} and {REPORT_MD}")
+    result_path = RESULTS_JSON if args.output_dir is None else args.output_dir / "results.json"
+    report_path = REPORT_MD if args.output_dir is None else args.output_dir / "report.md"
+    result_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    result_path.write_text(json.dumps(combined, indent=2))
+    report_path.write_text(md)
+    print(f"wrote {result_path} and {report_path}")
     return 0
 
 

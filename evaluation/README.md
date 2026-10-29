@@ -31,6 +31,71 @@ whose repository is not indexed is skipped and listed in the report.
 
 ## Measurement scope and reproducibility
 
+### Run the resume-target benchmark on a local model
+
+The working targets are 12 PyTorch repositories, standard Recall@5 of at
+least 91%, status accuracy of at least 87%, and citation grounding of at
+least 97%. These are acceptance thresholds, not measured results of the
+new code. The archived `93cd752` measurements remain unchanged.
+
+`suites/resume-targets.json` selects 15 paper/repository pairs, including
+12 source-reviewed PyTorch repositories. Seven new pairs add 35 positive
+implementation claims. The target checker keeps the original 79 claims
+separate: adding these positive cases cannot raise the original accuracy.
+It freezes their texts, labels, and relevant symbols from `77e2e97`.
+
+With the existing PostgreSQL/pgvector database and LM Studio settings in
+`.env`, run from the repository root using your backend virtual environment:
+
+```bash
+python evaluation/run_local.py --prepare
+```
+
+Both the chat and embedding models must be available in LM Studio. Existing
+`OPENAI_BASE_URL`, `OPENAI_MODEL_CHAT`, `OPENAI_MODEL_EMBED`, and
+`OPENAI_EMBED_DIM` settings are used; no public model endpoint is needed.
+Apply database migrations before the first run, as in the main setup guide.
+
+Preparation clones immutable source revisions, indexes symbols, validates
+framework and annotated-symbol evidence, and builds missing embeddings.
+It reads downloaded code without importing or executing it. Existing
+repositories are reused only when their clean source revision and embedding
+index are compatible. A conflicting or partial index produces an error;
+use a separate benchmark database rather than resetting your workbench.
+
+The remaining stages run in this order: **retrieval → verification → safety
+→ report → target check**. Each run writes to a new ignored directory under
+`evaluation/runs/`, preserving the checked-in results. The output includes
+`report.md`, `targets.md`, `coverage.json`, and per-claim records. Exit status
+1 means measurements completed but one or more numerical targets remain
+unmet; status 2 indicates invalid inputs or setup. To resume interrupted
+verification with the same source, models, and annotations:
+
+```bash
+python evaluation/run_local.py --prepare --resume --output-dir evaluation/runs/<previous-run>
+```
+
+Use `--dry-run` to inspect the stage commands without network, database, or
+model calls. Source-only preparation is also available for parser coverage:
+
+```bash
+python evaluation/prepare_benchmark.py --parse-only --output /tmp/claim2code-coverage.json
+```
+
+Source-only coverage does not measure embedding or verification quality.
+The new annotations record actual source quotes and full repository SHAs;
+official PDF downloads were blocked in the cloud environment, so missing PDF
+hashes and unverified paper quotations remain explicit. Frozen-PDF checks
+can be enabled with `run_local.py --require-reproducible` after those inputs
+have been verified.
+
+New retrieval output distinguishes standard relevant-symbol Recall@5 from
+Hit@5 (any relevant target in the first five results). The historical
+reported 74% was Hit@5. A claim of **74% → 91% Recall@5** requires a paired
+measurement with the same metric definition; the target report records
+that comparison separately. Exact citation-line accuracy is now also
+reported separately from the earlier evaluator's ±2-line tolerance.
+
 The checked-in numbers are **development-set measurements** of commit
 `93cd752` (2026-10-28), with provenance in each results file. The saved
 verification predictions have 70 VERIFIED and 9 PARTIALLY_VERIFIED gold

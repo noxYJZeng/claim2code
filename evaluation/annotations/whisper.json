@@ -1,0 +1,232 @@
+{
+  "pair_id": "whisper",
+  "paper": {
+    "title": "Robust Speech Recognition via Large-Scale Weak Supervision",
+    "authors": [
+      "Radford",
+      "Kim",
+      "Xu",
+      "Brockman",
+      "McLeavey",
+      "Sutskever"
+    ],
+    "year": 2023,
+    "venue": "ICML",
+    "arxiv_id": "2212.04356",
+    "url": "https://arxiv.org/abs/2212.04356",
+    "pdf_url": "https://cdn.openai.com/papers/whisper.pdf"
+  },
+  "repo": {
+    "url": "https://github.com/openai/whisper",
+    "commit": "86098128c0b4f24f0e2aa2994de830614b474227",
+    "description": "Official PyTorch Whisper speech-recognition implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "start_line": 8,
+        "end_line": 8,
+        "quote": "import torch",
+        "file_path": "whisper/model.py"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "created_at": "2026-10-29",
+    "selection": "Additional PyTorch architecture coverage selected before any model predictions on these claims.",
+    "label_method": "Architecture paraphrases checked against the pinned official repository source, without executing repository code or consulting model predictions.",
+    "paper_evidence_status": "unverified_pdf; curated paraphrases only",
+    "paper_download_status": "HTTP 403 from the official PDF endpoint in this environment; SHA-256 intentionally absent.",
+    "independent_annotation": false,
+    "measurement_status": "not_run"
+  },
+  "claims": [
+    {
+      "claim_id": "whisper_c1",
+      "text": "Whisper preprocesses audio at 16 kHz and pads or trims its input to 30-second chunks.",
+      "evidence_span": {
+        "section": "Audio preprocessing",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "whisper/audio.py",
+          "name": "load_audio",
+          "kind": "function"
+        },
+        {
+          "file_path": "whisper/audio.py",
+          "name": "pad_or_trim",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "SAMPLE_RATE is 16000; CHUNK_LENGTH is 30; load_audio resamples through ffmpeg and pad_or_trim defaults to N_SAMPLES. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "whisper/audio.py",
+          "start_line": 13,
+          "end_line": 18,
+          "quote": "SAMPLE_RATE = 16000\nN_FFT = 400\nHOP_LENGTH = 160\nCHUNK_LENGTH = 30\nN_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE  # 480000 samples in a 30-second chunk\nN_FRAMES = exact_div(N_SAMPLES, HOP_LENGTH)  # 3000 frames in a mel spectrogram input"
+        },
+        {
+          "file_path": "whisper/audio.py",
+          "start_line": 65,
+          "end_line": 80,
+          "quote": "def pad_or_trim(array, length: int = N_SAMPLES, *, axis: int = -1):\n    \"\"\"\n    Pad or trim the audio array to N_SAMPLES, as expected by the encoder.\n    \"\"\"\n    if torch.is_tensor(array):\n        if array.shape[axis] > length:\n            array = array.index_select(\n                dim=axis, index=torch.arange(length, device=array.device)\n            )\n\n        if array.shape[axis] < length:\n            pad_widths = [(0, 0)] * array.ndim\n            pad_widths[axis] = (0, length - array.shape[axis])\n            array = F.pad(array, [pad for sizes in pad_widths[::-1] for pad in sizes])\n    else:\n        if array.shape[axis] > length:"
+        }
+      ]
+    },
+    {
+      "claim_id": "whisper_c2",
+      "text": "Whisper converts audio into a log-Mel spectrogram using a 25-millisecond Fourier window and a 10-millisecond hop.",
+      "evidence_span": {
+        "section": "Audio preprocessing",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "whisper/audio.py",
+          "name": "log_mel_spectrogram",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "The Fourier window has 400 samples and the hop has 160 samples at 16000 Hz; the spectrogram is projected through Mel filters and log10 transformed. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "whisper/audio.py",
+          "start_line": 13,
+          "end_line": 17,
+          "quote": "SAMPLE_RATE = 16000\nN_FFT = 400\nHOP_LENGTH = 160\nCHUNK_LENGTH = 30\nN_SAMPLES = CHUNK_LENGTH * SAMPLE_RATE  # 480000 samples in a 30-second chunk"
+        },
+        {
+          "file_path": "whisper/audio.py",
+          "start_line": 147,
+          "end_line": 157,
+          "quote": "    window = torch.hann_window(N_FFT).to(audio.device)\n    stft = torch.stft(audio, N_FFT, HOP_LENGTH, window=window, return_complex=True)\n    magnitudes = stft[..., :-1].abs() ** 2\n\n    filters = mel_filters(audio.device, n_mels)\n    mel_spec = filters @ magnitudes\n\n    log_spec = torch.clamp(mel_spec, min=1e-10).log10()\n    log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)\n    log_spec = (log_spec + 4.0) / 4.0\n    return log_spec"
+        }
+      ]
+    },
+    {
+      "claim_id": "whisper_c3",
+      "text": "The Whisper audio encoder begins with two kernel-size-three one-dimensional convolutions followed by GELU activations, with stride two in the second convolution.",
+      "evidence_span": {
+        "section": "Model architecture",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "whisper/model.py",
+          "name": "AudioEncoder",
+          "kind": "class"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "AudioEncoder constructs both Conv1d layers and explicitly applies GELU after each; the second convolution uses stride=2. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "whisper/model.py",
+          "start_line": 186,
+          "end_line": 189,
+          "quote": "        self.conv1 = Conv1d(n_mels, n_state, kernel_size=3, padding=1)\n        self.conv2 = Conv1d(n_state, n_state, kernel_size=3, stride=2, padding=1)\n        self.register_buffer(\"positional_embedding\", sinusoids(n_ctx, n_state))\n"
+        },
+        {
+          "file_path": "whisper/model.py",
+          "start_line": 200,
+          "end_line": 203,
+          "quote": "        x = F.gelu(self.conv1(x))\n        x = F.gelu(self.conv2(x))\n        x = x.permute(0, 2, 1)\n"
+        }
+      ]
+    },
+    {
+      "claim_id": "whisper_c4",
+      "text": "Whisper adds sinusoidal positional embeddings to audio features and learned positional embeddings to decoder text tokens.",
+      "evidence_span": {
+        "section": "Model architecture",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "whisper/model.py",
+          "name": "AudioEncoder",
+          "kind": "class"
+        },
+        {
+          "file_path": "whisper/model.py",
+          "name": "TextDecoder",
+          "kind": "class"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "The audio encoder registers a sinusoidal buffer and adds it to convolutional features, whereas TextDecoder declares positional_embedding as an nn.Parameter and adds it to token embeddings. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "whisper/model.py",
+          "start_line": 188,
+          "end_line": 190,
+          "quote": "        self.register_buffer(\"positional_embedding\", sinusoids(n_ctx, n_state))\n\n        self.blocks: Iterable[ResidualAttentionBlock] = nn.ModuleList("
+        },
+        {
+          "file_path": "whisper/model.py",
+          "start_line": 220,
+          "end_line": 223,
+          "quote": "        self.token_embedding = nn.Embedding(n_vocab, n_state)\n        self.positional_embedding = nn.Parameter(torch.empty(n_ctx, n_state))\n\n        self.blocks: Iterable[ResidualAttentionBlock] = nn.ModuleList("
+        },
+        {
+          "file_path": "whisper/model.py",
+          "start_line": 205,
+          "end_line": 207,
+          "quote": "        x = (x + self.positional_embedding).to(x.dtype)\n\n        for block in self.blocks:"
+        }
+      ]
+    },
+    {
+      "claim_id": "whisper_c5",
+      "text": "Whisper uses an autoregressive Transformer text decoder with causal self-attention and cross-attention to encoded audio.",
+      "evidence_span": {
+        "section": "Model architecture",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "whisper/model.py",
+          "name": "TextDecoder",
+          "kind": "class"
+        },
+        {
+          "file_path": "whisper/model.py",
+          "name": "ResidualAttentionBlock",
+          "kind": "class"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "Every decoder block enables cross_attention, TextDecoder registers an upper-triangular negative-infinity causal mask, and ResidualAttentionBlock attends from text queries to xa audio features. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "whisper/model.py",
+          "start_line": 224,
+          "end_line": 227,
+          "quote": "            [\n                ResidualAttentionBlock(n_state, n_head, cross_attention=True)\n                for _ in range(n_layer)\n            ]"
+        },
+        {
+          "file_path": "whisper/model.py",
+          "start_line": 231,
+          "end_line": 233,
+          "quote": "        mask = torch.empty(n_ctx, n_ctx).fill_(-np.inf).triu_(1)\n        self.register_buffer(\"mask\", mask, persistent=False)\n"
+        },
+        {
+          "file_path": "whisper/model.py",
+          "start_line": 175,
+          "end_line": 178,
+          "quote": "        if self.cross_attn:\n            x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)[0]\n        x = x + self.mlp(self.mlp_ln(x))\n        return x"
+        }
+      ]
+    }
+  ]
+}

@@ -43,6 +43,13 @@ configuration or accept uploads.
 
 ## Measured results
 
+Work toward the submitted resume targets is tracked by the
+[local acceptance benchmark](evaluation/README.md#run-the-resume-target-benchmark-on-a-local-model).
+The suite now contains 12 PyTorch repositories plus the three other original
+repositories. New retrieval and verification changes need a local model run
+before their performance is reported; the measurements below remain the
+archived `93cd752` results.
+
 Development benchmark from [`evaluation/report.md`](evaluation/report.md), measured locally on
 2026-10-28 at commit `93cd752` with `qwen3.8-27b-mlx` (LM Studio) and
 `nomic-embed-text-v1.5` embeddings on 8 annotated pairs (Attention Is All You

@@ -398,3 +398,7 @@ def test_callee_context_follows_registry_dispatch(
         ("simple_loss", "losses.py", 1), ("load", "data.py", 1),
     ]
     assert "square().sum()" in spans[0].source
+    registry = next(s for s in spans if s.name == "loss_registry")
+    assert registry.file_path == "losses.py"
+    assert registry.start_line == 5
+    assert "'simple': simple_loss" in registry.source

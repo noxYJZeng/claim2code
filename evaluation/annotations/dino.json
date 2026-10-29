@@ -1,0 +1,172 @@
+{
+  "pair_id": "dino",
+  "paper": {
+    "title": "Emerging Properties in Self-Supervised Vision Transformers",
+    "authors": [
+      "Caron",
+      "Touvron",
+      "Misra",
+      "Jégou",
+      "Mairal",
+      "Bojanowski",
+      "Joulin"
+    ],
+    "year": 2021,
+    "venue": "ICCV",
+    "arxiv_id": "2104.14294",
+    "pdf_url": "https://openaccess.thecvf.com/content/ICCV2021/papers/Caron_Emerging_Properties_in_Self-Supervised_Vision_Transformers_ICCV_2021_paper.pdf",
+    "sha256": null
+  },
+  "repo": {
+    "url": "https://github.com/facebookresearch/dino",
+    "commit": "7c446df5b9f45747937fb0d72314eb9f7b66930a",
+    "description": "Official PyTorch DINO implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "main_dino.py",
+        "start_line": 25,
+        "end_line": 25,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "created_at": "2026-10-29",
+    "paper_evidence_verified": false,
+    "paper_download_status": "HTTP 403 from official publisher/CVF and arxiv.org PDF endpoints in the cloud environment; no PDF hash or page span is asserted.",
+    "label_method": "Read-only review of pinned repository source and parser-resolved relevant symbols; no model output was consulted.",
+    "scope": "Curated implementation claims associated with the named paper; not PDF extraction or paper-citation validation.",
+    "label_distribution_note": "All five claims in this pair are positive implementation claims. Four-way verification quality must be measured on separately annotated negative and insufficient-evidence cases."
+  },
+  "claims": [
+    {
+      "claim_id": "dino_c1",
+      "text": "DINO minimizes cross-entropy between teacher and student output distributions from different augmented views, skipping pairs that use the same view.",
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "DINOLoss"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "main_dino.py",
+          "start_line": 396,
+          "end_line": 399,
+          "quote": "                if v == iq:\n                    # we skip cases where student and teacher operate on the same view\n                    continue\n                loss = torch.sum(-q * F.log_softmax(student_out[v], dim=-1), dim=-1)"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "dino_c2",
+      "text": "DINO centers and sharpens the teacher outputs by subtracting a running center and applying a temperature-scaled softmax; teacher targets are detached from gradients.",
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "DINOLoss"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "main_dino.py",
+          "start_line": 388,
+          "end_line": 390,
+          "quote": "        temp = self.teacher_temp_schedule[epoch]\n        teacher_out = F.softmax((teacher_output - self.center) / temp, dim=-1)\n        teacher_out = teacher_out.detach().chunk(2)"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "dino_c3",
+      "text": "The DINO teacher parameters are updated as an exponential moving average of the student parameters rather than by backpropagation.",
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "train_one_epoch",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "main_dino.py",
+          "start_line": 346,
+          "end_line": 350,
+          "quote": "        # EMA update for the teacher\n        with torch.no_grad():\n            m = momentum_schedule[it]  # momentum parameter\n            for param_q, param_k in zip(student.module.parameters(), teacher_without_ddp.parameters()):\n                param_k.data.mul_(m).add_((1 - m) * param_q.detach().data)"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "dino_c4",
+      "text": "DINO updates its teacher-output center with an exponential moving average of the distributed batch mean.",
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "update_center",
+          "kind": "method",
+          "parent_name": "DINOLoss"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "main_dino.py",
+          "start_line": 411,
+          "end_line": 416,
+          "quote": "        batch_center = torch.sum(teacher_output, dim=0, keepdim=True)\n        dist.all_reduce(batch_center)\n        batch_center = batch_center / (len(teacher_output) * dist.get_world_size())\n\n        # ema update\n        self.center = self.center * self.center_momentum + batch_center * (1 - self.center_momentum)"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "dino_c5",
+      "text": "DINO multi-crop augmentation produces two global views at resolution 224 and a configurable number of local views at resolution 96.",
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "__init__",
+          "kind": "method",
+          "parent_name": "DataAugmentationDINO"
+        },
+        {
+          "file_path": "main_dino.py",
+          "name": "__call__",
+          "kind": "method",
+          "parent_name": "DataAugmentationDINO"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "main_dino.py",
+          "start_line": 436,
+          "end_line": 436,
+          "quote": "            transforms.RandomResizedCrop(224, scale=global_crops_scale, interpolation=Image.BICUBIC),"
+        },
+        {
+          "file_path": "main_dino.py",
+          "start_line": 452,
+          "end_line": 452,
+          "quote": "            transforms.RandomResizedCrop(96, scale=local_crops_scale, interpolation=Image.BICUBIC),"
+        },
+        {
+          "file_path": "main_dino.py",
+          "start_line": 460,
+          "end_line": 463,
+          "quote": "        crops.append(self.global_transfo1(image))\n        crops.append(self.global_transfo2(image))\n        for _ in range(self.local_crops_number):\n            crops.append(self.local_transfo(image))"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    }
+  ]
+}

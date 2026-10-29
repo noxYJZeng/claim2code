@@ -2,36 +2,74 @@
   "pair_id": "reflexion",
   "paper": {
     "title": "Reflexion: Language Agents with Verbal Reinforcement Learning",
-    "authors": ["Shinn", "Cassano", "Berman", "Gopinath", "Narasimhan", "Yao"],
+    "authors": [
+      "Shinn",
+      "Cassano",
+      "Berman",
+      "Gopinath",
+      "Narasimhan",
+      "Yao"
+    ],
     "year": 2023,
     "venue": "NeurIPS",
     "arxiv_id": "2303.11366",
-    "sha256": "Shinn2023-placeholder"
+    "pdf_verified": false
   },
   "repo": {
     "url": "https://github.com/noahshinn/reflexion",
-    "commit": "main",
-    "description": "Reflexion agents for AlfWorld, HotPotQA and programming."
+    "commit": "218cf0ef1df84b05ce379dd4a8e47f17766733a0",
+    "description": "Reflexion agents for AlfWorld, HotPotQA and programming.",
+    "framework": "agent"
   },
   "claims": [
     {
       "claim_id": "refl_c1",
       "text": "In AlfWorld experiments, the agent's memory is truncated to the last 3 self-reflections (experiences).",
-      "evidence_span": {"section": "4.1", "page": 5, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "4.1",
+        "page": 5,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "alfworld_runs/alfworld_trial.py", "name": "alfworld_run", "kind": "function"},
-        {"file_path": "alfworld_runs/generate_reflections.py", "name": "update_memory", "kind": "function"}
+        {
+          "file_path": "alfworld_runs/alfworld_trial.py",
+          "name": "alfworld_run",
+          "kind": "function"
+        },
+        {
+          "file_path": "alfworld_runs/generate_reflections.py",
+          "name": "update_memory",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "refl_c2",
       "text": "For AlfWorld, the heuristic for self-evaluation triggers if the agent executes the same action and receives the same response for more than 3 cycles, or if the number of actions taken exceeds 30.",
-      "evidence_span": {"section": "4.1", "page": 5, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "4.1",
+        "page": 5,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "alfworld_runs/env_history.py", "name": "add", "kind": "method"},
-        {"file_path": "alfworld_runs/env_history.py", "name": "check_is_exhausted", "kind": "method"},
-        {"file_path": "alfworld_runs/alfworld_trial.py", "name": "alfworld_run", "kind": "function"}
+        {
+          "file_path": "alfworld_runs/env_history.py",
+          "name": "add",
+          "kind": "method"
+        },
+        {
+          "file_path": "alfworld_runs/env_history.py",
+          "name": "check_is_exhausted",
+          "kind": "method"
+        },
+        {
+          "file_path": "alfworld_runs/alfworld_trial.py",
+          "name": "alfworld_run",
+          "kind": "function"
+        }
       ],
       "expected_verification": "PARTIALLY_VERIFIED",
       "notes": "Code marks exhaustion on the first repeated action and caps steps at 49, not 3 cycles / 30 actions."
@@ -39,10 +77,23 @@
     {
       "claim_id": "refl_c3",
       "text": "For programming tasks, the Reflexion agent samples a maximum of 6 unit tests to produce a test suite.",
-      "evidence_span": {"section": "4.3", "page": 7, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "4.3",
+        "page": 7,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "programming_runs/reflexion.py", "name": "run_reflexion", "kind": "function"},
-        {"file_path": "programming_runs/generators/generator_utils.py", "name": "generic_generate_internal_tests", "kind": "function"}
+        {
+          "file_path": "programming_runs/reflexion.py",
+          "name": "run_reflexion",
+          "kind": "function"
+        },
+        {
+          "file_path": "programming_runs/generators/generator_utils.py",
+          "name": "generic_generate_internal_tests",
+          "kind": "function"
+        }
       ],
       "expected_verification": "PARTIALLY_VERIFIED",
       "notes": "run_reflexion passes max_num_tests=1; the default elsewhere is 5."
@@ -50,29 +101,64 @@
     {
       "claim_id": "refl_c4",
       "text": "Reflexion filters generated tests for syntactically valid test statements by attempting to construct a valid abstract syntax tree.",
-      "evidence_span": {"section": "4.3", "page": 7, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "4.3",
+        "page": 7,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "programming_runs/generators/generator_utils.py", "name": "generic_generate_internal_tests", "kind": "function"},
-        {"file_path": "programming_runs/generators/py_generate.py", "name": "py_is_syntax_valid", "kind": "function"}
+        {
+          "file_path": "programming_runs/generators/generator_utils.py",
+          "name": "generic_generate_internal_tests",
+          "kind": "function"
+        },
+        {
+          "file_path": "programming_runs/generators/py_generate.py",
+          "name": "py_is_syntax_valid",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "refl_c5",
       "text": "For programming tasks, the Reflexion agent uses a max memory limit of 1 experience.",
-      "evidence_span": {"section": "4.3", "page": 7, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "4.3",
+        "page": 7,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "programming_runs/reflexion.py", "name": "run_reflexion", "kind": "function"}
+        {
+          "file_path": "programming_runs/reflexion.py",
+          "name": "run_reflexion",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "refl_c6",
       "text": "In HotPotQA experiments, the memory size is set to 3 experiences.",
-      "evidence_span": {"section": "4.2", "page": 6, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "4.2",
+        "page": 6,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "hotpotqa_runs/agents.py", "name": "reflect", "kind": "method"},
-        {"file_path": "hotpotqa_runs/agents.py", "name": "format_reflections", "kind": "function"}
+        {
+          "file_path": "hotpotqa_runs/agents.py",
+          "name": "reflect",
+          "kind": "method"
+        },
+        {
+          "file_path": "hotpotqa_runs/agents.py",
+          "name": "format_reflections",
+          "kind": "function"
+        }
       ],
       "expected_verification": "PARTIALLY_VERIFIED",
       "notes": "reflections accumulate without any limit of 3."
@@ -80,21 +166,51 @@
     {
       "claim_id": "refl_c7",
       "text": "The self-reflection model generates verbal feedback that is appended to the agent's memory for the next trial.",
-      "evidence_span": {"section": "3", "page": 3, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "3",
+        "page": 3,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "hotpotqa_runs/agents.py", "name": "reflect", "kind": "method"},
-        {"file_path": "alfworld_runs/generate_reflections.py", "name": "update_memory", "kind": "function"},
-        {"file_path": "programming_runs/generators/generator_utils.py", "name": "generic_generate_self_reflection", "kind": "function"}
+        {
+          "file_path": "hotpotqa_runs/agents.py",
+          "name": "reflect",
+          "kind": "method"
+        },
+        {
+          "file_path": "alfworld_runs/generate_reflections.py",
+          "name": "update_memory",
+          "kind": "function"
+        },
+        {
+          "file_path": "programming_runs/generators/generator_utils.py",
+          "name": "generic_generate_self_reflection",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     },
     {
       "claim_id": "refl_c8",
       "text": "HotPotQA uses an exact-match evaluator on normalized answers to judge success.",
-      "evidence_span": {"section": "4.2", "page": 6, "char_start": 0, "char_end": 100},
+      "evidence_span": {
+        "section": "4.2",
+        "page": 6,
+        "char_start": 0,
+        "char_end": 100
+      },
       "relevant_symbols": [
-        {"file_path": "hotpotqa_runs/agents.py", "name": "EM", "kind": "function"},
-        {"file_path": "hotpotqa_runs/agents.py", "name": "normalize_answer", "kind": "function"}
+        {
+          "file_path": "hotpotqa_runs/agents.py",
+          "name": "EM",
+          "kind": "function"
+        },
+        {
+          "file_path": "hotpotqa_runs/agents.py",
+          "name": "normalize_answer",
+          "kind": "function"
+        }
       ],
       "expected_verification": "VERIFIED"
     }

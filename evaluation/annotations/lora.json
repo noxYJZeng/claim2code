@@ -2,16 +2,40 @@
   "pair_id": "lora",
   "paper": {
     "title": "LoRA: Low-Rank Adaptation of Large Language Models",
-    "authors": ["Hu", "Shen", "Wallis", "Allen-Zhu", "Li", "Wang", "Chen"],
+    "authors": [
+      "Hu",
+      "Shen",
+      "Wallis",
+      "Allen-Zhu",
+      "Li",
+      "Wang",
+      "Chen"
+    ],
     "year": 2021,
     "venue": "ICLR",
     "arxiv_id": "2106.09685",
-    "sha256": "Hu2021-placeholder"
+    "pdf_url": "https://arxiv.org/pdf/2106.09685",
+    "pdf_verified": false
   },
   "repo": {
     "url": "https://github.com/microsoft/LoRA",
-    "commit": "main",
-    "description": "Microsoft LoRA — low-rank adaptation of large language models."
+    "commit": "c4593f060e6a368d7bb5af5273b8e42810cdef90",
+    "description": "Microsoft LoRA — low-rank adaptation of large language models.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "loralib/layers.py",
+        "start_line": 5,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "review_scope": "Repository revision, PyTorch import, and all annotated symbol locations checked against pinned source; existing claim text and labels preserved.",
+    "paper_evidence_verified": false,
+    "paper_evidence_note": "Original PDF bytes have not been verified for this metadata review. Claim text is curated; existing section/page/character spans must not be treated as verified PDF quotations.",
+    "legacy_claims_sha256": "e989e44f02d4ae55f519711988a193749874d223cbaf7f73fdcfc85d9ad8aead"
   },
   "claims": [
     {

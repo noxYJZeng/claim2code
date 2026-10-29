@@ -121,8 +121,8 @@ def capture(
     if corpus is not None:
         meta["corpus_sha256"] = digest(corpus)
     if models:
+        import claim2code_api.llm.providers as providers
         from claim2code_api.app.config import get_settings
-        from claim2code_api.llm import providers
 
         settings = get_settings()
         provider = providers.active(settings)

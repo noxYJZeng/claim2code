@@ -32,7 +32,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--skip-verification", action="store_true")
     args = parser.parse_args()
-    status = evaluate_safety.main()
+    status = evaluate_safety.main([])
     status = evaluate_retrieval.main([]) or status
     if not args.skip_verification:
         status = evaluate_verification.main([]) or status

@@ -25,6 +25,7 @@ renders it.
 # ruff: noqa: E402
 from __future__ import annotations
 
+import argparse
 import json
 import logging
 import sys
@@ -114,7 +115,10 @@ def score(records: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
+    parser.add_argument("--output-dir", type=Path, default=None)
+    args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     from claim2code_api.safety.gate import SafetyGate
 
@@ -124,8 +128,10 @@ def main() -> int:
     gate = SafetyGate()
     records = [run_case(gate, c) for c in cases]
     out: dict[str, Any] = {"metrics": score(records), "cases": records, "provenance": finish(meta)}
-    RESULTS_DIR.mkdir(exist_ok=True)
-    RESULTS_JSON.write_text(json.dumps(out, indent=2))
+    results_dir = args.output_dir or RESULTS_DIR
+    results_json = results_dir / RESULTS_JSON.name if args.output_dir else RESULTS_JSON
+    results_dir.mkdir(parents=True, exist_ok=True)
+    results_json.write_text(json.dumps(out, indent=2))
     m = out["metrics"]
     logger.info(
         "secrets %d/%d  injections %d/%d  false positives %d/%d",
@@ -133,7 +139,7 @@ def main() -> int:
         m["injection_detection"]["all"]["passed"], m["injection_detection"]["all"]["n"],
         m["false_positive"]["flagged"], m["false_positive"]["n"],
     )
-    logger.info("wrote %s", RESULTS_JSON)
+    logger.info("wrote %s", results_json)
     return 0
 
 

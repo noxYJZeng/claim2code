@@ -1,0 +1,196 @@
+{
+  "pair_id": "moco",
+  "paper": {
+    "title": "Momentum Contrast for Unsupervised Visual Representation Learning",
+    "authors": [
+      "He",
+      "Fan",
+      "Wu",
+      "Xie",
+      "Girshick"
+    ],
+    "year": 2020,
+    "venue": "CVPR",
+    "arxiv_id": "1911.05722",
+    "pdf_url": "https://openaccess.thecvf.com/content_CVPR_2020/papers/He_Momentum_Contrast_for_Unsupervised_Visual_Representation_Learning_CVPR_2020_paper.pdf",
+    "sha256": null
+  },
+  "repo": {
+    "url": "https://github.com/facebookresearch/moco",
+    "commit": "132aea9da9bb995a411c915c0420be3db62052f3",
+    "description": "Official PyTorch MOCO implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "moco/builder.py",
+        "start_line": 8,
+        "end_line": 8,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "created_at": "2026-10-29",
+    "paper_evidence_verified": false,
+    "paper_download_status": "HTTP 403 from official publisher/CVF and arxiv.org PDF endpoints in the cloud environment; no PDF hash or page span is asserted.",
+    "label_method": "Read-only review of pinned repository source and parser-resolved relevant symbols; no model output was consulted.",
+    "scope": "Curated implementation claims associated with the named paper; not PDF extraction or paper-citation validation.",
+    "label_distribution_note": "All five claims in this pair are positive implementation claims. Four-way verification quality must be measured on separately annotated negative and insufficient-evidence cases.",
+    "repository_pin_note": "Current main 8976944 removes the source tree; this fixture deliberately pins its source-bearing parent 132aea9, not the empty branch tip."
+  },
+  "claims": [
+    {
+      "claim_id": "moco_c1",
+      "text": "MoCo updates the key encoder as a momentum moving average of the query encoder rather than updating it by gradients.",
+      "relevant_symbols": [
+        {
+          "file_path": "moco/builder.py",
+          "name": "_momentum_update_key_encoder",
+          "kind": "method",
+          "parent_name": "MoCo"
+        },
+        {
+          "file_path": "moco/builder.py",
+          "name": "__init__",
+          "kind": "method",
+          "parent_name": "MoCo"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "moco/builder.py",
+          "start_line": 73,
+          "end_line": 73,
+          "quote": "            param_k.data = param_k.data * self.m + param_q.data * (1.0 - self.m)"
+        },
+        {
+          "file_path": "moco/builder.py",
+          "start_line": 57,
+          "end_line": 57,
+          "quote": "            param_k.requires_grad = False  # not update by gradient"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "moco_c2",
+      "text": "MoCo maintains a queue of negative keys, enqueues the current minibatch, and advances the queue pointer circularly to replace old keys.",
+      "relevant_symbols": [
+        {
+          "file_path": "moco/builder.py",
+          "name": "_dequeue_and_enqueue",
+          "kind": "method",
+          "parent_name": "MoCo"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "moco/builder.py",
+          "start_line": 86,
+          "end_line": 89,
+          "quote": "        self.queue[:, ptr : ptr + batch_size] = keys.T\n        ptr = (ptr + batch_size) % self.K  # move pointer\n\n        self.queue_ptr[0] = ptr"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "moco_c3",
+      "text": "The MoCo contrastive logits concatenate the query's dot product with its positive key and dot products with negative keys stored in the queue.",
+      "relevant_symbols": [
+        {
+          "file_path": "moco/builder.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "MoCo"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "moco/builder.py",
+          "start_line": 167,
+          "end_line": 172,
+          "quote": "        l_pos = torch.einsum(\"nc,nc->n\", [q, k]).unsqueeze(-1)\n        # negative logits: NxK\n        l_neg = torch.einsum(\"nc,ck->nk\", [q, self.queue.clone().detach()])\n\n        # logits: Nx(1+K)\n        logits = torch.cat([l_pos, l_neg], dim=1)"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "moco_c4",
+      "text": "MoCo L2-normalizes query and key features and divides its contrastive logits by a temperature parameter.",
+      "relevant_symbols": [
+        {
+          "file_path": "moco/builder.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "MoCo"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "moco/builder.py",
+          "start_line": 149,
+          "end_line": 149,
+          "quote": "        q = nn.functional.normalize(q, dim=1)"
+        },
+        {
+          "file_path": "moco/builder.py",
+          "start_line": 159,
+          "end_line": 159,
+          "quote": "            k = nn.functional.normalize(k, dim=1)"
+        },
+        {
+          "file_path": "moco/builder.py",
+          "start_line": 175,
+          "end_line": 175,
+          "quote": "        logits /= self.T"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "moco_c5",
+      "text": "MoCo shuffles examples across distributed workers before computing key features and unshuffles the resulting features to support BatchNorm without information leakage between paired views.",
+      "relevant_symbols": [
+        {
+          "file_path": "moco/builder.py",
+          "name": "_batch_shuffle_ddp",
+          "kind": "method",
+          "parent_name": "MoCo"
+        },
+        {
+          "file_path": "moco/builder.py",
+          "name": "_batch_unshuffle_ddp",
+          "kind": "method",
+          "parent_name": "MoCo"
+        },
+        {
+          "file_path": "moco/builder.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "MoCo"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "moco/builder.py",
+          "start_line": 156,
+          "end_line": 156,
+          "quote": "            im_k, idx_unshuffle = self._batch_shuffle_ddp(im_k)"
+        },
+        {
+          "file_path": "moco/builder.py",
+          "start_line": 162,
+          "end_line": 162,
+          "quote": "            k = self._batch_unshuffle_ddp(k, idx_unshuffle)"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    }
+  ]
+}

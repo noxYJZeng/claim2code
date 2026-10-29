@@ -2,16 +2,39 @@
   "pair_id": "mae",
   "paper": {
     "title": "Masked Autoencoders Are Scalable Vision Learners",
-    "authors": ["He", "Chen", "Xie", "Li", "Dollár", "Girshick"],
+    "authors": [
+      "He",
+      "Chen",
+      "Xie",
+      "Li",
+      "Dollár",
+      "Girshick"
+    ],
     "year": 2022,
     "venue": "CVPR",
     "arxiv_id": "2111.06377",
-    "sha256": "He2022-placeholder"
+    "pdf_url": "https://arxiv.org/pdf/2111.06377",
+    "pdf_verified": false
   },
   "repo": {
     "url": "https://github.com/facebookresearch/mae",
-    "commit": "main",
-    "description": "Official PyTorch MAE pre-training and fine-tuning."
+    "commit": "efb2a8062c206524e35e47d04501ed4f544c0ae8",
+    "description": "Official PyTorch MAE pre-training and fine-tuning.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "models_mae.py",
+        "start_line": 14,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "review_scope": "Repository revision, PyTorch import, and all annotated symbol locations checked against pinned source; existing claim text and labels preserved.",
+    "paper_evidence_verified": false,
+    "paper_evidence_note": "Original PDF bytes have not been verified for this metadata review. Claim text is curated; existing section/page/character spans must not be treated as verified PDF quotations.",
+    "legacy_claims_sha256": "93c1777721eb9b1910be83934c28421f6449d8571197b05f3df3496616daa676"
   },
   "claims": [
     {

@@ -60,6 +60,7 @@ from claim2code_api.papers.exceptions import ClaimExtractionError
 from claim2code_api.papers.schemas import Claim, ClaimList, Paper, PaperEvidence
 from claim2code_api.repos.schemas import RetrieveMatch
 from claim2code_api.safety import SafetyGate, SafetyViolation
+from claim2code_api.verification.context import MAX_VERIFY_PAYLOAD_CHAR_CAP
 from claim2code_api.verification.exceptions import VerificationLLMError
 from claim2code_api.verification.schemas import (
     Discrepancy,
@@ -108,7 +109,7 @@ specifics. If a section contains no testable claim, omit it.
 _VERIFY_SYSTEM_PROMPT = """\
 You are a meticulous paper-to-code verifier. Given (1) a technical
 claim extracted from a paper, (2) a verbatim snippet of the paper
-that grounds it, and (3) up to 8 candidate code symbols retrieved
+that grounds it, and (3) candidate code symbols retrieved
 from the reference implementation, judge whether the code actually
 implements the claim.
 
@@ -117,23 +118,26 @@ RULES (non-negotiable):
   1. **No model knowledge.** Every piece of paper evidence you cite
      must be a verbatim substring of the paper_evidence.quote
      provided. Every piece of code evidence you cite must reference
-     a specific candidate from the list provided (its symbol_id,
-     file_path, line numbers, signature, docstring, source,
-     class_context, or callee_context). You MAY NOT
+     a specific located source block from the list provided (its
+     symbol_id, file_path, line numbers, and source). Signatures and
+     docstrings guide interpretation; they cannot replace implementation
+     evidence. You MAY NOT
      use knowledge of the paper, the library, or the algorithm
      beyond what is explicitly given in the inputs.
 
   2. **One of four verdicts:**
        VERIFIED, PARTIALLY_VERIFIED, CONTRADICTED, UNVERIFIED.
 
-       - VERIFIED only when >=1 candidate's signature/docstring/source
-         directly implements the claim and no HIGH-severity
-         discrepancies exist.
+       - VERIFIED only when the provided implementation supports the
+         claim's substantive, code-testable statements and no concrete
+         mismatch exists. A matching function name alone is insufficient.
        - PARTIALLY_VERIFIED when >=1 candidate is relevant but
          discrepancies (LOW or MEDIUM severity) exist.
        - CONTRADICTED when a candidate clearly contradicts the
          claim or a HIGH-severity discrepancy exists.
-       - UNVERIFIED when no candidate is relevant.
+       - UNVERIFIED when the implementation evidence is insufficient,
+         including when relevant names are present but the required body,
+         wiring, or configuration cannot be established.
 
   3. **Extract structured hyperparameters** as part of your
      response: for any hyperparameter mentioned in the claim or
@@ -144,9 +148,10 @@ RULES (non-negotiable):
 
   4. **Cite deterministically.** Each ``code_evidence`` entry must
      include ``symbol_id`` (UUID string), ``quote`` (verbatim from
-     candidate.signature, candidate.docstring, candidate.source,
-     candidate.class_context, or candidate.callee_context), and
-     ``file_path`` + line numbers that match the candidate.
+     located source), and ``file_path`` + line numbers from the source
+     block containing it. Context blocks have their own identities and
+     locations. Quote implementation statements, not just a ``def`` line
+     or docstring. Combine citations when the claim spans several helpers.
 
   5. The deterministic checker has already produced the following
      discrepancies (if any). You MAY add more of any severity, but
@@ -172,12 +177,13 @@ RULES (non-negotiable):
      present in the code", "the candidates do not reference the
      dataset", or "the theorem is not implemented" — a detail the
      candidates do not show is silence, even when you can quote
-     neighbouring code. If the code implements the claim's mechanism
-     and the rest is theory, an empirical result, or a detail the
-     candidates are silent on, return VERIFIED with an EMPTY
-     discrepancies list and name the unchecked part in the
-     explanation; if the claim is purely a theorem, a dataset
-     statistic, or a measured result, return UNVERIFIED.
+     neighbouring code. Check the claim's code-testable clauses against
+     the implementation before choosing a status. If an essential clause
+     remains unproven, return UNVERIFIED and identify the missing evidence.
+     Treat algebraically equivalent operations or different local variable
+     names as equivalent only when that equivalence follows from supplied
+     source. If the claim is purely a theorem, a dataset statistic, or a
+     measured result, return UNVERIFIED.
      The converse also holds: when a relevant candidate for the
      same setting hard-codes a different value for a quantity the
      claim states (a loop bound ``while step < 50`` where the claim
@@ -202,8 +208,20 @@ RULES (non-negotiable):
      CONFIGURATION_MISMATCH; METRIC_MISMATCH only for evaluation
      metrics.
 
+  9. **Use the actual configuration scope.** A supplied launch command
+     overrides parser defaults for that run. An unset required value
+     (such as ``???``) is not a conflicting numeric default. Distinguish
+     memory capacity from iteration count, and model architecture from a
+     training recipe. Training-recipe/default differences are MEDIUM
+     unless supplied evidence shows they change the central algorithm.
+
+ 10. **State the evidence chain.** In the explanation, identify which
+     operations support each code-testable clause, then list any concrete
+     mismatches or remaining gaps. Review all supplied located context
+     blocks before calling a definition or dispatch mapping missing.
+
 Output schema is enforced via Structured Outputs
-(\`response_format\`.json_schema with strict=True). Any deviation
+(``response_format``.json_schema with strict=True). Any deviation
 fails the call. If insufficient evidence is available, return
 UNVERIFIED with an empty code_evidence list — do NOT guess.
 """
@@ -914,6 +932,15 @@ def _build_verify_payload(
                 if len(body) > _VERIFY_SOURCE_CHAR_CAP:
                     body = body[:_VERIFY_SOURCE_CHAR_CAP] + "\n[... truncated ...]"
                 parts.append(f"source:\n```\n{body}\n```\n")
+            if c.context_spans:
+                for span in c.context_spans:
+                    parts.append(
+                        "located_context:\n"
+                        f"symbol_id: {span.symbol_id}\n"
+                        f"file: {span.file_path}:{span.start_line}-{span.end_line}\n"
+                        f"name: {span.name}\n"
+                        f"source:\n```\n{span.source}\n```\n"
+                    )
             if c.class_context:
                 ctx = c.class_context
                 if len(ctx) > _VERIFY_SOURCE_CHAR_CAP:
@@ -928,7 +955,15 @@ def _build_verify_payload(
     else:
         parts.append("# Candidates\n\n(none — top-K retrieval returned empty)\n")
 
-    return "\n".join(parts)
+    payload = "\n".join(parts)
+    if len(payload) > MAX_VERIFY_PAYLOAD_CHAR_CAP:
+        # Fail explicitly instead of silently trimming claim semantics or
+        # showing less source than the downstream validator can inspect.
+        raise VerificationLLMError(
+            "Verification input exceeds the bounded prompt budget; "
+            "shorten the claim/paper excerpt or prepare fewer source candidates."
+        )
+    return payload
 
 
 def _build_compare_payload(*, claim: Claim, paper: ScholarPaper) -> str:

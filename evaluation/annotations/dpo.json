@@ -2,16 +2,39 @@
   "pair_id": "dpo",
   "paper": {
     "title": "Direct Preference Optimization: Your Language Model is Secretly a Reward Model",
-    "authors": ["Rafailov", "Sharma", "Mitchell", "Ermon", "Manning", "Finn"],
+    "authors": [
+      "Rafailov",
+      "Sharma",
+      "Mitchell",
+      "Ermon",
+      "Manning",
+      "Finn"
+    ],
     "year": 2023,
     "venue": "NeurIPS",
     "arxiv_id": "2305.18290",
-    "sha256": "Rafailov2023-placeholder"
+    "pdf_url": "https://arxiv.org/pdf/2305.18290",
+    "pdf_verified": false
   },
   "repo": {
     "url": "https://github.com/eric-mitchell/direct-preference-optimization",
-    "commit": "main",
-    "description": "Reference DPO implementation (SFT + DPO trainers, Hydra configs)."
+    "commit": "f8b8c0f49dc92a430bae41585f9d467d3618fe2f",
+    "description": "Reference DPO implementation (SFT + DPO trainers, Hydra configs).",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "trainers.py",
+        "start_line": 1,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "review_scope": "Repository revision, PyTorch import, and all annotated symbol locations checked against pinned source; existing claim text and labels preserved.",
+    "paper_evidence_verified": false,
+    "paper_evidence_note": "Original PDF bytes have not been verified for this metadata review. Claim text is curated; existing section/page/character spans must not be treated as verified PDF quotations.",
+    "legacy_claims_sha256": "0469a4980529682513da209f7ef6cbf927c9f7d952672a3798c040d4d25f5f1f"
   },
   "claims": [
     {

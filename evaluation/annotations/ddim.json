@@ -2,16 +2,36 @@
   "pair_id": "ddim",
   "paper": {
     "title": "Denoising Diffusion Implicit Models",
-    "authors": ["Song", "Meng", "Ermon"],
+    "authors": [
+      "Song",
+      "Meng",
+      "Ermon"
+    ],
     "year": 2021,
     "venue": "ICLR",
     "arxiv_id": "2010.02502",
-    "sha256": "Song2021-placeholder"
+    "pdf_url": "https://arxiv.org/pdf/2010.02502",
+    "pdf_verified": false
   },
   "repo": {
     "url": "https://github.com/ermongroup/ddim",
-    "commit": "main",
-    "description": "Official DDIM training and sampling code."
+    "commit": "e8df66cf02e457719930748b5c26e37e3126dfdd",
+    "description": "Official DDIM training and sampling code.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "models/diffusion.py",
+        "start_line": 2,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "review_scope": "Repository revision, PyTorch import, and all annotated symbol locations checked against pinned source; existing claim text and labels preserved.",
+    "paper_evidence_verified": false,
+    "paper_evidence_note": "Original PDF bytes have not been verified for this metadata review. Claim text is curated; existing section/page/character spans must not be treated as verified PDF quotations.",
+    "legacy_claims_sha256": "ce8f1dc221325c91dac988f42ec57da518146294d1126cafeb11b59c50e60cd6"
   },
   "claims": [
     {

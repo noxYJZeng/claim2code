@@ -20,6 +20,7 @@ evaluation/
 ├── evaluate_safety.py        # secret protection, injection detection, false positives
 ├── report.py                 # results/*.json → results.json + report.md
 ├── evaluate_all.py           # runs every evaluator, then report.py
+├── preflight.py              # checks a run can start (used by scripts/eval-local.sh)
 ├── results/                  # per-evaluator output (retrieval/verification/safety.json)
 ├── results.json              # combined, with commit + model names
 └── report.md                 # the rendered report
@@ -28,6 +29,24 @@ evaluation/
 Annotation pairs are matched to indexed repositories by `repo.url`
 (`CLAIM2CODE_EVAL_REPO_IDS='{"pair_id": "<uuid>"}'` overrides). A pair
 whose repository is not indexed is skipped and listed in the report.
+
+### One-command local run
+
+```bash
+scripts/eval-local.sh --check    # preflight only, about a minute
+scripts/eval-local.sh            # preflight, every evaluator, report (≈2.5 h with a local 27B model)
+scripts/eval-local.sh --resume   # continue an interrupted verification run
+```
+
+The script uses the database and models in `.env` (for example LM Studio
+on `localhost:1234`). Before spending hours it checks that the database
+answers, every annotated pair is indexed, the chat and embedding models
+are actually served (LM Studio answers an unknown model id with whatever
+is loaded), and the embedding dimension matches `OPENAI_EMBED_DIM` and the
+stored embeddings. On macOS it keeps the machine awake with `caffeinate`.
+The full log goes to `evaluation/logs/` (gitignored); results and
+`report.md` are written as usual. Commit first: a run on uncommitted code
+is recorded as dirty.
 
 ## Measurement scope and reproducibility
 

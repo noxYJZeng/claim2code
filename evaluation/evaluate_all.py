@@ -4,7 +4,8 @@
 Safety needs nothing external; retrieval needs the indexed repos and the
 embedding model; verification additionally calls the chat model once per
 annotated claim (the slow part). ``--skip-verification`` reuses the last
-``results/verification.json``.
+``results/verification.json``; ``--resume`` continues an interrupted
+verification run from its saved claims.
 """
 # Imports below bootstrap the repository-root CLI entry point.
 # ruff: noqa: E402
@@ -31,11 +32,12 @@ from evaluation import (
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     parser.add_argument("--skip-verification", action="store_true")
+    parser.add_argument("--resume", action="store_true", help="continue the last verification run")
     args = parser.parse_args()
     status = evaluate_safety.main()
     status = evaluate_retrieval.main([]) or status
     if not args.skip_verification:
-        status = evaluate_verification.main([]) or status
+        status = evaluate_verification.main(["--resume"] if args.resume else []) or status
     report.main([])
     return status
 

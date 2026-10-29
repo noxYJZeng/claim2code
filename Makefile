@@ -97,6 +97,10 @@ eval-report: ## Render evaluation/results.json + report.md from the last runs.
 eval-all: ## Run every evaluator + render the report.
 	@python evaluation/evaluate_all.py
 
+.PHONY: eval-local
+eval-local: ## Preflight (DB, indexed pairs, served models), then every evaluator + report; ARGS=--resume | --check.
+	@bash scripts/eval-local.sh $(ARGS)
+
 # ---------------------------- Logs ----------------------------
 
 .PHONY: logs

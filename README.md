@@ -48,7 +48,7 @@ Development benchmark from [`evaluation/report.md`](evaluation/report.md), measu
 `nomic-embed-text-v1.5` embeddings on 8 annotated pairs (Attention Is All You
 Need, BERT, DDIM, DDPM, DPO, LoRA, MAE, Reflexion; 79 claims), with the runtime
 citation check on. Each evaluator records its provenance in its results file;
-see [evaluation instructions](evaluation/README.md) before running `make eval-all`.
+see [evaluation instructions](evaluation/README.md) before running `make eval-local`.
 
 | Area | Metric | Claim2Code | Baseline |
 |---|---|---|---|
@@ -423,6 +423,7 @@ first (pairs without an indexed repo are skipped).
 | `evaluation/evaluate_safety.py` | `make eval-safety` | nothing | secret protection, injection detection, false positives on `datasets/safety_corpus.json` |
 | `evaluation/report.py` | `make eval-report` | the results above | `results.json` + `report.md` |
 | `evaluation/evaluate_all.py` | `make eval-all` | all of the above | runs every evaluator, then the report |
+| `scripts/eval-local.sh` | `make eval-local` | all of the above | preflight (DB, indexed pairs, served models, embedding dims), then `eval-all` with a log and a summary; `--resume`, `--check` |
 
 ```bash
 make eval-safety                       # seconds, no services needed

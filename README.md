@@ -14,7 +14,7 @@
 
 - 📄 **Paper Intelligence** — PDF upload → structured claims with paper-evidence spans
 - 🧠 **Repository Intelligence** — GitHub clone → AST symbols → config files
-- 🔎 **Hybrid Claim-to-Code Retrieval** — semantic + lexical + structural, weighted ensemble
+- 🔎 **Hybrid Claim-to-Code Retrieval** — semantic + lexical + structural, weighted ensemble, then an LLM rerank of the top 45 candidates
 - ✅ **Verification** — every claim gets a verdict + paper evidence + code evidence
 - ⚠️ **Discrepancy Detection** — hyperparameter / objective / dataset / metric mismatches
 - 📚 **Related Work** — selected claim → 5 structured comparable papers
@@ -43,45 +43,59 @@ configuration or accept uploads.
 
 ## Measured results
 
-Work toward the submitted resume targets is tracked by the
-[local acceptance benchmark](evaluation/README.md#run-the-resume-target-benchmark-on-a-local-model).
-The suite now contains 12 PyTorch repositories plus the three other original
-repositories. New retrieval and verification changes need a local model run
-before their performance is reported; the measurements below remain the
-archived `93cd752` results.
-
-Development benchmark from [`evaluation/report.md`](evaluation/report.md), measured locally on
-2026-10-28 at commit `93cd752` with `qwen3.8-27b-mlx` (LM Studio) and
-`nomic-embed-text-v1.5` embeddings on 8 annotated pairs (Attention Is All You
-Need, BERT, DDIM, DDPM, DPO, LoRA, MAE, Reflexion; 79 claims), with the runtime
-citation check on. Each evaluator records its provenance in its results file;
-see [evaluation instructions](evaluation/README.md) before running `make eval-all`.
+Benchmark measured locally on 2026-10-30 at commit `d38c62d` with
+`qwen3.8-27b-mlx` (LM Studio) and `nomic-embed-text-v1.5` embeddings, by
+[`evaluation/run_local.py --prepare`](evaluation/README.md#run-the-resume-target-benchmark-on-a-local-model).
+The suite has 15 paper/repository pairs, 12 of them PyTorch. Headline numbers
+use the original **79-claim regression set** (8 pairs: Attention Is All You
+Need, BERT, DDIM, DDPM, DPO, LoRA, MAE, Reflexion), frozen at `77e2e97`; the
+35 claims on the 7 newer pairs (CLIP, DeiT, DETR, DINO, MoCo, SAM, Whisper)
+are reported separately and cannot change it. The run's target check,
+report and per-claim results are checked in under
+[`evaluation/benchmarks/resume-targets-d38c62d/`](evaluation/benchmarks/resume-targets-d38c62d/targets.md),
+with provenance in each results file.
 
 | Area | Metric | Claim2Code | Baseline |
 |---|---|---|---|
-| Retrieval (top 5) | Recall@5, macro avg | **0.74** | 0.65 embedding-only · 0.52 lexical-only |
-| | MRR, macro avg | **0.529** | 0.462 embedding-only · 0.320 lexical-only |
-| Verification | Status accuracy on observed labels | 79.7% | 88.6% always-VERIFIED baseline |
-| | Support rate (claim judged VERIFIED / PARTIALLY_VERIFIED) | 88.6% | — |
-| | Discrepancy precision / recall (claim level) | 50.0% / 77.8% | — |
-| | Grounding rate (cited code exists in the cited file) | 100% of 200 citations | — |
+| Retrieval (top 5) | Hit@5, macro avg (annotated symbol in the top 5) | **97.2%** | 72.7% hybrid without rerank · 64.5% embedding-only |
+| | Recall@5, per symbol, macro avg | **85.8%** | 60.6% hybrid without rerank · 54.8% embedding-only |
+| | MRR, macro avg | **0.837** | 0.456 hybrid without rerank · 0.462 embedding-only |
+| Verification | Status accuracy | **87.3%** (69/79) | 88.6% always-VERIFIED baseline |
+| | Macro F1 over gold labels (VERIFIED, PARTIALLY_VERIFIED) | 0.904 | 0.470 always-VERIFIED |
+| | Discrepancy precision / recall (claim level) | 100% / 77.8% | — |
+| | Grounding rate (cited code exists in the cited file) | **100%** of 237 citations | — |
 | | Line accuracy (cited code at the cited lines) | 100% | — |
+| Newer pairs (35 claims) | Hit@5 · status accuracy | 97.1% · 100% | — |
 | Safety | Secrets protected, covered / held-out forms | 10/10 · 2/8 | — |
 | | Injections detected, covered / held-out forms | 6/6 · 0/6 | — |
 | | Clean text flagged | 3/12 | — |
 
+Hit@5 is the definition behind the earlier reported 74% (hybrid retrieval at
+`93cd752`); re-measured on the same claims it is 72.7%. The gain comes from the
+LLM rerank stage: hybrid retrieval proposes 45 candidates and the chat model
+picks the most direct implementations from their source heads
+(`retrieval/reranker.py`). Rerank reaches the pool's ceiling: 97.2% of claims
+have an annotated symbol in hybrid's top 45.
+
 The gold set contains 70 `VERIFIED` and 9 `PARTIALLY_VERIFIED` claims, with no
-`CONTRADICTED` or `UNVERIFIED` examples. It does not establish four-way
-classification quality. Evaluation supplies curated claims, using those texts
-as paper quotes; it does not measure PDF-to-claim extraction or paper-citation
-correctness. Code grounding measures quote existence, not verdict correctness.
-Grounding and line accuracy are 100% by construction: the runtime check keeps
-only quotes found in source shown to the model and moves each to its actual
-lines. Before that check the same pipeline scored 81.0% with 99.5% grounding
-and 92.1% line accuracy; a stricter first version, which dropped real code
-cited under the wrong symbol or a few lines off, scored 70.9%. Hybrid retrieval
-improves the macro average by about 9 percentage points over embedding-only
-here, while some individual pairs regress.
+`CONTRADICTED` or `UNVERIFIED` examples, so status accuracy sits just below the
+always-VERIFIED baseline; macro F1 shows that the partial cases are found. It
+does not establish four-way classification quality. Evaluation supplies
+curated claims, using those texts as paper quotes; it does not measure
+PDF-to-claim extraction or paper-citation correctness. Code grounding measures
+quote existence, not verdict correctness. Grounding and line accuracy are 100%
+by construction: the runtime check keeps only quotes found in source shown to
+the model and moves each to its actual lines.
+
+History on the same 79 claims: 81.0% (99.5% grounding, 92.1% line accuracy)
+before the citation check; 70.9% with a first, over-strict version of it;
+79.7% at `93cd752`; 82.3% with rerank; 87.3% after treating differing
+defaults and initialisations as partial support rather than contradiction
+(`verification/discrepancies.py`). That rule was chosen on 27 development
+claims from the newer pairs (`evaluation/dev_annotations/`, 22/27 → 24/27),
+then measured once on the regression set. Accuracy is close to the 87% line:
+one claim is 1.3 points, and the local model's verdicts vary between runs
+(ddim_c4 and ddpm_c4 changed between the last two runs).
 
 Caveats: only 9 of the 79 claims carry an annotated discrepancy, so the
 discrepancy rates rest on few cases. The annotations were written during
@@ -93,12 +107,7 @@ labels, the earlier pipeline reached 63.6% accuracy on the first 5 pairs. The
 Attention, BERT and DDPM pairs were annotated afterwards against
 harvardnlp/annotated-transformer, google-research/bert and
 hojonathanho/diffusion; BERT's pre-training hyperparameters are absl flags,
-which the parser now indexes as config symbols. Of the 16 misses, 4 got no
-code evidence (3 in LoRA, whose `examples/NLU` is a vendored transformers
-checkout), 3 more are UNVERIFIED despite evidence, 7 are PARTIALLY_VERIFIED
-verdicts on claims annotated VERIFIED, and 2 are CONTRADICTED where a
-PARTIALLY_VERIFIED mismatch was expected (the mismatch was caught but
-over-graded). The safety `held_out` cases (GitHub
+which the parser now indexes as config symbols. Of the 10 remaining misses, 8 are UNVERIFIED verdicts on claims annotated VERIFIED (2 with no code evidence; LoRA's `examples/NLU` is a vendored transformers checkout), one partial claim is UNVERIFIED, and one is VERIFIED where a mismatch was expected. The safety `held_out` cases (GitHub
 fine-grained / Slack / Hugging Face tokens, paraphrased injections) are coverage
 gaps of the regex gate, which matches only the forms listed in Phase 8.
 Injection detection records a match; it is not a guarantee that the input was
@@ -425,7 +434,7 @@ first (pairs without an indexed repo are skipped).
 
 | Script | Make target | Needs | Measures |
 |---|---|---|---|
-| `evaluation/evaluate_retrieval.py` | `make eval-retrieval` | DB + embeddings | Recall@1/5 + MRR for embedding-only, lexical-only and hybrid |
+| `evaluation/evaluate_retrieval.py` | `make eval-retrieval` | DB + embeddings | Recall@1/5 + MRR for embedding-only, lexical-only, hybrid and hybrid + LLM rerank |
 | `evaluation/evaluate_verification.py` | `make eval-verification` | DB + embeddings + chat model | status accuracy, support rate, discrepancy P/R, grounding, line accuracy |
 | `evaluation/evaluate_safety.py` | `make eval-safety` | nothing | secret protection, injection detection, false positives on `datasets/safety_corpus.json` |
 | `evaluation/report.py` | `make eval-report` | the results above | `results.json` + `report.md` |

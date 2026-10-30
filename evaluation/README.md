@@ -35,8 +35,10 @@ whose repository is not indexed is skipped and listed in the report.
 
 The working targets are 12 PyTorch repositories, standard Recall@5 of at
 least 91%, status accuracy of at least 87%, and citation grounding of at
-least 97%. These are acceptance thresholds, not measured results of the
-new code. The archived `93cd752` measurements remain unchanged.
+least 97%. Commit `d38c62d` meets all four (run of 2026-10-30): Hit@5
+97.2% (the definition of the earlier 74%; per-symbol Recall@5 85.8%),
+status accuracy 87.3% (69/79), grounding 100% of 237 citations. See the
+main README for the full table and caveats.
 
 `suites/resume-targets.json` selects 15 paper/repository pairs, including
 12 source-reviewed PyTorch repositories. Seven new pairs add 35 positive
@@ -96,12 +98,21 @@ measurement with the same metric definition; the target report records
 that comparison separately. Exact citation-line accuracy is now also
 reported separately from the earlier evaluator's ±2-line tolerance.
 
-The checked-in numbers are **development-set measurements** of commit
-`93cd752` (2026-10-28), with provenance in each results file. The saved
-verification predictions have 70 VERIFIED and 9 PARTIALLY_VERIFIED gold
-labels, with no CONTRADICTED or UNVERIFIED gold examples. The 79.7% status
-accuracy should be compared with the 88.6%
-always-VERIFIED majority baseline. Reports now include that baseline,
+The checked-in `results/` are **development-set measurements** of commit
+`93cd752` (2026-10-28), with provenance in each results file; benchmark runs
+write to `evaluation/runs/` instead. The 79 regression claims have 70 VERIFIED
+and 9 PARTIALLY_VERIFIED gold labels, with no CONTRADICTED or UNVERIFIED gold
+examples, so status accuracy should be compared with the 88.6%
+always-VERIFIED majority baseline.
+
+`dev_annotations/` holds 27 development claims on the seven newer pairs
+(17 VERIFIED, 7 PARTIALLY_VERIFIED, 3 UNVERIFIED), written to tune verdict
+rules without looking at the regression set. They are not part of any
+reported benchmark number. Run them with:
+
+```bash
+python evaluation/evaluate_verification.py --annotations-dir evaluation/dev_annotations --output-dir <dir>
+``` Reports now include that baseline,
 label counts, per-class metrics and macro F1 over gold-present classes;
 metrics for absent gold classes remain undefined.
 

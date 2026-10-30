@@ -91,6 +91,25 @@
       "relevant_symbols": [],
       "expected_verification": "UNVERIFIED",
       "notes": "No training code in the repository."
+    },
+    {
+      "claim_id": "whisper_dev4",
+      "text": "Whisper suppresses the blank and end-of-text tokens at every decoding step.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 75
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "whisper/decoding.py",
+          "name": "SuppressBlank",
+          "kind": "class"
+        }
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "SuppressBlank masks blank and EOT only at the first sampled position (tokens.shape[1] == sample_begin), not every step."
     }
   ]
 }

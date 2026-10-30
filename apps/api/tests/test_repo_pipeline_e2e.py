@@ -402,3 +402,56 @@ def test_callee_context_follows_registry_dispatch(
     assert registry.file_path == "losses.py"
     assert registry.start_line == 5
     assert "'simple': simple_loss" in registry.source
+
+
+def test_usage_context_shows_where_an_option_is_read(
+    session, tmp_path: Path,
+) -> None:
+    """A command-line option's candidate carries the lines that read it,
+    inside their enclosing function, from its file before its siblings."""
+    import uuid
+
+    from claim2code_api.repos.storage import WalkedFile
+    from claim2code_api.repos.workflow import _extract_symbols
+    from claim2code_api.verification.workflow import _usage_spans
+
+    files = {
+        "main.py": (
+            "import argparse\n"
+            "parser = argparse.ArgumentParser()\n"
+            "parser.add_argument('--batch-size', default=64, type=int)\n"
+            "parser.add_argument('--lr', default=5e-4, type=float)\n"
+            "\n"
+            "\n"
+            "def main(args):\n"
+            "    model = build()\n"
+            "    data = load()\n"
+            "    args.lr = args.lr * args.batch_size / 512.0\n"
+            "    other.lr_drop = 3\n"
+            "    return train(model, data, args)\n"
+        ),
+        "engine.py": "def step(args):\n    return args.lr\n",
+        "sub/engine.py": "def step(args):\n    return args.lr\n",
+    }
+    repo_id = uuid.uuid4()
+    for rel, text in files.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        wf = WalkedFile(absolute_path=path, relative_path=rel, size_bytes=path.stat().st_size)
+        _extract_symbols(session, repo_id, wf, {})
+    session.flush()
+
+    rows = {(s.file_path, s.name): s for s in session.query(CodeSymbol).all()}
+    lr = rows[("main.py", "--lr")]
+    spans = _usage_spans(session, lr, tmp_path)
+    assert [(s.name, s.file_path, s.start_line, s.end_line) for s in spans] == [
+        ("main", "main.py", 8, 12),
+    ]
+    assert spans[0].symbol_id == rows[("main.py", "main")].symbol_id
+    assert "args.lr * args.batch_size / 512.0" in spans[0].source
+
+    # Not read in its own file: the sibling in the same directory, not sub/.
+    files["main.py"] = files["main.py"].replace("args.lr = args.lr * ", "scale = ")
+    (tmp_path / "main.py").write_text(files["main.py"])
+    assert [(s.file_path, s.name) for s in _usage_spans(session, lr, tmp_path)] == [("engine.py", "step")]

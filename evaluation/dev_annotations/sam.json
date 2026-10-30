@@ -97,6 +97,30 @@
       "relevant_symbols": [],
       "expected_verification": "UNVERIFIED",
       "notes": "No training code or loss definition in the repository."
+    },
+    {
+      "claim_id": "sam_dev4",
+      "text": "SAM normalizes input pixels with the ImageNet mean and standard deviation before the image encoder.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 99
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "segment_anything/modeling/sam.py",
+          "name": "preprocess",
+          "kind": "function"
+        },
+        {
+          "file_path": "segment_anything/modeling/sam.py",
+          "name": "__init__",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "pixel_mean [123.675, 116.28, 103.53], pixel_std [58.395, 57.12, 57.375]; preprocess subtracts and divides."
     }
   ]
 }

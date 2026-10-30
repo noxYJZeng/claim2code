@@ -161,6 +161,64 @@
       ],
       "expected_verification": "VERIFIED",
       "notes": "weight_decay=0.04, weight_decay_end=0.4 with a cosine scheduler."
+    },
+    {
+      "claim_id": "dino_dev6",
+      "text": "DINO keeps the last layer of the projection head frozen during the first epoch of training.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 91
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "train_one_epoch",
+          "kind": "function"
+        },
+        {
+          "file_path": "utils.py",
+          "name": "cancel_gradients_last_layer",
+          "kind": "function"
+        },
+        {
+          "file_path": "main_dino.py",
+          "name": "--freeze_last_layer",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "cancel_gradients_last_layer(epoch, student, args.freeze_last_layer) with default 1."
+    },
+    {
+      "claim_id": "dino_dev7",
+      "text": "DINO clips the student's gradients to a maximum norm of 3.0.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 60
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "train_one_epoch",
+          "kind": "function"
+        },
+        {
+          "file_path": "utils.py",
+          "name": "clip_gradients",
+          "kind": "function"
+        },
+        {
+          "file_path": "main_dino.py",
+          "name": "--clip_grad",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "utils.clip_gradients(student, args.clip_grad) with default 3.0."
     }
   ]
 }

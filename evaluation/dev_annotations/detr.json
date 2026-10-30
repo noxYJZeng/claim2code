@@ -185,6 +185,54 @@
       ],
       "expected_verification": "VERIFIED",
       "notes": "Defaults dropout=0.1, clip_max_norm=0.1."
+    },
+    {
+      "claim_id": "detr_dev6",
+      "text": "DETR optimizes backbone parameters with their own, lower learning rate in a separate parameter group.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 101
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main.py",
+          "name": "main",
+          "kind": "function"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--lr_backbone",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "param_dicts: non-backbone params at args.lr, backbone params at args.lr_backbone."
+    },
+    {
+      "claim_id": "detr_dev7",
+      "text": "DETR clips the gradient norm of the model parameters at every training step.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 76
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "engine.py",
+          "name": "train_one_epoch",
+          "kind": "function"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--clip_max_norm",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "train_one_epoch calls clip_grad_norm_ when max_norm > 0; main passes args.clip_max_norm (0.1)."
     }
   ]
 }

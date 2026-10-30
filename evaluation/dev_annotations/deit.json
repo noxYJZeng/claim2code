@@ -170,6 +170,30 @@
       ],
       "expected_verification": "PARTIALLY_VERIFIED",
       "notes": "teacher-model defaults to regnety_160 and hard distillation exists, but distillation-type defaults to 'none'."
+    },
+    {
+      "claim_id": "deit_dev6",
+      "text": "DeiT uses repeated augmentation, sampling each training image several times per batch through a dedicated sampler.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 114
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main.py",
+          "name": "main",
+          "kind": "function"
+        },
+        {
+          "file_path": "samplers.py",
+          "name": "RASampler",
+          "kind": "class"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "repeated_aug defaults True and selects RASampler."
     }
   ]
 }

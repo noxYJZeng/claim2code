@@ -461,6 +461,8 @@ def _hybrid_to_retrieve_matches(
             if clone_path is not None and source
             else []
         )
+        if clone_path is not None and sym.kind == CodeSymbolKind.CONFIG_SCHEMA.value:
+            callee_spans += _usage_spans(db, sym, clone_path)
         out.append(
             RetrieveMatch(
                 symbol_id=sym.symbol_id,
@@ -672,6 +674,72 @@ def _registry_members(
         literal = text.split("=", 1)[1] if text and "=" in text else ""
         members += _IDENT_RE.findall(_STRING_RE.sub("", literal))
     return members
+
+
+# A command-line option read back as an attribute: ``--batch-size`` is
+# ``args.batch_size``, an absl ``learning_rate`` flag ``FLAGS.learning_rate``.
+_OPTION_RE = re.compile(r"-{0,2}([A-Za-z_][\w-]*)")
+_MAX_USAGES = 3
+_USAGE_RADIUS = 2
+
+
+def _usage_spans(db: Session, sym: CodeSymbol, clone_path: Path) -> list[SourceSpan]:
+    """Lines that read the option ``sym`` defines, with a little context.
+
+    A claim about how a setting is used ("the learning rate is scaled by
+    batch size / 512") is implemented where the option is read, which
+    can sit deep in a long ``main`` that retrieval does not surface; the
+    option's definition only shows its default. Searches the defining
+    file, then the other Python files in its directory. Each window is
+    cut to the smallest function or class around the usage, so a
+    citation in it belongs to that symbol.
+    """
+    match = _OPTION_RE.fullmatch(sym.name)
+    if match is None or not sym.file_path.endswith(".py"):
+        return []
+    attr = re.compile(rf"\.{re.escape(match.group(1).replace('-', '_'))}\b")
+    folder = sym.file_path.rsplit("/", 1)[0] if "/" in sym.file_path else ""
+    siblings = sorted(
+        path for (path,) in db.query(CodeSymbol.file_path)
+        .filter(CodeSymbol.repository_id == sym.repository_id)
+        .distinct()
+        if path.endswith(".py") and path != sym.file_path
+        and (path.rsplit("/", 1)[0] if "/" in path else "") == folder
+    )
+    spans: list[SourceSpan] = []
+    for path in [sym.file_path, *siblings]:
+        text = _read_source_range(clone_path=clone_path, rel_path=path, start_line=1, end_line=10**9)
+        lines = text.splitlines() if text else []
+        for number, line in enumerate(lines, start=1):
+            if path == sym.file_path and sym.start_line <= number <= sym.end_line:
+                continue
+            if not attr.search(line) or any(s.file_path == path and s.start_line <= number <= s.end_line for s in spans):
+                continue
+            owner = (
+                db.query(CodeSymbol)
+                .filter(
+                    CodeSymbol.repository_id == sym.repository_id,
+                    CodeSymbol.file_path == path,
+                    CodeSymbol.kind.in_(("function", "method", "class")),
+                    CodeSymbol.start_line <= number,
+                    CodeSymbol.end_line >= number,
+                )
+                .order_by(CodeSymbol.end_line - CodeSymbol.start_line)
+                .first()
+            )
+            if owner is None:
+                continue
+            start = max(owner.start_line, number - _USAGE_RADIUS)
+            end = min(owner.end_line, number + _USAGE_RADIUS)
+            spans.append(SourceSpan(
+                symbol_id=owner.symbol_id, file_path=path, start_line=start, end_line=end,
+                name=owner.name, source="\n".join(lines[start - 1:end]),
+            ))
+            if len(spans) == _MAX_USAGES:
+                return spans
+        if spans:
+            return spans
+    return spans
 
 
 def _nearest_definition(defs: list[CodeSymbol], file_path: str) -> CodeSymbol | None:

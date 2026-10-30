@@ -155,6 +155,30 @@
       ],
       "expected_verification": "VERIFIED",
       "notes": "main_lincls defaults lr 30, wd 0, epochs 100, schedule [60,80]."
+    },
+    {
+      "claim_id": "moco_dev5",
+      "text": "MoCo sets the learning rate from its schedule at the start of every training epoch.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 83
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_moco.py",
+          "name": "main_worker",
+          "kind": "function"
+        },
+        {
+          "file_path": "main_moco.py",
+          "name": "adjust_learning_rate",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "adjust_learning_rate(optimizer, epoch, args) at the top of the epoch loop."
     }
   ]
 }

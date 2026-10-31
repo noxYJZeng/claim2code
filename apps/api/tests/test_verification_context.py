@@ -72,6 +72,32 @@ def test_long_body_keeps_relevant_implementation_with_original_lines() -> None:
     assert result.code_evidence[0].start_line == 192
 
 
+def test_windows_finish_a_statement_they_cut() -> None:
+    text = "The reference model is loaded from the SFT checkpoint."
+    source = "def main(config):\n" + "    step = 0\n" * 300
+    source += "    reference_model = AutoModel.from_pretrained(\n"
+    source += "        config.model.name_or_path,\n" * 6
+    source += "        torch_dtype=dtype)\n" + "    step += 1\n" * 40
+    [prepared] = prepare_candidates([_candidate(source)], text)
+    [window] = [s for s in prepared.context_spans if "reference_model" in s.source]
+    assert window.source.endswith("torch_dtype=dtype)")
+    assert window.source == "\n".join(source.splitlines()[window.start_line - 10:window.end_line - 9])
+
+
+def test_prefix_finishes_a_statement_it_cuts() -> None:
+    # Eight candidates, as the workflow shows: each prefix gets 2000 chars.
+    head = "def f(x):\n" + "    y = 0\n" * 194
+    source = head + "    return call(\n" + "        x,\n" * 10 + "    )\n" + "    z = 1\n" * 100
+    endless = "def f(x):\n    return call(\n" + "        x,\n" * 400 + "    )\n"
+    filler = [_candidate("    w = 2\n" * 400) for _ in range(6)]
+    finished, unfinished, *_ = prepare_candidates(
+        [_candidate(source), _candidate(endless), *filler], "unrelated",
+    )
+    assert finished.source is not None and finished.source.endswith("    )")
+    # A statement that cannot close within the allowance keeps the plain cut.
+    assert unfinished.source is not None and not unfinished.source.endswith("    )")
+
+
 def test_hidden_tail_cannot_validate_a_citation() -> None:
     source = "class Block:\n" + "    padding_value = 0\n" * 180 + "    hidden_value = 999\n"
     [prepared] = prepare_candidates([_candidate(source)], "The module scales query vectors.")

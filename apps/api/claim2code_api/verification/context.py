@@ -19,6 +19,11 @@ TOTAL_SOURCE_CHAR_CAP = 32000
 TOTAL_METADATA_CHAR_CAP = 8000
 MAX_CANDIDATES = 16
 MAX_VERIFY_PAYLOAD_CHAR_CAP = 52000
+# Statement completion past a window's cut: at most this many lines/chars.
+_COMPLETE_LINES = 12
+_COMPLETE_CHARS = 400
+_STRING_RE = re.compile(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"")
+_COMMENT_RE = re.compile(r"#.*")
 _TOKEN_RE = re.compile(r"[A-Z]+(?=[A-Z][a-z]|\b)|[A-Z]?[a-z]+|\d+")
 _STOP = frozenset({
     "the", "and", "for", "from", "with", "that", "this", "are", "uses", "use",
@@ -40,6 +45,30 @@ def _slice(span: SourceSpan, first: int, last: int) -> SourceSpan:
     })
 
 
+def _depth(line: str) -> int:
+    """Net open brackets on one line, ignoring string literals and comments."""
+    code = _COMMENT_RE.sub("", _STRING_RE.sub("", line))
+    return sum(code.count(c) for c in "([{") - sum(code.count(c) for c in ")]}")
+
+
+def _complete(lines: list[str], first: int, last: int, allowance: int) -> int:
+    """Extend ``last`` so the window does not stop inside an open statement.
+
+    A window that ends at ``from_pretrained(`` hides the argument the claim
+    is about. Up to ``_COMPLETE_LINES`` further lines and ``allowance``
+    characters are added until the brackets opened in the window close.
+    """
+    depth = sum(_depth(line) for line in lines[first:last])
+    end, used = last, 0
+    while depth > 0 and end < len(lines) and end - last < _COMPLETE_LINES:
+        used += len(lines[end]) + 1
+        if used > allowance:
+            return last
+        depth += _depth(lines[end])
+        end += 1
+    return end if depth <= 0 else last
+
+
 def _prefix(span: SourceSpan, cap: int) -> SourceSpan | None:
     lines = span.source.splitlines()
     used = 0
@@ -50,7 +79,10 @@ def _prefix(span: SourceSpan, cap: int) -> SourceSpan | None:
             break
         used += cost
         count += 1
-    return _slice(span, 0, count) if count else None
+    if not count:
+        return None
+    allowance = min(_COMPLETE_CHARS, SOURCE_CHAR_CAP - used)
+    return _slice(span, 0, _complete(lines, 0, count, allowance))
 
 
 def _windows(
@@ -72,8 +104,13 @@ def _windows(
         # A very long generated line is not useful prompt context.
         if len(window.source) > char_cap:
             window = _slice(span, i, i + 1)
-        if len(window.source) > char_cap:
-            continue
+            if len(window.source) > char_cap:
+                continue
+        else:
+            # Finish a statement cut by the window, within the block cap.
+            allowance = min(_COMPLETE_CHARS, SOURCE_CHAR_CAP - len(window.source))
+            last = _complete(lines, first, last, allowance)
+            window = _slice(span, first, last)
         out.append((score, window))
         covered.update(range(first, last))
         if len(out) == 4:

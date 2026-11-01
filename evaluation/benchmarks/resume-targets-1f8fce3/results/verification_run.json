@@ -1,11 +1,11 @@
 {
   "schema_version": 1,
   "evaluator": "verification",
-  "run_id": "35a913ab-72c5-477a-a3ee-099e16918811",
-  "started_at": "2026-10-30T01:26:26+00:00",
+  "run_id": "4b2b4870-3c51-455e-ab19-daba123760ba",
+  "started_at": "2026-11-01T04:54:33+00:00",
   "code": {
-    "git_commit": "d38c62dea5ea66f464ccd8af915c44da129a937e",
-    "source_sha256": "8ef8d518b49f6cef8605c895332b1f9c3c3006d874a6ba054082b4dacc012bc3",
+    "git_commit": "1f8fce3f0d2fcebf704210444fb1ae5beddb427e",
+    "source_sha256": "bbb1b2d07a2bb8e210a71d28fcf1312364d32360e57e59580c4d8c6816fc5855",
     "dirty": false
   },
   "parameters": {
@@ -204,5 +204,5 @@
     "sam: paper SHA-256 is missing or a placeholder",
     "whisper: paper SHA-256 is missing or a placeholder"
   ],
-  "completed_at": "2026-10-30T08:14:53+00:00"
+  "completed_at": "2026-11-01T12:14:27+00:00"
 }

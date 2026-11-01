@@ -43,7 +43,7 @@ configuration or accept uploads.
 
 ## Measured results
 
-Benchmark measured locally on 2026-10-30 at commit `d38c62d` with
+Benchmark measured locally on 2026-11-01 at commit `1f8fce3` with
 `qwen3.8-27b-mlx` (LM Studio) and `nomic-embed-text-v1.5` embeddings, by
 [`evaluation/run_local.py --prepare`](evaluation/README.md#run-the-resume-target-benchmark-on-a-local-model).
 The suite has 15 paper/repository pairs, 12 of them PyTorch. Headline numbers
@@ -52,7 +52,7 @@ Need, BERT, DDIM, DDPM, DPO, LoRA, MAE, Reflexion), frozen at `77e2e97`; the
 35 claims on the 7 newer pairs (CLIP, DeiT, DETR, DINO, MoCo, SAM, Whisper)
 are reported separately and cannot change it. The run's target check,
 report and per-claim results are checked in under
-[`evaluation/benchmarks/resume-targets-d38c62d/`](evaluation/benchmarks/resume-targets-d38c62d/targets.md),
+[`evaluation/benchmarks/resume-targets-1f8fce3/`](evaluation/benchmarks/resume-targets-1f8fce3/targets.md),
 with provenance in each results file.
 
 | Area | Metric | Claim2Code | Baseline |
@@ -60,10 +60,10 @@ with provenance in each results file.
 | Retrieval (top 5) | Hit@5, macro avg (annotated symbol in the top 5) | **97.2%** | 72.7% hybrid without rerank · 64.5% embedding-only |
 | | Recall@5, per symbol, macro avg | **85.8%** | 60.6% hybrid without rerank · 54.8% embedding-only |
 | | MRR, macro avg | **0.837** | 0.456 hybrid without rerank · 0.462 embedding-only |
-| Verification | Status accuracy | **87.3%** (69/79) | 88.6% always-VERIFIED baseline |
-| | Macro F1 over gold labels (VERIFIED, PARTIALLY_VERIFIED) | 0.904 | 0.470 always-VERIFIED |
+| Verification | Status accuracy | **91.1%** (72/79) | 88.6% always-VERIFIED baseline |
+| | Macro F1 over gold labels (VERIFIED, PARTIALLY_VERIFIED) | 0.915 | 0.470 always-VERIFIED |
 | | Discrepancy precision / recall (claim level) | 100% / 77.8% | — |
-| | Grounding rate (cited code exists in the cited file) | **100%** of 237 citations | — |
+| | Grounding rate (cited code exists in the cited file) | **100%** of 239 citations | — |
 | | Line accuracy (cited code at the cited lines) | 100% | — |
 | Newer pairs (35 claims) | Hit@5 · status accuracy | 97.1% · 100% | — |
 | Safety | Secrets protected, covered / held-out forms | 10/10 · 2/8 | — |
@@ -78,8 +78,8 @@ picks the most direct implementations from their source heads
 have an annotated symbol in hybrid's top 45.
 
 The gold set contains 70 `VERIFIED` and 9 `PARTIALLY_VERIFIED` claims, with no
-`CONTRADICTED` or `UNVERIFIED` examples, so status accuracy sits just below the
-always-VERIFIED baseline; macro F1 shows that the partial cases are found. It
+`CONTRADICTED` or `UNVERIFIED` examples, so the always-VERIFIED baseline
+already scores 88.6%; macro F1 shows that the partial cases are found. It
 does not establish four-way classification quality. Evaluation supplies
 curated claims, using those texts as paper quotes; it does not measure
 PDF-to-claim extraction or paper-citation correctness. Code grounding measures
@@ -89,13 +89,27 @@ the model and moves each to its actual lines.
 
 History on the same 79 claims: 81.0% (99.5% grounding, 92.1% line accuracy)
 before the citation check; 70.9% with a first, over-strict version of it;
-79.7% at `93cd752`; 82.3% with rerank; 87.3% after treating differing
-defaults and initialisations as partial support rather than contradiction
-(`verification/discrepancies.py`). That rule was chosen on 27 development
-claims from the newer pairs (`evaluation/dev_annotations/`, 22/27 → 24/27),
-then measured once on the regression set. Accuracy is close to the 87% line:
-one claim is 1.3 points, and the local model's verdicts vary between runs
-(ddim_c4 and ddpm_c4 changed between the last two runs).
+79.7% at `93cd752`; 82.3% with rerank; 87.3% at `d38c62d` after treating
+differing defaults and initialisations as partial support rather than
+contradiction (`verification/discrepancies.py`, chosen on development
+claims from the newer pairs, `evaluation/dev_annotations/`); 91.1% at
+`1f8fce3`. Between those two, three runs at `d38c62d`, `62cfa22` and
+`6f332b9` gave 87.3%, 86.1% and 84.8%: the local model's verdicts vary
+between runs, mostly through discrepancies that only said the code was "not
+visible", "not provided" or "truncated". The changes since `d38c62d`:
+
+- source windows finish a statement they cut (`verification/context.py`);
+- discrepancies that only report unseen code are dropped, as rule 7 of the
+  verify prompt already requires (`verification/verifier.py`);
+- command-line options carry the lines that read them, and methods carry
+  the lines elsewhere in their class that call them or read the attributes
+  they use (`verification/workflow.py`).
+
+Each was checked on the 35 development claims (35/35, 35/35 and 34/35; the
+one miss also occurred before any of them). The last two were designed
+after reading the regression-set failures, so the 79 claims are no longer
+fully held out for them; on all stored runs the unseen-code pattern matches
+only discrepancies on claims annotated VERIFIED. 91.1% is one run.
 
 Caveats: only 9 of the 79 claims carry an annotated discrepancy, so the
 discrepancy rates rest on few cases. The annotations were written during
@@ -107,7 +121,7 @@ labels, the earlier pipeline reached 63.6% accuracy on the first 5 pairs. The
 Attention, BERT and DDPM pairs were annotated afterwards against
 harvardnlp/annotated-transformer, google-research/bert and
 hojonathanho/diffusion; BERT's pre-training hyperparameters are absl flags,
-which the parser now indexes as config symbols. Of the 10 remaining misses, 8 are UNVERIFIED verdicts on claims annotated VERIFIED (2 with no code evidence; LoRA's `examples/NLU` is a vendored transformers checkout), one partial claim is UNVERIFIED, and one is VERIFIED where a mismatch was expected. The safety `held_out` cases (GitHub
+which the parser now indexes as config symbols. Of the 7 remaining misses, 5 are UNVERIFIED verdicts on claims annotated VERIFIED (BERT's activation is set in a JSON config outside the repository; a DDIM claim is a qualitative result; LoRA's `examples/NLU` is a vendored transformers checkout), one partial claim is UNVERIFIED, and one is VERIFIED where a mismatch was expected. The safety `held_out` cases (GitHub
 fine-grained / Slack / Hugging Face tokens, paraphrased injections) are coverage
 gaps of the regex gate, which matches only the forms listed in Phase 8.
 Injection detection records a match; it is not a guarantee that the input was

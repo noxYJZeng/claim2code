@@ -1,9 +1,9 @@
 # Claim2Code — Evaluation Report
 
-Report rendered 2026-10-30T08:14:55+00:00. Rendering does not run the models.
+Report rendered 2026-11-01T12:14:29+00:00. Rendering does not run the models.
 Measurement code and model identities below come only from stored evaluator provenance.
 
-Measurement `retrieval`: run `c1431184-fd51-49da-8dce-ea33d4e7c85c`, code `d38c62dea5ea66f464ccd8af915c44da129a937e`, started `2026-10-29T23:44:56+00:00`.
+Measurement `retrieval`: run `797be91a-dde4-48b0-9d3a-f9a1e439941d`, code `1f8fce3f0d2fcebf704210444fb1ae5beddb427e`, started `2026-11-01T03:20:38+00:00`.
 
 Recorded chat `qwen3.8-27b-mlx`; embeddings `text-embedding-nomic-embed-text-v1.5`.
 
@@ -159,7 +159,7 @@ Unresolved annotated symbols remain in the recall denominator.
 
 Aggregates are macro averages over datasets. Baselines: embedding_only, lexical_only, hybrid_claim2code, claim2code_rerank.
 
-Measurement `verification`: run `35a913ab-72c5-477a-a3ee-099e16918811`, code `d38c62dea5ea66f464ccd8af915c44da129a937e`, started `2026-10-30T01:26:26+00:00`.
+Measurement `verification`: run `4b2b4870-3c51-455e-ab19-daba123760ba`, code `1f8fce3f0d2fcebf704210444fb1ae5beddb427e`, started `2026-11-01T04:54:33+00:00`.
 
 Recorded chat `qwen3.8-27b-mlx`; embeddings `text-embedding-nomic-embed-text-v1.5`.
 
@@ -171,17 +171,17 @@ The input is an annotation's claim text, also used as its paper quote. This does
 
 | Metric | Value |
 |---|---|
-| Status accuracy (exact, on observed labels) | 91.2% |
+| Status accuracy (exact, on observed labels) | 93.9% |
 | Majority-class baseline (always VERIFIED) | 92.1% |
-| Macro F1 (gold-present labels only) | 91.5% |
-| Balanced accuracy (gold-present labels only) | 85.1% |
-| Support rate (VERIFIED or PARTIALLY_VERIFIED) | 92.1% |
+| Macro F1 (gold-present labels only) | 92.3% |
+| Balanced accuracy (gold-present labels only) | 86.5% |
+| Support rate (VERIFIED or PARTIALLY_VERIFIED) | 94.7% |
 | Discrepancy precision | 100.0% (7 flagged) |
 | Discrepancy recall | 77.8% (9 annotated) |
 | Grounding rate (cited code exists in the cited file) | 100.0% (355 citations) |
 | Line accuracy (±2-line grading tolerance) | 100.0% |
 | Exact line accuracy (no tolerance) | 100.0% |
-| Evidence hit rate (supported verdicts citing an annotated symbol) | 99.0% |
+| Evidence hit rate (supported verdicts citing an annotated symbol) | 99.1% |
 | LLM errors | 0 |
 
 ### Per pair
@@ -189,15 +189,15 @@ The input is an annotation's claim text, also used as its paper quote. This does
 | Pair | Claims | Accuracy | Support | Disc. P | Disc. R | Grounding |
 |---|---|---|---|---|---|---|
 | attention_is_all_you_need | 12 | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
-| bert | 11 | 81.8% | 81.8% | 100.0% | 100.0% | 100.0% |
+| bert | 11 | 90.9% | 90.9% | 100.0% | 100.0% | 100.0% |
 | clip | 5 | 100.0% | 100.0% | n/a | n/a | 100.0% |
 | ddim | 8 | 75.0% | 75.0% | n/a | n/a | 100.0% |
 | ddpm | 12 | 91.7% | 100.0% | n/a | 0.0% | 100.0% |
 | deit | 5 | 100.0% | 100.0% | n/a | n/a | 100.0% |
 | detr | 5 | 100.0% | 100.0% | n/a | n/a | 100.0% |
 | dino | 5 | 100.0% | 100.0% | n/a | n/a | 100.0% |
-| dpo | 9 | 88.9% | 88.9% | 100.0% | 100.0% | 100.0% |
-| lora | 10 | 80.0% | 80.0% | 100.0% | 100.0% | 100.0% |
+| dpo | 9 | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
+| lora | 10 | 90.0% | 90.0% | 100.0% | 100.0% | 100.0% |
 | mae | 9 | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
 | moco | 5 | 100.0% | 100.0% | n/a | n/a | 100.0% |
 | reflexion | 8 | 75.0% | 75.0% | 100.0% | 66.7% | 100.0% |
@@ -208,7 +208,7 @@ The input is an annotation's claim text, also used as its paper quote. This does
 
 | Gold label | Count | Precision | Recall | F1 |
 |---|---|---|---|---|
-| VERIFIED | 105 | 99.0% | 92.4% | 95.6% |
+| VERIFIED | 105 | 99.0% | 95.2% | 97.1% |
 | PARTIALLY_VERIFIED | 9 | 100.0% | 77.8% | 87.5% |
 | CONTRADICTED | 0 | n/a | n/a | n/a |
 | UNVERIFIED | 0 | 0.0% | n/a | n/a |
@@ -221,10 +221,10 @@ Code grounding measures whether a quote exists, not whether the verdict is corre
 
 | | VERIFIED | PARTIALLY_VERIFIED | CONTRADICTED | UNVERIFIED |
 |---|---|---|---|---|
-| VERIFIED | 97 | 0 | 0 | 8 |
+| VERIFIED | 100 | 0 | 0 | 5 |
 | PARTIALLY_VERIFIED | 1 | 7 | 0 | 1 |
 
-Measurement `safety`: run `0de03af5-c08a-4e94-a86a-a547b46eb49b`, code `d38c62dea5ea66f464ccd8af915c44da129a937e`, started `2026-10-30T08:14:54+00:00`.
+Measurement `safety`: run `0ee209a4-bb0d-4bf3-9130-a698866c90bb`, code `1f8fce3f0d2fcebf704210444fb1ae5beddb427e`, started `2026-11-01T12:14:28+00:00`.
 
 ## Safety
 

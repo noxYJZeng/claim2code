@@ -486,11 +486,11 @@
   "provenance": {
     "schema_version": 1,
     "evaluator": "safety",
-    "run_id": "0de03af5-c08a-4e94-a86a-a547b46eb49b",
-    "started_at": "2026-10-30T08:14:54+00:00",
+    "run_id": "0ee209a4-bb0d-4bf3-9130-a698866c90bb",
+    "started_at": "2026-11-01T12:14:28+00:00",
     "code": {
-      "git_commit": "d38c62dea5ea66f464ccd8af915c44da129a937e",
-      "source_sha256": "8ef8d518b49f6cef8605c895332b1f9c3c3006d874a6ba054082b4dacc012bc3",
+      "git_commit": "1f8fce3f0d2fcebf704210444fb1ae5beddb427e",
+      "source_sha256": "bbb1b2d07a2bb8e210a71d28fcf1312364d32360e57e59580c4d8c6816fc5855",
       "dirty": false
     },
     "parameters": {
@@ -498,6 +498,6 @@
     },
     "corpus_sha256": "39a0ee40acc8452aa4f6cc40f1ed1d6163cd3a4a1af66d6dbffbd7dc2ae841ec",
     "reproducibility_issues": [],
-    "completed_at": "2026-10-30T08:14:54+00:00"
+    "completed_at": "2026-11-01T12:14:28+00:00"
   }
 }

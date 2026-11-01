@@ -16,7 +16,7 @@
     },
     "status_accuracy": {
       "status": "met",
-      "actual": 0.8734177215189873,
+      "actual": 0.9113924050632911,
       "required": 0.87,
       "issues": []
     },
@@ -45,9 +45,9 @@
       "per_class": {
         "VERIFIED": {
           "support": 70,
-          "precision": 0.9841269841269841,
-          "recall": 0.8857142857142857,
-          "f1": 0.9323308270676691
+          "precision": 0.9848484848484849,
+          "recall": 0.9285714285714286,
+          "f1": 0.9558823529411765
         },
         "PARTIALLY_VERIFIED": {
           "support": 9,
@@ -68,15 +68,15 @@
           "f1": null
         }
       },
-      "macro_f1_present_labels": 0.9036654135338346,
-      "balanced_accuracy_present_labels": 0.8317460317460317,
+      "macro_f1_present_labels": 0.9154411764705883,
+      "balanced_accuracy_present_labels": 0.8531746031746033,
       "missing_gold_labels": [
         "CONTRADICTED",
         "UNVERIFIED"
       ],
       "n_claims": 79,
-      "status_accuracy": 0.8734177215189873,
-      "support_rate": 0.8860759493670886,
+      "status_accuracy": 0.9113924050632911,
+      "support_rate": 0.9240506329113924,
       "discrepancy_precision": 1.0,
       "discrepancy_recall": 0.7777777777777778,
       "n_expected_discrepancy": 9,
@@ -84,20 +84,20 @@
       "grounding_rate": 1.0,
       "line_accuracy": 1.0,
       "exact_line_accuracy": 1.0,
-      "n_code_evidence": 237,
-      "evidence_hit_rate": 0.9857142857142858,
+      "n_code_evidence": 239,
+      "evidence_hit_rate": 0.9863013698630136,
       "n_llm_errors": 0,
       "predicted_counts": {
-        "VERIFIED": 63,
+        "VERIFIED": 66,
         "PARTIALLY_VERIFIED": 7,
-        "UNVERIFIED": 9
+        "UNVERIFIED": 6
       },
       "confusion": {
         "VERIFIED": {
-          "VERIFIED": 62,
+          "VERIFIED": 65,
           "PARTIALLY_VERIFIED": 0,
           "CONTRADICTED": 0,
-          "UNVERIFIED": 8
+          "UNVERIFIED": 5
         },
         "PARTIALLY_VERIFIED": {
           "VERIFIED": 1,

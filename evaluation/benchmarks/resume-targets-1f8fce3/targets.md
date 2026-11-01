@@ -4,7 +4,7 @@
 |---|---|---|---|
 | pytorch_repositories | met | 12 | 12 |
 | recall_at_5 | met | 97.2% | 91% |
-| status_accuracy | met | 87.3% | 87% |
+| status_accuracy | met | 91.1% | 87% |
 | grounding_rate | met | 100.0% | 97% |
 
 Retrieval on the regression set (top 5): claim2code_rerank hit 97.2%, standard recall 85.8%; hybrid_claim2code hit 72.7%; embedding_only hit 64.5%.

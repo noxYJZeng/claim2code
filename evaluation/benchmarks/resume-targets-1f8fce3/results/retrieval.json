@@ -22983,11 +22983,11 @@
   "provenance": {
     "schema_version": 1,
     "evaluator": "retrieval",
-    "run_id": "c1431184-fd51-49da-8dce-ea33d4e7c85c",
-    "started_at": "2026-10-29T23:44:56+00:00",
+    "run_id": "797be91a-dde4-48b0-9d3a-f9a1e439941d",
+    "started_at": "2026-11-01T03:20:38+00:00",
     "code": {
-      "git_commit": "d38c62dea5ea66f464ccd8af915c44da129a937e",
-      "source_sha256": "8ef8d518b49f6cef8605c895332b1f9c3c3006d874a6ba054082b4dacc012bc3",
+      "git_commit": "1f8fce3f0d2fcebf704210444fb1ae5beddb427e",
+      "source_sha256": "bbb1b2d07a2bb8e210a71d28fcf1312364d32360e57e59580c4d8c6816fc5855",
       "dirty": false
     },
     "parameters": {
@@ -23192,7 +23192,7 @@
       "sam: paper SHA-256 is missing or a placeholder",
       "whisper: paper SHA-256 is missing or a placeholder"
     ],
-    "completed_at": "2026-10-30T01:26:23+00:00"
+    "completed_at": "2026-11-01T04:54:30+00:00"
   },
   "selected_pairs": [
     "attention_is_all_you_need",

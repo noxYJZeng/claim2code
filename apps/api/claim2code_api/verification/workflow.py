@@ -59,7 +59,7 @@ from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveM
 from claim2code_api.retrieval.hybrid_ranker import HybridWeights, hybrid_ranker
 from claim2code_api.retrieval.reranker import POOL_SIZE as RERANK_POOL_SIZE
 from claim2code_api.retrieval.reranker import rerank
-from claim2code_api.verification.context import prepare_candidates
+from claim2code_api.verification.context import _tokens, prepare_candidates
 from claim2code_api.verification.exceptions import VerificationNotFoundError
 from claim2code_api.verification.schemas import (
     Discrepancy,
@@ -289,7 +289,7 @@ def _verify_one_claim(
         except Exception:
             hybrid_matches = []
         retrieve_matches = _hybrid_to_retrieve_matches(
-            db=db, matches=hybrid_matches, repository_id=repository_id,
+            db=db, matches=hybrid_matches, repository_id=repository_id, claim=claim.text,
         )
 
     retrieve_matches = prepare_candidates(retrieve_matches, claim.text)
@@ -370,7 +370,7 @@ def _expanded_candidates(
     try:
         matches = _retrieve(db, repository_id, claim.text, top_k=min(max(top_k * 2, 12), 24))
         expanded = _hybrid_to_retrieve_matches(
-            db=db, matches=matches, repository_id=repository_id,
+            db=db, matches=matches, repository_id=repository_id, claim=claim.text,
         )
     except Exception as exc:  # noqa: BLE001 — optional recovery pass
         logger.warning("Evidence expansion failed for claim=%s: %s", claim.claim_id, exc)
@@ -409,6 +409,7 @@ def _hybrid_to_retrieve_matches(
     db: Session,
     matches: list,
     repository_id: UUID | None = None,
+    claim: str = "",
 ) -> list[RetrieveMatch]:
     """Convert Phase 5 ``HybridMatch`` objects to ``RetrieveMatch``.
 
@@ -463,6 +464,8 @@ def _hybrid_to_retrieve_matches(
         )
         if clone_path is not None and sym.kind == CodeSymbolKind.CONFIG_SCHEMA.value:
             callee_spans += _usage_spans(db, sym, clone_path)
+        if clone_path is not None and source and sym.kind == CodeSymbolKind.METHOD.value:
+            callee_spans += _member_spans(db, sym, source, clone_path, claim, callee_spans)
         out.append(
             RetrieveMatch(
                 symbol_id=sym.symbol_id,
@@ -739,6 +742,85 @@ def _usage_spans(db: Session, sym: CodeSymbol, clone_path: Path) -> list[SourceS
                 return spans
         if spans:
             return spans
+    return spans
+
+
+_SELF_ATTR_RE = re.compile(r"\bself\.([A-Za-z_]\w*)")
+_MEMBER_RADIUS = 3
+
+
+def _member_spans(
+    db: Session, sym: CodeSymbol, source: str, clone_path: Path, claim: str,
+    existing: list[SourceSpan],
+) -> list[SourceSpan]:
+    """Where the rest of a method's class uses what the method touches.
+
+    A method that only computes or stores something (``merge_AB``,
+    ``self.merged = False``, ``return self.sequence_output``) does not show
+    what the class does with it; that happens in a sibling method
+    (``train`` folding the delta into the weight, a pooler slicing the
+    first token). Shows up to ``_MAX_USAGES`` lines elsewhere in the class
+    that call this method, or read an attribute this method uses whose
+    name shares a word with the claim. Each window is cut to the method
+    around the line, so a citation in it belongs to that method.
+    """
+    terms = _tokens(claim)
+    attrs = sorted({a for a in _SELF_ATTR_RE.findall(source) if terms & _tokens(a)})
+    patterns = [rf"\bself\.{re.escape(a)}\b" for a in attrs]
+    if not sym.name.startswith("__"):
+        patterns.append(rf"\.{re.escape(sym.name)}\(")
+    if not patterns:
+        return []
+    owner_class = (
+        db.query(CodeSymbol)
+        .filter(
+            CodeSymbol.repository_id == sym.repository_id,
+            CodeSymbol.file_path == sym.file_path,
+            CodeSymbol.kind == "class",
+            CodeSymbol.start_line <= sym.start_line,
+            CodeSymbol.end_line >= sym.end_line,
+        )
+        .order_by(CodeSymbol.end_line - CodeSymbol.start_line)
+        .first()
+    )
+    if owner_class is None:
+        return []
+    text = _read_source_range(
+        clone_path=clone_path, rel_path=sym.file_path, start_line=1, end_line=owner_class.end_line,
+    )
+    lines = text.splitlines() if text else []
+    used = re.compile("|".join(patterns))
+    spans: list[SourceSpan] = []
+    for number in range(owner_class.start_line, min(owner_class.end_line, len(lines)) + 1):
+        if sym.start_line <= number <= sym.end_line or not used.search(lines[number - 1]):
+            continue
+        if any(
+            s.file_path == sym.file_path and s.start_line <= number <= s.end_line
+            for s in [*existing, *spans]
+        ):
+            continue
+        owner = (
+            db.query(CodeSymbol)
+            .filter(
+                CodeSymbol.repository_id == sym.repository_id,
+                CodeSymbol.file_path == sym.file_path,
+                CodeSymbol.kind.in_(("function", "method")),
+                CodeSymbol.start_line <= number,
+                CodeSymbol.end_line >= number,
+            )
+            .order_by(CodeSymbol.end_line - CodeSymbol.start_line)
+            .first()
+        )
+        if owner is None:
+            continue
+        start = max(owner.start_line, number - _MEMBER_RADIUS)
+        end = min(owner.end_line, number + _MEMBER_RADIUS)
+        spans.append(SourceSpan(
+            symbol_id=owner.symbol_id, file_path=sym.file_path, start_line=start, end_line=end,
+            name=owner.name, source="\n".join(lines[start - 1:end]),
+        ))
+        if len(spans) == _MAX_USAGES:
+            break
     return spans
 
 

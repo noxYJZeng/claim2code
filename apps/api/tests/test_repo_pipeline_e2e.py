@@ -455,3 +455,59 @@ def test_usage_context_shows_where_an_option_is_read(
     files["main.py"] = files["main.py"].replace("args.lr = args.lr * ", "scale = ")
     (tmp_path / "main.py").write_text(files["main.py"])
     assert [(s.file_path, s.name) for s in _usage_spans(session, lr, tmp_path)] == [("engine.py", "step")]
+
+
+def test_member_context_shows_where_the_class_uses_a_method(
+    session, tmp_path: Path,
+) -> None:
+    """A method's candidate carries sibling-method lines that call it or read
+    an attribute it uses whose name shares a word with the claim."""
+    import uuid
+
+    from claim2code_api.repos.storage import WalkedFile
+    from claim2code_api.repos.workflow import _extract_symbols
+    from claim2code_api.verification.workflow import _member_spans
+
+    text = (
+        "class Layer:\n"
+        "    def __init__(self):\n"
+        "        self.merged = False\n"
+        "        self.rank = 4\n"
+        "\n"
+        "    def delta(self):\n"
+        "        return self.a @ self.b\n"
+        "\n"
+        "    def train(self, mode):\n"
+        "        if not mode and not self.merged:\n"
+        "            self.weight += self.delta()\n"
+        "            self.merged = True\n"
+        "\n"
+        "    def size(self):\n"
+        "        return self.rank\n"
+    )
+    (tmp_path / "layers.py").write_text(text)
+    wf = WalkedFile(
+        absolute_path=tmp_path / "layers.py", relative_path="layers.py",
+        size_bytes=len(text),
+    )
+    _extract_symbols(session, uuid.uuid4(), wf, {})
+    session.flush()
+    rows = {s.name: s for s in session.query(CodeSymbol).all()}
+
+    claim = "Merged weights are folded back at inference."
+    delta = rows["delta"]
+    spans = _member_spans(session, delta, "        return self.a @ self.b\n", tmp_path, claim, [])
+    assert [(s.name, s.start_line, s.end_line) for s in spans] == [("train", 9, 12)]
+    assert spans[0].symbol_id == rows["train"].symbol_id
+    assert "self.weight += self.delta()" in spans[0].source
+
+    # __init__ shares the word "merged" with the claim but not "rank".
+    init = rows["__init__"]
+    init_source = "        self.merged = False\n        self.rank = 4\n"
+    spans = _member_spans(session, init, init_source, tmp_path, claim, [])
+    assert [s.name for s in spans] == ["train"]
+    assert _member_spans(session, init, init_source, tmp_path, "The rank is four.", []) == [
+        spans[0].model_copy(update={"start_line": 14, "end_line": 15, "name": "size",
+                                     "symbol_id": rows["size"].symbol_id,
+                                     "source": "    def size(self):\n        return self.rank"}),
+    ]

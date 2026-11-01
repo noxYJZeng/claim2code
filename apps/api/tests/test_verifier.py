@@ -411,6 +411,34 @@ def test_compose_verified_once_unquoted_discrepancies_drop() -> None:
     assert out.status == VerificationStatus.VERIFIED
 
 
+@pytest.mark.parametrize("detail", [
+    "The position embedding addition is not explicitly visible in the provided source.",
+    "The source for embedding_postprocessor is truncated before the addition.",
+    "The full training script gpt2_ft.py is not provided to confirm the dataset.",
+])
+def test_compose_drops_discrepancies_about_unseen_code(detail: str) -> None:
+    """A quoted discrepancy that only says the code is not shown is silence (rule 7)."""
+    cand = _grounded_candidate()
+    ce = [CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
+    )]
+    unseen = Discrepancy(
+        type=DiscrepancyType.CONFIGURATION_MISMATCH,
+        severity=DiscrepancySeverity.LOW,
+        detail=detail,
+        code_quote=cand.signature,
+    )
+    verdict = _llm_verdict(
+        status=VerificationStatus.PARTIALLY_VERIFIED, code_evidence=ce,
+    ).model_copy(update={"discrepancies": [unseen]})
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[], llm_verdict=verdict,
+    )
+    assert out.discrepancies == []
+    assert out.status == VerificationStatus.VERIFIED
+
+
 def test_verdict_schema_requires_code_quote_on_discrepancies() -> None:
     fake = _fake_openai(_make_valid_verification_json())
     _build_client(fake).verdict_for_claim(

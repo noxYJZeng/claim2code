@@ -14,6 +14,8 @@ in.
 """
 from __future__ import annotations
 
+import re
+
 from claim2code_api.papers.schemas import Claim
 from claim2code_api.repos.schemas import RetrieveMatch, SourceSpan
 from claim2code_api.verification.discrepancies import (
@@ -207,7 +209,10 @@ def compose_verification(
         # code found" restated (often as HIGH), which reads as a real
         # mismatch in the report. Keep only the deterministic ones.
         llm_emitted = []
-    llm_emitted = [d for d in llm_emitted if _quote_in_candidates(d.code_quote, candidates)]
+    llm_emitted = [
+        d for d in llm_emitted
+        if _quote_in_candidates(d.code_quote, candidates) and not _UNSEEN_RE.search(d.detail)
+    ]
     all_discrepancies = merge_discrepancies(
         deterministic=deterministic_discrepancies,
         llm_emitted=llm_emitted,
@@ -275,6 +280,18 @@ def run_deterministic_checkers(
         claim_text=claim.text, candidates=candidates,
     )
     return [*hp, *model, *dataset, *metric]
+
+
+# A discrepancy whose detail says the code is not visible, provided or is
+# truncated reports what the prompt did not show, not a mismatch: rule 7 of
+# the verify prompt calls that silence. The model still emits these with a
+# neighbouring quote, so they are dropped like unquoted ones.
+_UNSEEN_RE = re.compile(
+    r"\b(?:not\s+(?:explicitly\s+|fully\s+|directly\s+)?"
+    r"(?:visible|shown|provided|included|present\s+in\s+the\s+provided)"
+    r"|truncated|cut\s+off)\b",
+    re.IGNORECASE,
+)
 
 
 def _quote_in_candidates(quote: str | None, candidates: list[RetrieveMatch]) -> bool:

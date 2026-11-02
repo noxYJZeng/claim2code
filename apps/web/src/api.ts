@@ -601,10 +601,13 @@ export async function getReferenceChecks(
 
 /** Run the cited function next to a reference written from the paper.
  *  POST /analyses/{analysis_id}/reference-checks — two LLM calls and a
- *  sandboxed run, so it takes as long as a verification or longer. */
+ *  sandboxed run, so it takes as long as a verification or longer.
+ *  testKind forces a reference or a property test; omitted, the model
+ *  picks from the claim. */
 export async function runReferenceCheck(
   analysisId: string,
   claimId: string,
+  testKind?: "reference" | "property",
   signal?: AbortSignal,
 ): Promise<ReferenceCheckResult> {
   try {
@@ -613,7 +616,7 @@ export async function runReferenceCheck(
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ claim_id: claimId }),
+        body: JSON.stringify(testKind ? { claim_id: claimId, test_kind: testKind } : { claim_id: claimId }),
         signal,
       },
     );

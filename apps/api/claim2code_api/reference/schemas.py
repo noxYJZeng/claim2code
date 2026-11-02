@@ -183,6 +183,8 @@ class ReferenceCheckRequest(BaseModel):
 
     claim_id: str = Field(min_length=1)
     symbol_id: UUID | None = None
+    test_kind: TestKind | None = None
+    """Force a reference or a property test; omitted, the model chooses."""
 
 
 class ReferenceCheckListResponse(BaseModel):

@@ -70,8 +70,12 @@ _RETRIEVAL_K = 8
 
 def run_reference_check(
     *, db: Session, analysis_id: UUID, claim_id: str, symbol_id: UUID | None = None,
+    test_kind: TestKind | None = None,
 ) -> ReferenceCheck:
     """Run one reference check and persist it.
+
+    ``test_kind`` forces a reference or a property test; ``None`` lets
+    the inputs author choose from the claim.
 
     :raises ReferenceCheckNotFoundError: unknown analysis or claim.
     """
@@ -90,7 +94,7 @@ def run_reference_check(
     with get_tracer(__name__).start_as_current_span(
         "reference_check.run", attributes={"claim.id": claim_id},
     ):
-        check = _check(db, state, claim, symbol_id)
+        check = _check(db, state, claim, symbol_id, test_kind)
 
     entry = json.loads(check.model_dump_json())
     state.reference_checks = [
@@ -104,7 +108,10 @@ def run_reference_check(
     return check
 
 
-def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | None) -> ReferenceCheck:
+def _check(
+    db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | None,
+    test_kind: TestKind | None,
+) -> ReferenceCheck:
     def result(status: ReferenceCheckStatus, explanation: str, **fields: Any) -> ReferenceCheck:
         return ReferenceCheck(
             claim_id=claim.claim_id, status=status, explanation=explanation,
@@ -141,7 +148,7 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
     client = get_llm_client()
     inputs_payload = prompts.build_inputs_payload(
         claim=claim, target=target, qualname=qualname, environment=environment,
-    )
+    ) + prompts.requested_kind_section(test_kind)
 
     def is_property(written: ReferenceInputs) -> bool:
         return written.test_kind == TestKind.PROPERTY and bool(written.property_code.strip())
@@ -162,8 +169,18 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
     def testable(written: ReferenceInputs, reference: ReferenceImplementation | None) -> bool:
         return reference is not None or (written.testable and is_property(written))
 
+    kind_note = ""
     try:
         inputs, impl = write(inputs_payload)
+        if test_kind is not None and inputs.testable and inputs.test_kind != test_kind:
+            # Asked for one kind, got the other: say so and ask once more.
+            inputs_payload += prompts.wrong_kind_section(inputs.test_kind, test_kind)
+            inputs, impl = write(inputs_payload)
+            if inputs.testable and inputs.test_kind != test_kind:
+                kind_note = (
+                    f" A {test_kind.value} test was requested, but the model wrote a "
+                    f"{inputs.test_kind.value} test."
+                )
     except ReferenceCheckLLMError as exc:
         return result(ReferenceCheckStatus.ERROR, f"The model call failed: {exc}", target=target_info)
     if not testable(inputs, impl):
@@ -259,7 +276,7 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
             )
 
     return result(
-        status, explanation,
+        status, explanation + kind_note,
         test_kind=TestKind.REFERENCE if impl is not None else TestKind.PROPERTY,
         property_statement="" if impl is not None else inputs.property_statement,
         property_code="" if impl is not None else inputs.property_code,

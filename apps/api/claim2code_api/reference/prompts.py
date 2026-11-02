@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 
 from claim2code_api.papers.schemas import Claim
-from claim2code_api.reference.schemas import ReferenceInputs
+from claim2code_api.reference.schemas import ReferenceInputs, TestKind
 from claim2code_api.repos.schemas import RetrieveMatch
 
 _SOURCE_CAP = 6000
@@ -223,6 +223,27 @@ def build_inputs_payload(
     return "\n".join(parts)
 
 
+def requested_kind_section(kind: TestKind | None) -> str:
+    """Appended to the inputs payload when the user chose the kind of test."""
+    if kind is None:
+        return ""
+    if kind == TestKind.PROPERTY:
+        return (
+            "\n# Requested test kind\n\n"
+            "test_kind must be property. Write check() so that first and second are the two "
+            "computations the claim says agree, run through the repository's code (for example "
+            "the object's output before and after a merge step, on the same input).\n"
+        )
+    return "\n# Requested test kind\n\ntest_kind must be reference.\n"
+
+
+def wrong_kind_section(got: TestKind, wanted: TestKind) -> str:
+    return (
+        f"\nYour previous answer used test_kind={got.value}. "
+        f"This test must use test_kind={wanted.value}; answer again.\n"
+    )
+
+
 def build_repair_section(previous: ReferenceInputs, error: str) -> str:
     """Appended to the inputs payload when the previous attempt's code failed."""
     return (
@@ -259,5 +280,7 @@ __all__ = [
     "build_reference_payload",
     "build_repair_section",
     "describe_environment",
+    "requested_kind_section",
+    "wrong_kind_section",
     "reference_signature",
 ]

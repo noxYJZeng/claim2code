@@ -54,6 +54,7 @@ def create_reference_check(
     try:
         check = run_reference_check(
             db=db, analysis_id=analysis_id, claim_id=body.claim_id, symbol_id=body.symbol_id,
+            test_kind=body.test_kind,
         )
     except ReferenceCheckNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -82,6 +82,16 @@ describe("ReferenceTest", () => {
     expect(JSON.parse(post?.[1]?.body as string)).toEqual({ claim_id: "c1" });
   });
 
+  it("sends the chosen kind of test", async () => {
+    const fetchMock = stubFetch(true, [], { ...MISMATCH, status: "MATCH", test_kind: "property" });
+    render(<Harness />);
+    fireEvent.change(await screen.findByTestId("reference-kind"), { target: { value: "property" } });
+    fireEvent.click(screen.getByTestId("reference-run"));
+    await screen.findByText("Property holds");
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+    expect(JSON.parse(post?.[1]?.body as string)).toEqual({ claim_id: "c1", test_kind: "property" });
+  });
+
   it("labels a property test by its two sides", async () => {
     stubFetch(true, [{
       ...MISMATCH,

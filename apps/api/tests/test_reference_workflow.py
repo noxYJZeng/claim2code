@@ -30,6 +30,7 @@ from claim2code_api.reference.schemas import (
     ReferenceCheckStatus,
     ReferenceImplementation,
     ReferenceInputs,
+    TestKind,
 )
 from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch
 
@@ -255,6 +256,39 @@ def test_property_that_fails(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) ->
     assert check.status == ReferenceCheckStatus.MISMATCH
     assert check.confirmed is None
     assert "read check()" in check.explanation
+
+
+class _LateProperty(_Client):
+    """Writes a reference test until told a second time to write a property."""
+
+    def reference_inputs(self, *, system: str, payload: str) -> ReferenceInputs:
+        written = super().reference_inputs(system=system, payload=payload)
+        if "must use test_kind=property" in payload:
+            return written
+        return written.model_copy(update={"test_kind": TestKind.REFERENCE, "property_code": ""})
+
+
+def test_requested_property_is_insisted_on(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
+    from claim2code_api.reference.schemas import TestKind
+    client = _LateProperty(property_code=_HOMOGENEOUS)
+    db, state, _ = _setup(monkeypatch, repo_dir, client=client)
+    check = workflow_mod.run_reference_check(
+        db=db, analysis_id=state.analysis_id, claim_id="c1", test_kind=TestKind.PROPERTY,
+    )
+    assert check.test_kind == TestKind.PROPERTY
+    assert check.status == ReferenceCheckStatus.MATCH
+    assert "test_kind must be property" in client.payloads[0]
+    assert "requested" not in check.explanation
+
+
+def test_a_refused_request_is_reported(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
+    from claim2code_api.reference.schemas import TestKind
+    db, state, _ = _setup(monkeypatch, repo_dir)
+    check = workflow_mod.run_reference_check(
+        db=db, analysis_id=state.analysis_id, claim_id="c1", test_kind=TestKind.PROPERTY,
+    )
+    assert check.test_kind == TestKind.REFERENCE
+    assert "A property test was requested, but the model wrote a reference test." in check.explanation
 
 
 def test_a_match_needs_no_second_reference(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:

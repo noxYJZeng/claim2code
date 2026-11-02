@@ -8,12 +8,14 @@ import {
 } from "./api";
 import Spinner from "./Spinner";
 
+type TestKind = "reference" | "property";
+
 export type ReferenceChecks = {
   enabled: boolean | null;
   checks: Record<string, ReferenceCheck>;
   running: string | null;
   error: { claimId: string; message: string } | null;
-  run: (claimId: string) => void;
+  run: (claimId: string, testKind?: TestKind) => void;
 };
 
 type ReferenceTestProps = {
@@ -76,10 +78,10 @@ export function useReferenceChecks(analysisId: string): ReferenceChecks {
     return () => controller.abort();
   }, [analysisId]);
 
-  async function run(claimId: string) {
+  async function run(claimId: string, testKind?: TestKind) {
     setRunning(claimId);
     setError(null);
-    const result = await runReferenceCheck(analysisId, claimId);
+    const result = await runReferenceCheck(analysisId, claimId, testKind);
     setRunning(null);
     if (result.ok) {
       setChecks((prev) => ({ ...prev, [claimId]: result.check }));
@@ -93,6 +95,7 @@ export function useReferenceChecks(analysisId: string): ReferenceChecks {
 
 export default function ReferenceTest({ claimId, repositoryBound, reference }: ReferenceTestProps) {
   const { enabled, checks, running, error } = reference;
+  const [kind, setKind] = useState<TestKind | "auto">("auto");
   const check = checks[claimId];
   const busy = running === claimId;
   const canRun = enabled === true && repositoryBound && running === null;
@@ -102,20 +105,37 @@ export default function ReferenceTest({ claimId, repositoryBound, reference }: R
       <div className="flex items-center justify-between gap-3">
         <h3 className="font-semibold">Reference test</h3>
         {enabled && (
-          <button
-            type="button"
-            className="btn-secondary"
-            disabled={!canRun}
-            onClick={() => reference.run(claimId)}
-            data-testid="reference-run"
-          >
-            {check ? "Run again" : "Run reference test"}
-          </button>
+          <div className="flex items-center gap-2">
+            <label className="sr-only" htmlFor="reference-kind">Kind of test</label>
+            <select
+              id="reference-kind"
+              className="field h-8 py-0 text-[13px]"
+              value={kind}
+              onChange={(e) => setKind(e.target.value as TestKind | "auto")}
+              disabled={!canRun}
+              data-testid="reference-kind"
+            >
+              <option value="auto">Choose from the claim</option>
+              <option value="reference">Against a reference</option>
+              <option value="property">As a property</option>
+            </select>
+            <button
+              type="button"
+              className="btn-secondary"
+              disabled={!canRun}
+              onClick={() => reference.run(claimId, kind === "auto" ? undefined : kind)}
+              data-testid="reference-run"
+            >
+              {check ? "Run again" : "Run test"}
+            </button>
+          </div>
         )}
       </div>
       <p className="mt-1 text-[13px] text-ink-muted">
         Runs the cited function next to an implementation written from the paper alone, on the
-        same inputs, and compares the outputs.
+        same inputs, and compares the outputs. A claim that two computations agree (for example,
+        merging weights leaves the output unchanged) can instead be run as a property: both
+        computations go through the repository&apos;s code and their results are compared.
       </p>
 
       {enabled === false && !check && (

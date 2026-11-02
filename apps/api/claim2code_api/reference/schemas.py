@@ -34,15 +34,20 @@ class ReferenceCheckStatus(StrEnum):
     every input, timeout).
     ``UNTESTABLE``: no callable function, or the claim is not an
     input-to-output computation; nothing was run.
+    ``INCONCLUSIVE``: a property held, but it still held with the
+    function's output perturbed, so it does not test that function.
     """
 
     MATCH = "MATCH"
+    INCONCLUSIVE = "INCONCLUSIVE"
     MISMATCH = "MISMATCH"
     ERROR = "ERROR"
     UNTESTABLE = "UNTESTABLE"
 
 
 class TestKind(StrEnum):
+    __test__ = False  # not a pytest test class, despite the name
+
     REFERENCE = "reference"
     PROPERTY = "property"
 
@@ -81,6 +86,12 @@ class ReferenceInputs(BaseModel):
         description=(
             "For a property test: Python source defining check(subject, *args, **kwargs) "
             "returning (first, second). Else empty."
+        ),
+    )
+    property_target: str = Field(
+        description=(
+            "For a property test on an object: the name of the method that performs the step "
+            "the property checks (for a merge, the method that merges), e.g. train. Else empty."
         ),
     )
     rtol: float = Field(description="For a property test: relative tolerance, e.g. 1e-5.")
@@ -142,6 +153,10 @@ class ReferenceCase(BaseModel):
     actual: str | None = None
     expected: str | None = None
     detail: str = ""
+    sensitive: bool | None = None
+    """Property tests only: whether the equality broke when the function's
+    output was perturbed (None when that could not be tried)."""
+    sensitivity: str = ""
 
 
 class ReferenceCheck(BaseModel):
@@ -153,6 +168,9 @@ class ReferenceCheck(BaseModel):
     test_kind: TestKind = TestKind.REFERENCE
     property_statement: str = ""
     property_code: str = ""
+    property_target: str = ""
+    """The method whose step the property checks; the sensitivity check
+    perturbs it. Empty means the function under test itself."""
     target: ReferenceTarget | None = None
     reference_code: str = ""
     second_reference_code: str = ""
@@ -167,6 +185,8 @@ class ReferenceCheck(BaseModel):
     atol: float | None = None
     cases: list[ReferenceCase] = Field(default_factory=list)
     isolation: list[str] = Field(default_factory=list)
+    repaired: bool = False
+    """The first generated test code failed and was rewritten once."""
     environment: list[str] = Field(default_factory=list)
     """How the test environment differed from the repository's own, e.g.
     packages replaced by stubs, or CUDA calls run on the CPU."""

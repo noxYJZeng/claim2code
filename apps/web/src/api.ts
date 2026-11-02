@@ -527,7 +527,7 @@ export async function runVerification(
   }
 }
 
-export type ReferenceCheckStatus = "MATCH" | "MISMATCH" | "ERROR" | "UNTESTABLE";
+export type ReferenceCheckStatus = "MATCH" | "MISMATCH" | "INCONCLUSIVE" | "ERROR" | "UNTESTABLE";
 
 export type ReferenceCase = {
   index: number;
@@ -536,6 +536,9 @@ export type ReferenceCase = {
   actual: string | null;
   expected: string | null;
   detail: string;
+  // Property tests: false when the equality survived perturbing the function.
+  sensitive?: boolean | null;
+  sensitivity?: string;
 };
 
 export type ReferenceCheck = {
@@ -565,6 +568,7 @@ export type ReferenceCheck = {
   atol: number | null;
   cases: ReferenceCase[];
   isolation: string[];
+  repaired?: boolean;
   environment: string[];
   generated_at: string;
 };

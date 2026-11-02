@@ -201,6 +201,7 @@ def _check(
             inputs_code=inputs.inputs_code,
             instance_code=inputs.instance_code,
             property_code="" if reference else inputs.property_code,
+            property_target="" if reference else _method_name(inputs.property_target),
             rtol=rtol,
             atol=atol,
             timeout_seconds=settings.reference_check_timeout_seconds,
@@ -212,6 +213,7 @@ def _check(
         return run, status, text, cases, rtol, atol
 
     run, status, explanation, cases, rtol, atol = execute(impl)
+    was_repaired = False
     failure = setup_failure(run)
     if failure is not None:
         # Generated test code that does not run says nothing about the
@@ -224,7 +226,7 @@ def _check(
             logger.warning("reference_check repair failed claim=%s: %s", claim.claim_id, exc)
         else:
             if testable(repaired, repaired_impl):
-                inputs, impl = repaired, repaired_impl
+                inputs, impl, was_repaired = repaired, repaired_impl, True
                 run, status, explanation, cases, rtol, atol = execute(impl)
 
     confirmed: bool | None = None
@@ -280,6 +282,7 @@ def _check(
         test_kind=TestKind.REFERENCE if impl is not None else TestKind.PROPERTY,
         property_statement="" if impl is not None else inputs.property_statement,
         property_code="" if impl is not None else inputs.property_code,
+        property_target="" if impl is not None else _method_name(inputs.property_target),
         target=target_info,
         reference_code=impl.reference_code if impl is not None else "",
         second_reference_code=second.reference_code if second is not None else "",
@@ -290,8 +293,15 @@ def _check(
         rtol=rtol, atol=atol,
         cases=cases,
         isolation=run.isolation,
+        repaired=was_repaired,
         environment=environment_notes(run.report),
     )
+
+
+def _method_name(text: str) -> str:
+    """``train`` from ``train``, ``MergedLinear.train`` or ``train()``; '' if not a name."""
+    name = text.strip().removesuffix("()").rsplit(".", 1)[-1]
+    return name if name.isidentifier() else ""
 
 
 def setup_failure(run: SandboxRun) -> str | None:
@@ -408,9 +418,23 @@ def summarise(
             cases,
         )
     if claimed:
+        insensitive = [c for c in compared if c.sensitive is False]
+        if insensitive:
+            return (
+                ReferenceCheckStatus.INCONCLUSIVE,
+                f"The property held on all {_inputs(len(compared))}: {claimed}. But it does not "
+                f"test the code it names: {insensitive[0].sensitivity}, so it would also hold "
+                "if that code were wrong. This happens when the code runs the same way on both "
+                f"paths, or when check() recomputes a side by its own formula.{tail}",
+                cases,
+            )
+        unknown = "" if any(c.sensitive for c in compared) else (
+            f" Whether it depends on {qualname} could not be checked"
+            f"{': ' + compared[0].sensitivity if compared[0].sensitivity else ''}."
+        )
         return (
             ReferenceCheckStatus.MATCH,
-            f"The property held on all {_inputs(len(compared))}: {claimed}.{tail}",
+            f"The property held on all {_inputs(len(compared))}: {claimed}.{unknown}{tail}",
             cases,
         )
     if mismatched:

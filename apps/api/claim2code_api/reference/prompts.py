@@ -45,10 +45,17 @@ Then choose the kind of test:
 
     where subject is a fresh object for an instance method (the
     function itself otherwise). Compute first and second along the two
-    paths the claim compares, using the repository's own code, for
-    example the output before and after merging. They must come from
-    different code paths; returning the same computation twice tests
-    nothing. Copy tensors you need before a step changes them in place.
+    paths the claim compares by calling the repository's own methods:
+    for a merge, first = subject(x) before merging, then trigger the
+    repository's own merge (its eval()/train(False) or merge method),
+    then second = subject(x). Never recompute a side with your own
+    formula: then the test checks your algebra, not the repository. Set
+    property_target to the method on subject that performs the step
+    the property checks (for a merge, the method that merges, which may
+    not be the function under test). The harness re-runs check() with
+    that method's result, or the change it makes to the object's
+    weights, perturbed by 1%, and reports the test as inconclusive if
+    the two sides still agree. Copy tensors you need before a step changes them in place.
     State the equality in property_statement and set rtol and atol.
     No reference implementation is written for a property test.
   - test_kind="reference" otherwise: an independent implementation of

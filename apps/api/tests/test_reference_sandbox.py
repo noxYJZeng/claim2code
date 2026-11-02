@@ -254,27 +254,38 @@ class Merging:
         self.merged = False
         self.broken = broken
 
+    def delta(self):
+        return self.d * 1.5 if self.broken else self.d
+
     def merge(self):
-        self.w = self.w + (self.d * 1.5 if self.broken else self.d)
+        self.w = self.w + self.delta()
         self.merged = True
 
     def forward(self, x):
         return self.w * x if self.merged else self.w * x + self.d * x
 """
 
+# The claim's property, through the repository's own merge.
 _MERGE_CHECK = (
     "def check(obj, x):\n"
     "    before = obj.forward(x)\n"
     "    obj.merge()\n"
     "    return before, obj.forward(x)\n"
 )
+# Both sides recomputed with delta() the same way: holds whatever delta() returns.
+_VACUOUS_CHECK = (
+    "def check(obj, x):\n"
+    "    return (obj.w + obj.delta()) * x, obj.w * x + obj.delta() * x\n"
+)
 
 
-def _merge_run(repo: Path, check: str, broken: bool):
+def _merge_run(
+    repo: Path, check: str, broken: bool, qualname: str = "Merging.delta", property_target: str = "",
+):
     (repo / "pkg" / "merging.py").write_text("import numpy as np\n" + class_merge)
     return run_harness(
-        python=sys.executable, repo_root=repo, module_file="pkg/merging.py", qualname="Merging.forward",
-        reference_code="", property_code=check,
+        python=sys.executable, repo_root=repo, module_file="pkg/merging.py", qualname=qualname,
+        reference_code="", property_code=check, property_target=property_target,
         inputs_code=f"def make_inputs():\n    return [{{'instance': {{'broken': {broken}}}, 'args': [2.0]}}]\n",
         instance_code="def make_instance(**c):\n    from pkg.merging import Merging\n    return Merging(**c)\n",
         rtol=1e-9, atol=0, timeout_seconds=30,
@@ -284,13 +295,40 @@ def _merge_run(repo: Path, check: str, broken: bool):
 def test_property_holds_for_a_correct_merge(repo: Path) -> None:
     run = _merge_run(repo, _MERGE_CHECK, broken=False)
     assert run.report is not None
-    assert run.report["cases"][0]["outcome"] == "match"
+    case = run.report["cases"][0]
+    assert case["outcome"] == "match"
+    assert case["sensitive"] is True
 
 
 def test_property_catches_a_wrong_merge(repo: Path) -> None:
     run = _merge_run(repo, _MERGE_CHECK, broken=True)
     assert run.report is not None
     assert run.report["cases"][0]["outcome"] == "mismatch"
+
+
+def test_a_property_that_does_not_depend_on_the_function_is_flagged(repo: Path) -> None:
+    run = _merge_run(repo, _VACUOUS_CHECK, broken=True)  # wrong delta, and still "holds"
+    assert run.report is not None
+    case = run.report["cases"][0]
+    assert case["outcome"] == "match"
+    assert case["sensitive"] is False
+    assert "still agree when Merging.delta is off by 1%" in case["sensitivity"]
+
+
+def test_a_property_that_never_calls_the_function_is_flagged(repo: Path) -> None:
+    run = _merge_run(repo, "def check(obj, x):\n    return obj.w * x, obj.w * x * 1.0\n", broken=False)
+    assert run.report is not None
+    assert run.report["cases"][0]["sensitive"] is False
+    assert "never called" in run.report["cases"][0]["sensitivity"]
+
+
+def test_an_in_place_step_is_perturbed_through_its_changes(repo: Path) -> None:
+    # merge() returns nothing; scaling the change it makes to w breaks the equality.
+    run = _merge_run(repo, _MERGE_CHECK, broken=False, qualname="Merging.forward", property_target="merge")
+    assert run.report is not None
+    case = run.report["cases"][0]
+    assert case["outcome"] == "match"
+    assert case["sensitive"] is True, case
 
 
 def test_property_must_compute_two_sides(repo: Path) -> None:

@@ -445,8 +445,133 @@ def _property_cases(
         record["actual"], record["expected"] = _short(first), _short(second)
         ok, why = compare(first, second, rtol, atol)
         record["outcome"], record["detail"] = ("match" if ok else "mismatch"), why
+        if ok:
+            record["sensitive"], record["sensitivity"] = _sensitivity(
+                spec, target, method, needs_instance, namespace, check, case, seed,
+            )
         cases.append(record)
     return cases
+
+
+def _perturb(value: Any) -> tuple[Any, bool]:
+    """``value`` changed by about 1%, and whether anything numeric was changed."""
+    if isinstance(value, bool) or value is None:
+        return value, False
+    if isinstance(value, float):
+        return value * 1.01 + 1e-3, True
+    if isinstance(value, list | tuple):
+        parts = [_perturb(v) for v in value]
+        return type(value)(p for p, _ in parts), any(c for _, c in parts)
+    if type(value).__module__.startswith("torch") and hasattr(value, "is_floating_point"):
+        return (value * 1.01 + 1e-3, True) if value.is_floating_point() else (value, False)
+    try:
+        import numpy as np
+        if isinstance(value, np.ndarray) and np.issubdtype(value.dtype, np.floating):
+            return value * 1.01 + 1e-3, True
+    except ImportError:
+        pass
+    return value, False
+
+
+def _sensitivity(
+    spec: dict[str, Any], target: Any, method: str, needs_instance: bool,
+    namespace: dict[str, Any], check: Any, case: dict[str, Any], seed: int,
+) -> tuple[bool | None, str]:
+    """Does the property depend on the function under test?
+
+    Re-runs ``check()`` with the function's output changed by about 1%.
+    If the two sides still agree, the property would hold even if the
+    function were wrong: it does not test it (for example when check()
+    computes both sides with the function the same way, or recomputes
+    them from its own formulas).
+    """
+    seen = {"called": False, "changed": False}
+    name = spec.get("property_target") or method
+
+    def perturbed(original: Any, owner: Any = None) -> Any:
+        def call(*args: Any, **kwargs: Any) -> Any:
+            seen["called"] = True
+            before = _float_state(owner) if owner is not None else {}
+            value, changed = _perturb(original(*args, **kwargs))
+            if not changed and owner is not None:
+                # An in-place step (a merge into the weights): scale what it
+                # changed in the object's numeric state instead.
+                changed = _scale_changes(owner, before)
+            seen["changed"] = seen["changed"] or changed
+            return value
+        return call
+
+    try:
+        _seed(seed)
+        if needs_instance:
+            subject = namespace["make_instance"](**dict(case.get("instance") or {}))
+            # An instance attribute shadows the method, also for calls the
+            # class makes on itself (self.merge_AB() inside train()).
+            object.__setattr__(subject, name, perturbed(getattr(subject, name), subject))
+        else:
+            subject = perturbed(target)
+        _seed(seed)
+        first, second = _call(functools.partial(check, subject), case)
+    except BaseException as exc:  # noqa: BLE001
+        return None, f"could not re-run with {spec['qualname']} perturbed: {_error(exc)}"
+    label = _label(spec, name, needs_instance)
+    if not seen["called"]:
+        return False, f"check() never called {label} through its subject"
+    if not seen["changed"]:
+        return None, f"{label} neither returns nor changes anything numeric to perturb"
+    still_equal, _ = compare(first, second, float(spec["rtol"]), float(spec["atol"]))
+    if still_equal:
+        return False, f"the two sides still agree when {label} is off by 1%"
+    return True, ""
+
+
+def _label(spec: dict[str, Any], name: str, needs_instance: bool) -> str:
+    if not needs_instance:
+        return spec["qualname"]
+    owner = spec["qualname"].rsplit(".", 1)[0]
+    return f"{owner}.{name}"
+
+
+def _float_state(obj: Any) -> dict[str, Any]:
+    """Copies of an object's floating-point tensors and arrays, by attribute path."""
+    state: dict[str, Any] = {}
+    if hasattr(obj, "named_parameters") and hasattr(obj, "named_buffers"):
+        for key, t in [*obj.named_parameters(), *obj.named_buffers()]:
+            if t.is_floating_point():
+                state[key] = t.detach().clone()
+    try:
+        import numpy as np
+        for key, v in vars(obj).items():
+            if isinstance(v, np.ndarray) and np.issubdtype(v.dtype, np.floating):
+                state[key] = v.copy()
+    except (ImportError, TypeError):
+        pass
+    return state
+
+
+def _scale_changes(obj: Any, before: dict[str, Any]) -> bool:
+    """Make every change since ``before`` 1% larger; whether anything changed."""
+    after = _float_state(obj)
+    live: dict[str, Any] = {}
+    if hasattr(obj, "named_parameters") and hasattr(obj, "named_buffers"):
+        live = {**dict(obj.named_buffers()), **dict(obj.named_parameters())}
+    changed = False
+    for key, old in before.items():
+        new = after.get(key)
+        if new is None or new.shape != old.shape:
+            continue
+        if key in live:
+            import torch
+            if torch.equal(new, old):
+                continue
+            live[key].data.copy_(old + (new - old) * 1.01)
+        else:
+            import numpy as np
+            if np.array_equal(new, old):
+                continue
+            setattr(obj, key, old + (new - old) * 1.01)
+        changed = True
+    return changed
 
 
 def main() -> None:

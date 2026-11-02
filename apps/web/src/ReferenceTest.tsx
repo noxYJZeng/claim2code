@@ -40,6 +40,7 @@ type ReferenceTestProps = {
 const STATUS_TEXT: Record<ReferenceCheckStatus, string> = {
   MATCH: "Same output",
   MISMATCH: "Different output",
+  INCONCLUSIVE: "Inconclusive",
   ERROR: "Could not run",
   UNTESTABLE: "Not testable",
 };
@@ -47,6 +48,7 @@ const STATUS_TEXT: Record<ReferenceCheckStatus, string> = {
 const STATUS_STYLE: Record<ReferenceCheckStatus, string> = {
   MATCH: "bg-positive-bg text-positive-ink",
   MISMATCH: "bg-negative-bg text-negative-ink",
+  INCONCLUSIVE: "bg-warning-bg text-warning-ink",
   ERROR: "bg-warning-bg text-warning-ink",
   UNTESTABLE: "bg-neutral-bg text-neutral-ink",
 };
@@ -251,6 +253,11 @@ function Result({ check }: { check: ReferenceCheck }) {
         <p className="mt-3 text-[13px]" data-testid="reference-environment">
           Test environment: {check.environment.join("; ")}. A difference here can come from the
           environment rather than the code.
+        </p>
+      )}
+      {check.repaired && (
+        <p className="mt-3 text-[12px] text-ink-muted">
+          The first generated test code failed and was rewritten once.
         </p>
       )}
       {check.isolation.length > 0 && (

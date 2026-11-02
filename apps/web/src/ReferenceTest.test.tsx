@@ -112,6 +112,20 @@ describe("ReferenceTest", () => {
     expect(screen.queryByText("Reference implementation")).not.toBeInTheDocument();
   });
 
+  it("flags a property that does not test the function", async () => {
+    stubFetch(true, [{
+      ...MISMATCH,
+      status: "INCONCLUSIVE",
+      test_kind: "property",
+      property_statement: "Merging BA into W leaves the output unchanged.",
+      explanation: "The property held on all 5 inputs. But it does not test merge_AB.",
+      repaired: true,
+    }]);
+    render(<Harness />);
+    expect(await screen.findByTestId("reference-status")).toHaveTextContent("Inconclusive");
+    expect(screen.getByText(/rewritten once/)).toBeInTheDocument();
+  });
+
   it("cannot run without a repository", async () => {
     stubFetch(true, []);
     render(<Harness bound={false} />);

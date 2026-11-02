@@ -129,7 +129,7 @@ class _Client:
             input_notes="two float lists",
             test_kind="property" if self.property_code else "reference",
             property_statement="Scaling x, y and beta by 2 doubles the loss" if self.property_code else "",
-            property_code=self.property_code, rtol=1e-6, atol=1e-9,
+            property_code=self.property_code, property_target="", rtol=1e-6, atol=1e-9,
         )
 
     def reference_implementation(self, *, system: str, payload: str) -> ReferenceImplementation:
@@ -216,6 +216,7 @@ def test_broken_test_code_gets_one_repair(monkeypatch: pytest.MonkeyPatch, repo_
     repair_payload = client.payloads[2]
     assert "# Your previous attempt failed" in repair_payload
     assert "shapes do not fit" in repair_payload
+    assert check.repaired is True
 
 
 def test_repair_is_tried_only_once(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
@@ -241,7 +242,7 @@ def test_property_that_holds(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) ->
     check = workflow_mod.run_reference_check(db=db, analysis_id=state.analysis_id, claim_id="c1")
     assert check.status == ReferenceCheckStatus.MATCH
     assert check.test_kind.value == "property"
-    assert check.explanation.startswith("The property held on all 2 inputs: Scaling x, y and beta")
+    assert check.explanation == "The property held on all 2 inputs: Scaling x, y and beta by 2 doubles the loss."
     assert check.reference_code == ""
     assert check.property_code == _HOMOGENEOUS
     assert len(client.payloads) == 1  # no reference is written for a property
@@ -353,6 +354,18 @@ def test_summarise_counts_errors_apart_from_comparisons() -> None:
         "All 1 input gave the same output from f and from the reference written from the paper. "
         "Raised an error and not compared: 1 input in f."
     )
+
+
+def test_summarise_marks_an_insensitive_property_inconclusive() -> None:
+    status, _, _ = workflow_mod.summarise(
+        SandboxRun(report={"stage": "done", "cases": [
+            {"index": 0, "inputs": "a", "outcome": "match", "sensitive": True},
+            {"index": 1, "inputs": "b", "outcome": "match", "sensitive": False,
+             "sensitivity": "the two sides still agree when f is off by 1%"},
+        ]}, isolation=[]),
+        "f", 60, property_statement="Merging leaves the output unchanged.",
+    )
+    assert status == ReferenceCheckStatus.INCONCLUSIVE
 
 
 def test_summarise_errors() -> None:

@@ -473,56 +473,120 @@ def _perturb(value: Any) -> tuple[Any, bool]:
     return value, False
 
 
+_MAX_PROBED = 6
+
+
 def _sensitivity(
     spec: dict[str, Any], target: Any, method: str, needs_instance: bool,
     namespace: dict[str, Any], check: Any, case: dict[str, Any], seed: int,
 ) -> tuple[bool | None, str]:
-    """Does the property depend on the function under test?
+    """Does the property depend on the repository's code?
 
-    Re-runs ``check()`` with the function's output changed by about 1%.
-    If the two sides still agree, the property would hold even if the
-    function were wrong: it does not test it (for example when check()
-    computes both sides with the function the same way, or recomputes
-    them from its own formulas).
+    Re-runs ``check()`` with one repository method's result (or, for an
+    in-place step, the change it makes to the object's weights) moved by
+    about 1%. If the two sides still agree whichever method is moved, the
+    property would hold even if the code were wrong: it does not test it
+    (check() recomputes the sides by its own formulas, or the code runs
+    the same way on both paths).
+
+    For an object, the methods tried are the named property target, the
+    method under test, and the repository methods check() actually calls
+    on it; the first whose perturbation breaks the equality is reported.
     """
-    seen = {"called": False, "changed": False}
-    name = spec.get("property_target") or method
+    rtol, atol = float(spec["rtol"]), float(spec["atol"])
 
-    def perturbed(original: Any, owner: Any = None) -> Any:
-        def call(*args: Any, **kwargs: Any) -> Any:
-            seen["called"] = True
-            before = _float_state(owner) if owner is not None else {}
-            value, changed = _perturb(original(*args, **kwargs))
-            if not changed and owner is not None:
-                # An in-place step (a merge into the weights): scale what it
-                # changed in the object's numeric state instead.
-                changed = _scale_changes(owner, before)
-            seen["changed"] = seen["changed"] or changed
-            return value
-        return call
+    def trial(name: str | None) -> tuple[str, str]:
+        seen = {"called": False, "changed": False}
 
+        def perturbed(original: Any, owner: Any = None) -> Any:
+            def call(*args: Any, **kwargs: Any) -> Any:
+                seen["called"] = True
+                before = _float_state(owner) if owner is not None else {}
+                value, changed = _perturb(original(*args, **kwargs))
+                if not changed and owner is not None:
+                    # An in-place step (a merge into the weights): scale what
+                    # it changed in the object's numeric state instead.
+                    changed = _scale_changes(owner, before)
+                seen["changed"] = seen["changed"] or changed
+                return value
+            return call
+
+        try:
+            _seed(seed)
+            if name is not None:
+                subject = namespace["make_instance"](**dict(case.get("instance") or {}))
+                # An instance attribute shadows the method, also for calls the
+                # class makes on itself (self.merge_AB() inside train()).
+                object.__setattr__(subject, name, perturbed(getattr(subject, name), subject))
+            else:
+                subject = perturbed(target)
+            _seed(seed)
+            first, second = _call(functools.partial(check, subject), case)
+        except BaseException as exc:  # noqa: BLE001
+            return "error", _error(exc)
+        if not seen["called"]:
+            return "not_called", ""
+        if not seen["changed"]:
+            return "unchanged", ""
+        still_equal, _ = compare(first, second, rtol, atol)
+        return ("insensitive" if still_equal else "sensitive"), ""
+
+    if not needs_instance:
+        outcome, detail = trial(None)
+        names = [spec["qualname"]]
+        results = [(spec["qualname"], outcome, detail)]
+    else:
+        owner = spec["qualname"].rsplit(".", 1)[0]
+        named = [n for n in (spec.get("property_target"), method) if n]
+        called = _called_methods(namespace, check, case, seed)
+        names = list(dict.fromkeys([*named, *called]))[:_MAX_PROBED]
+        results = [(f"{owner}.{n}", *trial(n)) for n in names]
+
+    for label, outcome, _ in results:
+        if outcome == "sensitive":
+            return True, f"the two sides disagree when {label} is off by 1%"
+    errors = [f"{label}: {detail}" for label, outcome, detail in results if outcome == "error"]
+    insensitive = [label for label, outcome, _ in results if outcome == "insensitive"]
+    if insensitive:
+        return False, f"the two sides still agree when {' or '.join(insensitive)} is off by 1%"
+    if all(outcome == "not_called" for _, outcome, _ in results):
+        return False, "check() never called the repository's code through its subject"
+    if errors:
+        return None, f"could not re-run check() with the code perturbed ({errors[0]})"
+    return None, "the code it calls neither returns nor changes anything numeric to perturb"
+
+
+def _called_methods(namespace: dict[str, Any], check: Any, case: dict[str, Any], seed: int) -> list[str]:
+    """Names of the repository's own methods check() calls on a fresh object, in order."""
+    calls: list[str] = []
     try:
         _seed(seed)
-        if needs_instance:
-            subject = namespace["make_instance"](**dict(case.get("instance") or {}))
-            # An instance attribute shadows the method, also for calls the
-            # class makes on itself (self.merge_AB() inside train()).
-            object.__setattr__(subject, name, perturbed(getattr(subject, name), subject))
-        else:
-            subject = perturbed(target)
+        subject = namespace["make_instance"](**dict(case.get("instance") or {}))
+        for name in _repo_methods(type(subject)):
+            original = getattr(subject, name)
+
+            def record(*args: Any, _name: str = name, _orig: Any = original, **kwargs: Any) -> Any:
+                calls.append(_name)
+                return _orig(*args, **kwargs)
+            object.__setattr__(subject, name, record)
         _seed(seed)
-        first, second = _call(functools.partial(check, subject), case)
-    except BaseException as exc:  # noqa: BLE001
-        return None, f"could not re-run with {spec['qualname']} perturbed: {_error(exc)}"
-    label = _label(spec, name, needs_instance)
-    if not seen["called"]:
-        return False, f"check() never called {label} through its subject"
-    if not seen["changed"]:
-        return None, f"{label} neither returns nor changes anything numeric to perturb"
-    still_equal, _ = compare(first, second, float(spec["rtol"]), float(spec["atol"]))
-    if still_equal:
-        return False, f"the two sides still agree when {label} is off by 1%"
-    return True, ""
+        _call(functools.partial(check, subject), case)
+    except BaseException:  # noqa: BLE001 — discovery is best effort
+        pass
+    return list(dict.fromkeys(calls))
+
+
+def _repo_methods(cls: type) -> list[str]:
+    """Methods defined by the repository's classes in ``cls``'s MRO, not by libraries."""
+    names: list[str] = []
+    for klass in cls.__mro__:
+        module = getattr(klass, "__module__", "") or ""
+        if module.split(".")[0] in _NEVER_STUB or module in ("builtins", "abc", "typing"):
+            continue
+        for name, value in vars(klass).items():
+            if inspect.isfunction(value) and not (name.startswith("__") and name.endswith("__")):
+                names.append(name)
+    return list(dict.fromkeys(names))
 
 
 def _label(spec: dict[str, Any], name: str, needs_instance: bool) -> str:

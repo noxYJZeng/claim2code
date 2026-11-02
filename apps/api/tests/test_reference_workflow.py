@@ -242,7 +242,10 @@ def test_property_that_holds(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) ->
     check = workflow_mod.run_reference_check(db=db, analysis_id=state.analysis_id, claim_id="c1")
     assert check.status == ReferenceCheckStatus.MATCH
     assert check.test_kind.value == "property"
-    assert check.explanation == "The property held on all 2 inputs: Scaling x, y and beta by 2 doubles the loss."
+    assert check.explanation == (
+        "The property held on all 2 inputs: Scaling x, y and beta by 2 doubles the loss. "
+        "It tests the repository's code: the two sides disagree when smooth_l1 is off by 1%."
+    )
     assert check.reference_code == ""
     assert check.property_code == _HOMOGENEOUS
     assert len(client.payloads) == 1  # no reference is written for a property

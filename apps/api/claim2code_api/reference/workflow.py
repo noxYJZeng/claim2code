@@ -428,8 +428,11 @@ def summarise(
                 f"paths, or when check() recomputes a side by its own formula.{tail}",
                 cases,
             )
-        unknown = "" if any(c.sensitive for c in compared) else (
-            f" Whether it depends on {qualname} could not be checked"
+        sensitive = next((c for c in compared if c.sensitive), None)
+        unknown = (
+            f" It tests the repository's code: {sensitive.sensitivity}."
+            if sensitive is not None and sensitive.sensitivity
+            else f" Whether it depends on the repository's code could not be checked"
             f"{': ' + compared[0].sensitivity if compared[0].sensitivity else ''}."
         )
         return (

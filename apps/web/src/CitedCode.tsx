@@ -46,15 +46,15 @@ export default function CitedCode({ analysisId, citation }: CitedCodeProps) {
   return (
     <div data-testid="code-citation">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-mono text-[11px] text-slate-600">
+        <p className="font-mono text-xs text-ink-2">
           {excerpt?.file_path ?? citation.file_path}:{range}
         </p>
-        <div className="flex gap-3 text-[11px]">
+        <div className="flex gap-4 text-xs">
           {excerpt && excerpt.lines.length < excerpt.total_lines && context === CONTEXT && (
             <button
               type="button"
               onClick={() => setContext(WIDE_CONTEXT)}
-              className="text-slate-500 hover:underline"
+              className="link"
               data-testid="code-more-context"
             >
               More context
@@ -65,7 +65,7 @@ export default function CitedCode({ analysisId, citation }: CitedCodeProps) {
               href={excerpt.url}
               target="_blank"
               rel="noreferrer"
-              className="text-slate-500 hover:underline"
+              className="link"
             >
               View on GitHub ↗
             </a>
@@ -75,7 +75,7 @@ export default function CitedCode({ analysisId, citation }: CitedCodeProps) {
 
       {excerpt ? (
         <pre
-          className="mt-1 max-h-96 overflow-auto rounded bg-slate-900 py-2 font-mono text-[11px] leading-relaxed text-slate-100"
+          className="mt-1.5 max-h-96 overflow-auto rounded-sm border border-rule bg-paper py-2 font-mono text-xs leading-relaxed text-ink"
           data-testid="code-excerpt"
         >
           {excerpt.lines.map((line) => {
@@ -83,10 +83,10 @@ export default function CitedCode({ analysisId, citation }: CitedCodeProps) {
             return (
               <div
                 key={line.number}
-                className={cited ? "bg-amber-400/20" : "opacity-60"}
+                className={cited ? "border-l-2 border-ink bg-hl/45" : "border-l-2 border-transparent text-ink-3"}
                 data-cited={cited || undefined}
               >
-                <span className="inline-block w-12 select-none pr-3 text-right text-slate-500">
+                <span className="inline-block w-12 select-none pr-4 text-right text-ink-3">
                   {line.number}
                 </span>
                 {line.text || " "}
@@ -96,15 +96,15 @@ export default function CitedCode({ analysisId, citation }: CitedCodeProps) {
         </pre>
       ) : error ? (
         <div className="mt-1" data-testid="code-excerpt-error">
-          <p className="text-[11px] text-rose-700">
+          <p className="text-xs text-verdict-bad">
             Could not load the file ({error}); showing the model's quote instead.
           </p>
-          <pre className="mt-1 overflow-x-auto rounded bg-slate-100 p-2 font-mono text-[11px]">
+          <pre className="mt-1.5 overflow-x-auto rounded-sm bg-paper px-3 py-2 font-mono text-xs">
             {citation.quote}
           </pre>
         </div>
       ) : (
-        <p className="mt-1 text-[11px] text-slate-400">Loading code…</p>
+        <p className="mt-1.5 text-xs text-ink-3">Loading code…</p>
       )}
     </div>
   );

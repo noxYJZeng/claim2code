@@ -57,79 +57,56 @@ export default function SymbolsList({ repositoryId }: SymbolsListProps) {
 
   if (error) {
     return (
-      <section
-        className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-800"
-        data-testid="symbols-error"
-      >
+      <p className="error-note" data-testid="symbols-error">
         Failed to load symbols: {error}
-      </section>
+      </p>
     );
   }
 
   if (!grouped) {
     return (
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500"
-        data-testid="symbols-loading"
-      >
+      <p className="text-sm text-ink-3" data-testid="symbols-loading">
         Loading symbols…
-      </section>
+      </p>
     );
   }
 
   if (grouped.length === 0) {
     return (
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600"
-        data-testid="symbols-empty"
-      >
-        The repo indexed but no code symbols were extracted (it might
-        only contain data / docs files).
-      </section>
+      <p className="text-sm text-ink-2" data-testid="symbols-empty">
+        The repo indexed but no code symbols were extracted (it might only contain
+        data or docs files).
+      </p>
     );
   }
 
   return (
-    <section
-      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-      data-testid="symbols-list"
-    >
-      <div className="mb-4 flex items-baseline justify-between">
-        <h2 className="text-lg font-medium">Extracted symbols</h2>
-        <span className="text-sm text-slate-500">
-          {symbols?.length ?? 0} symbol{(symbols?.length ?? 0) === 1 ? "" : "s"}{" "}
-          across {grouped.length} file{grouped.length === 1 ? "" : "s"}
-        </span>
-      </div>
+    <section data-testid="symbols-list">
+      <p className="text-sm text-ink-2">
+        {symbols?.length ?? 0} symbol{(symbols?.length ?? 0) === 1 ? "" : "s"} across{" "}
+        {grouped.length} file{grouped.length === 1 ? "" : "s"}.
+      </p>
 
-      <ul className="space-y-4">
+      <ul className="mt-6 space-y-6">
         {grouped.map((file) => (
-          <li
-            key={file.path}
-            data-testid="symbols-file"
-            className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-          >
-            <div className="mb-2 flex items-baseline justify-between gap-2">
-              <code
-                data-testid="symbols-file-path"
-                className="text-xs font-medium text-slate-700"
-              >
+          <li key={file.path} data-testid="symbols-file">
+            <div className="flex items-baseline justify-between gap-2 border-b border-rule pb-1.5">
+              <code data-testid="symbols-file-path" className="font-mono text-sm font-medium">
                 {file.path}
               </code>
-              <span className="text-xs text-slate-500">
+              <span className="text-xs text-ink-3">
                 {file.items.length + file.hidden} symbol
                 {file.items.length + file.hidden === 1 ? "" : "s"}
               </span>
             </div>
-            <ul className="space-y-1">
+            <ul className="mt-2 space-y-1">
               {file.items.map((sym) => (
                 <SymbolRow key={`${sym.file_path}:${sym.start_line}`} sym={sym} />
               ))}
             </ul>
             {file.hidden > 0 && (
-              <p className="mt-2 text-xs text-slate-500">
-                + {file.hidden} more symbol{file.hidden === 1 ? "" : "s"} not
-                shown
+              <p className="mt-2 text-xs text-ink-3">
+                + {file.hidden} more symbol{file.hidden === 1 ? "" : "s"} not shown
               </p>
             )}
           </li>
@@ -143,26 +120,16 @@ function SymbolRow({ sym }: { sym: CodeSymbol }) {
   return (
     <li
       data-testid="symbol-row"
-      className="flex items-baseline gap-3 text-sm"
+      className="grid grid-cols-[3.5rem_5rem_minmax(0,1fr)] items-baseline gap-3 text-sm"
     >
-      <span className="shrink-0 rounded-full bg-slate-900 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-white">
-        {sym.kind}
+      <span className="text-right font-mono text-xs text-ink-3">L{sym.start_line}</span>
+      <span className="text-xs text-ink-3">
+        {sym.kind} · {sym.language}
       </span>
-      <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-700">
-        {sym.language}
-      </span>
-      <code
-        data-testid="symbol-name"
-        className="font-mono text-sm text-slate-900"
-      >
+      <code data-testid="symbol-name" className="truncate font-mono text-[13px]">
         {sym.name}
-        {sym.signature && (
-          <span className="text-slate-500">{sym.signature}</span>
-        )}
+        {sym.signature && <span className="text-ink-3">{sym.signature}</span>}
       </code>
-      <span className="shrink-0 text-xs text-slate-400">
-        L{sym.start_line}:{sym.start_col}
-      </span>
     </li>
   );
 }

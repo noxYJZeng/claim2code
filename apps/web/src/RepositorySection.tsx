@@ -13,15 +13,7 @@ type RepositorySectionProps = {
 // POST /repositories {url, analysis_id} runs the full clone+walk+parse
 // pipeline synchronously; the response carries
 // {repository_id, n_files, n_symbols, …}. On success, the parent's
-// onCloned callback fires so App can render <SymbolsList/> below.
-//
-// The status badge mirrors the ``index_status`` from the response:
-//   * done    — green "indexed"
-//   * error   — red "failed"  (detail in error message)
-//   * other   — slate "pending"  (transient; the workflow is sync in v1)
-//
-// Phase 5+ replaces this with a router-aware /repo route; for now
-// the section lives inline under the analysis.
+// onCloned callback fires so App can show the repository and its tabs.
 export default function RepositorySection({
   analysisId,
   onCloned,
@@ -49,18 +41,14 @@ export default function RepositorySection({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-      data-testid="repository-section"
-    >
-      <h2 className="text-lg font-medium">Bind the paper's repository</h2>
-      <p className="mt-1 text-sm text-slate-600">
-        A public GitHub URL. The repository is cloned and its code indexed
-        for retrieval; it is never executed. Repositories up to 200 MB.
+    <form onSubmit={handleSubmit} className="panel p-6" data-testid="repository-section">
+      <h3 className="font-serif text-lg font-medium">Bind the paper's repository</h3>
+      <p className="mt-1 text-sm text-ink-2">
+        A public GitHub URL. The code is cloned and indexed for retrieval, never
+        executed. Up to 200 MB.
       </p>
 
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
           type="url"
           inputMode="url"
@@ -69,26 +57,26 @@ export default function RepositorySection({
           data-testid="repo-url-input"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+          className="field font-mono"
         />
         <button
           type="submit"
           disabled={submitting}
           data-testid="repo-clone-button"
-          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="btn-primary shrink-0"
         >
           {submitting && <Spinner />}
           {submitting ? "Indexing…" : "Clone & index"}
         </button>
       </div>
       {submitting && (
-        <p className="mt-3 text-xs text-slate-500">
+        <p className="mt-3 text-xs text-ink-3">
           Cloning, parsing and embedding the code — a few minutes for a large repository.
         </p>
       )}
 
       {error && (
-        <p className="mt-3 text-sm text-rose-700" data-testid="repo-error">
+        <p className="error-note mt-4" data-testid="repo-error">
           {error}
         </p>
       )}

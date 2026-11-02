@@ -1,95 +1,104 @@
 import { useState } from "react";
 import demo from "./data/portfolio-demo.json";
-
-const statusLabels: Record<string, string> = {
-  VERIFIED: "Verified",
-  PARTIALLY_VERIFIED: "Partially verified",
-  CONTRADICTED: "Contradicted",
-  UNVERIFIED: "Unverified",
-};
+import type { VerificationStatus } from "./api";
+import { STATUS_EDGE, STATUS_INK, STATUS_LABEL, STATUS_MARK } from "./verdicts";
 
 export default function DemoAnalysis({ onOpenWorkbench }: { onOpenWorkbench: () => void }) {
   const [selectedId, setSelectedId] = useState(demo.cases[0].id);
   const selected = demo.cases.find((item) => item.id === selectedId) ?? demo.cases[0];
 
+  const recorded = selected.recordedStatus as VerificationStatus;
+  const annotated = selected.annotatedStatus as VerificationStatus;
+
   return (
-    <main className="min-h-screen bg-slate-50 font-sans text-slate-900" data-testid="sample-analysis">
-      <div className="mx-auto max-w-5xl px-6 py-12">
-        <header>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight">Claim2Code</h1>
-            <span className="rounded-full bg-slate-200 px-3 py-1 text-xs font-medium text-slate-700">
-              Read-only sample · no model running
-            </span>
+    <main className="min-h-screen" data-testid="sample-analysis">
+      <header className="border-b border-rule">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <div className="flex items-baseline gap-3">
+            <h1 className="font-serif text-xl font-semibold tracking-tight">Claim2Code</h1>
+            <span className="font-mono text-xs text-ink-3">sample · read-only · no model running</span>
           </div>
-          <h2 className="mt-8 text-2xl font-semibold">Inspect recorded claim-to-code results</h2>
-          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
-            Explore a supported result, a potential configuration discrepancy, and a result
-            with insufficient evidence. These examples are bundled with the site and work
-            without an API key, model server, or uploaded files.
+          <button type="button" onClick={onOpenWorkbench} className="link text-sm">
+            Open the workbench
+          </button>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-5xl px-4 pb-24 pt-8 sm:px-6">
+        <section className="max-w-3xl pb-8 pt-6">
+          <h2 className="font-serif text-3xl leading-tight tracking-tight sm:text-4xl">
+            Recorded claim-to-code results
+          </h2>
+          <p className="mt-4 text-[15px] leading-relaxed text-ink-2">
+            A supported result, a possible configuration discrepancy, and a result with
+            insufficient evidence. They are bundled with the page and need no API key,
+            model server or upload.
           </p>
-          <p className="mt-3 max-w-3xl text-xs leading-relaxed text-slate-500" data-testid="sample-scope">
+          <p className="mt-3 text-xs leading-relaxed text-ink-3" data-testid="sample-scope">
             {demo.scope} A recorded verdict is a model output, not an independent proof.
           </p>
-        </header>
+        </section>
 
-        <div className="mt-8 grid gap-5 md:grid-cols-[15rem_minmax(0,1fr)]">
-          <nav aria-label="Sample cases" className="space-y-2">
-            {demo.cases.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setSelectedId(item.id)}
-                aria-pressed={selectedId === item.id}
-                className={`w-full rounded-xl border px-4 py-3 text-left text-sm ${
-                  selectedId === item.id
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
-                }`}
-              >
-                <span className="block font-medium">{item.label}</span>
-                <span className="mt-1 block text-xs opacity-70">{item.id}</span>
-              </button>
-            ))}
+        <div className="grid gap-8 border-t border-rule pt-8 md:grid-cols-[14rem_minmax(0,1fr)]">
+          <nav aria-label="Sample cases" className="flex flex-col gap-1">
+            {demo.cases.map((item) => {
+              const active = selectedId === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSelectedId(item.id)}
+                  aria-pressed={active}
+                  className={`border-l-2 py-2 pl-3 text-left text-sm ${
+                    active ? "border-ink text-ink" : "border-transparent text-ink-3 hover:text-ink"
+                  }`}
+                >
+                  <span className={`block ${active ? "font-medium" : ""}`}>{item.label}</span>
+                  <span className="mt-0.5 block font-mono text-xs opacity-70">{item.id}</span>
+                </button>
+              );
+            })}
           </nav>
 
-          <article className="min-w-0 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="sample-claim">
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-              Manually curated claim
-            </p>
-            <h3 id="sample-claim" className="mt-2 text-lg font-medium leading-relaxed">
+          <article className="min-w-0" aria-labelledby="sample-claim">
+            <p className="eyebrow">Curated claim</p>
+            <h3
+              id="sample-claim"
+              className={`mt-3 border-l-2 pl-4 font-serif text-xl leading-relaxed ${STATUS_EDGE[recorded]}`}
+            >
               {selected.claim}
             </h3>
-            <p className="mt-3 text-sm text-slate-500">{selected.paperTitle}</p>
-            <div className="mt-3 flex flex-wrap gap-4 text-xs">
-              <a href={selected.paperUrl} target="_blank" rel="noreferrer" className="text-slate-600 underline">
-                Paper on arXiv ↗
+            <p className="mt-3 pl-4 text-sm text-ink-2">
+              {selected.paperTitle} ·{" "}
+              <a href={selected.paperUrl} target="_blank" rel="noreferrer" className="link">
+                arXiv ↗
+              </a>{" "}
+              ·{" "}
+              <a href={selected.repoUrl} target="_blank" rel="noreferrer" className="link">
+                repository ↗
               </a>
-              <a href={selected.repoUrl} target="_blank" rel="noreferrer" className="text-slate-600 underline">
-                Reference repository ↗
-              </a>
-            </div>
+            </p>
 
-            <dl className="mt-6 grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-xs text-slate-500">Recorded model verdict</dt>
-                <dd className="mt-1 font-semibold" data-testid="sample-verdict">
-                  {statusLabels[selected.recordedStatus]}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-xs text-slate-500">Development annotation</dt>
-                <dd className="mt-1 font-medium">{statusLabels[selected.annotatedStatus]}</dd>
-              </div>
+            <dl className="mt-8 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[12rem_minmax(0,1fr)]">
+              <dt className="text-ink-3">Recorded model verdict</dt>
+              <dd className={`font-medium ${STATUS_INK[recorded]}`} data-testid="sample-verdict">
+                <span aria-hidden className="mr-1.5 font-mono">{STATUS_MARK[recorded]}</span>
+                {STATUS_LABEL[recorded]}
+              </dd>
+              <dt className="text-ink-3">Development annotation</dt>
+              <dd className={STATUS_INK[annotated]}>
+                <span aria-hidden className="mr-1.5 font-mono">{STATUS_MARK[annotated]}</span>
+                {STATUS_LABEL[annotated]}
+              </dd>
             </dl>
-            <p className="mt-3 text-sm leading-relaxed text-slate-600">{selected.note}</p>
+            <p className="mt-4 text-sm leading-relaxed text-ink-2">{selected.note}</p>
 
             {selected.discrepancies.length > 0 && (
-              <section className="mt-6" aria-label="Recorded discrepancies">
-                <h4 className="text-sm font-semibold">Potential discrepancies reported by the model</h4>
-                <ul className="mt-2 space-y-2 text-sm leading-relaxed text-slate-600">
+              <section className="mt-8" aria-label="Recorded discrepancies">
+                <h4 className="eyebrow mb-3">Possible discrepancies reported by the model</h4>
+                <ul className="space-y-3 text-sm leading-relaxed text-ink-2">
                   {selected.discrepancies.map((item, index) => (
-                    <li key={index} className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <li key={index} className="border-l-2 border-verdict-partial pl-3">
                       {item.detail}
                     </li>
                   ))}
@@ -97,25 +106,28 @@ export default function DemoAnalysis({ onOpenWorkbench }: { onOpenWorkbench: () 
               </section>
             )}
 
-            <section className="mt-6" aria-label="Recorded code citations">
-              <h4 className="text-sm font-semibold">Recorded code citations</h4>
-              <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                Saved quotes from the historical evaluation, not a fresh read of the current
-                repository. Source revisions and locations should be checked before reuse.
+            <section className="mt-8" aria-label="Recorded code citations">
+              <h4 className="eyebrow">Recorded code citations</h4>
+              <p className="mt-1 text-xs leading-relaxed text-ink-3">
+                Saved quotes from the historical evaluation, not a fresh read of the
+                current repository.
               </p>
               {selected.evidence.length === 0 ? (
-                <p className="mt-3 rounded-lg border border-slate-200 p-4 text-sm text-slate-600" data-testid="sample-no-evidence">
+                <p className="mt-4 text-sm text-ink-2" data-testid="sample-no-evidence">
                   No code evidence was recorded. The result remains Unverified even though
                   the development annotation expects support.
                 </p>
               ) : (
-                <div className="mt-3 space-y-3">
+                <div className="mt-4 space-y-3">
                   {selected.evidence.map((item, index) => (
-                    <details key={`${selected.id}-${index}`} className="rounded-lg border border-slate-200">
-                      <summary className="cursor-pointer px-3 py-2 font-mono text-xs text-slate-600">
+                    <details key={`${selected.id}-${index}`} open={index === 0}>
+                      <summary className="cursor-pointer font-mono text-xs text-ink-2 hover:text-ink">
                         {item.file_path}:{item.start_line}-{item.end_line}
                       </summary>
-                      <pre className="max-h-80 overflow-auto rounded-b-lg bg-slate-900 p-3 text-xs leading-relaxed text-slate-100" data-testid="sample-code-quote">
+                      <pre
+                        className="mt-1.5 max-h-80 overflow-auto rounded-sm border border-l-2 border-rule border-l-ink bg-hl/50 px-3 py-2 font-mono text-xs leading-relaxed"
+                        data-testid="sample-code-quote"
+                      >
                         {item.quote}
                       </pre>
                     </details>
@@ -123,15 +135,12 @@ export default function DemoAnalysis({ onOpenWorkbench }: { onOpenWorkbench: () 
                 </div>
               )}
             </section>
+
+            <p className="mt-12 border-t border-rule pt-4 text-xs text-ink-3">
+              Source: {demo.source}. The examples keep their recorded verdicts.
+            </p>
           </article>
         </div>
-
-        <footer className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-5 text-xs text-slate-500">
-          <p>Source: {demo.source}. The examples retain their recorded verdicts.</p>
-          <button type="button" onClick={onOpenWorkbench} className="font-medium text-slate-700 underline">
-            Open connected workbench
-          </button>
-        </footer>
       </div>
     </main>
   );

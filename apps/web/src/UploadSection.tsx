@@ -54,15 +54,10 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-      data-testid="upload-section"
-    >
-      <h2 className="text-lg font-medium">Upload a paper</h2>
-      <p className="mt-1 text-sm text-slate-600">
-        A digitally generated PDF (no scans), up to 50 MB. Its testable claims
-        are extracted with the paper passage each one comes from.
+    <form onSubmit={handleSubmit} className="panel p-6" data-testid="upload-section">
+      <h3 className="font-serif text-lg font-medium">Upload a paper</h3>
+      <p className="mt-1 text-sm text-ink-2">
+        A digitally generated PDF (no scans), up to 50 MB.
       </p>
 
       <label
@@ -76,10 +71,8 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
           setDragging(false);
           pick(e.dataTransfer.files?.[0]);
         }}
-        className={`mt-4 flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed px-4 py-8 text-center transition-colors ${
-          dragging
-            ? "border-slate-900 bg-slate-100"
-            : "border-slate-300 bg-slate-50 hover:border-slate-400"
+        className={`mt-5 flex cursor-pointer flex-col items-center justify-center rounded-sm border border-dashed px-4 py-10 text-center transition-colors ${
+          dragging ? "border-ink bg-hl/40" : "border-rule-strong hover:border-ink-3"
         }`}
       >
         <input
@@ -92,28 +85,30 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
         />
         {file ? (
           <>
-            <span className="font-medium text-slate-900">{file.name}</span>
-            <span className="mt-1 text-xs text-slate-500">
+            <span className="font-mono text-sm">{file.name}</span>
+            <span className="mt-1 text-xs text-ink-3">
               {(file.size / 1024 / 1024).toFixed(1)} MB · click to choose another
             </span>
           </>
         ) : (
           <>
-            <span className="font-medium text-slate-700">Drop a PDF here</span>
-            <span className="mt-1 text-xs text-slate-500">or click to choose a file</span>
+            <span className="font-serif text-base italic text-ink-2">Drop the PDF here</span>
+            <span className="mt-1 text-xs text-ink-3">or click to choose a file</span>
           </>
         )}
       </label>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <span className="text-xs text-slate-500">
-          {submitting && "Parsing and extracting claims — this can take a minute or two."}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        <span className="text-xs text-ink-3">
+          {submitting
+            ? "Parsing and extracting claims — a minute or two."
+            : "Claims are extracted with the passage each comes from."}
         </span>
         <button
           type="submit"
           disabled={!file || submitting}
           data-testid="upload-button"
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="btn-primary"
         >
           {submitting && <Spinner />}
           {submitting ? "Extracting…" : "Extract claims"}
@@ -121,7 +116,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
       </div>
 
       {error && (
-        <p className="mt-3 text-sm text-rose-700" data-testid="upload-error">
+        <p className="error-note mt-4" data-testid="upload-error">
           {error}
         </p>
       )}

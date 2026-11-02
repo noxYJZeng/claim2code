@@ -45,20 +45,20 @@ export default function CitedPaper({ analysisId, evidence }: CitedPaperProps) {
 
   return (
     <div data-testid="paper-citation">
-      <blockquote className="border-l-2 border-slate-300 pl-3 italic text-slate-600">
-        "{evidence.quote}"
+      <blockquote className="font-serif text-[15px] leading-relaxed text-ink">
+        <mark className="bg-hl/80 px-0.5 text-ink">{evidence.quote}</mark>
       </blockquote>
-      <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2 text-[11px]">
-        <p className="text-slate-500" data-testid="paper-location">
+      <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2 text-xs">
+        <p className="text-ink-3" data-testid="paper-location">
           {evidence.section_title || "(preamble)"}, page {page}
           {excerpt && excerpt.page !== evidence.page && ` (cited as page ${evidence.page})`}
         </p>
-        <div className="flex gap-3">
+        <div className="flex gap-4">
           {excerpt && (
             <button
               type="button"
               onClick={() => setFull((f) => !f)}
-              className="text-slate-500 hover:underline"
+              className="link"
               data-testid="paper-toggle-page"
             >
               {full ? "Show the cited part" : "Show whole page"}
@@ -68,7 +68,7 @@ export default function CitedPaper({ analysisId, evidence }: CitedPaperProps) {
             href={paperPdfUrl(analysisId, page)}
             target="_blank"
             rel="noreferrer"
-            className="text-slate-500 hover:underline"
+            className="link"
             data-testid="paper-open-pdf"
           >
             Open PDF at page {page} ↗
@@ -79,23 +79,23 @@ export default function CitedPaper({ analysisId, evidence }: CitedPaperProps) {
       {excerpt ? (
         <>
           {!excerpt.found && (
-            <p className="mt-1 text-[11px] text-amber-700" data-testid="paper-not-found">
+            <p className="mt-2 text-xs text-verdict-partial" data-testid="paper-not-found">
               The quote could not be located in the PDF text; showing the cited page.
             </p>
           )}
           <img
             src={excerpt.image}
             alt={`Page ${excerpt.page} of the paper${excerpt.found ? ", quote highlighted" : ""}`}
-            className="mt-1 w-full rounded border border-slate-200 bg-white"
+            className="mt-2 w-full rounded-sm border border-rule bg-white"
             data-testid="paper-excerpt"
           />
         </>
       ) : error ? (
-        <p className="mt-1 text-[11px] text-rose-700" data-testid="paper-excerpt-error">
+        <p className="mt-2 text-xs text-verdict-bad" data-testid="paper-excerpt-error">
           Could not render the paper ({error}).
         </p>
       ) : (
-        <p className="mt-1 text-[11px] text-slate-400">Loading paper…</p>
+        <p className="mt-2 text-xs text-ink-3">Loading paper…</p>
       )}
     </div>
   );

@@ -1,3 +1,39 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-paper font-sans text-ink antialiased;
+  }
+  ::selection {
+    @apply bg-hl;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-sm border border-rule bg-surface;
+  }
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.12em] text-ink-3;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-sm px-3.5 py-1.5 text-sm font-medium transition-colors disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn bg-ink text-surface hover:bg-ink-2 disabled:bg-rule-strong;
+  }
+  .btn-quiet {
+    @apply btn border border-rule-strong text-ink hover:border-ink disabled:border-rule disabled:text-ink-3;
+  }
+  .link {
+    @apply text-accent underline decoration-accent/30 underline-offset-2 hover:decoration-accent;
+  }
+  .field {
+    @apply block w-full rounded-sm border border-rule-strong bg-surface px-3 py-2 text-sm placeholder:text-ink-3 focus:border-ink focus:outline-none;
+  }
+  .error-note {
+    @apply border-l-2 border-verdict-bad pl-3 text-sm text-verdict-bad;
+  }
+}

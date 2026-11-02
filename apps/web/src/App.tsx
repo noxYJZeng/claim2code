@@ -138,115 +138,119 @@ function Workbench({ onOpenDemo }: { onOpenDemo: () => void }) {
   const step = !analysisId ? 1 : !repo ? 2 : 3;
 
   return (
-    <main className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
-          <button
-            type="button"
-            onClick={startOver}
-            className="flex items-baseline gap-2 text-left"
-          >
-            <h1 className="text-xl font-semibold tracking-tight">Claim2Code</h1>
-            <span className="hidden text-sm text-slate-500 sm:inline">
-              paper ↔ code verification
-            </span>
+    <main className="min-h-screen">
+      <header className="sticky top-0 z-10 border-b border-rule bg-paper/95 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3 sm:px-6">
+          <button type="button" onClick={startOver} className="flex items-baseline gap-3 text-left">
+            <h1 className="font-serif text-xl font-semibold tracking-tight">Claim2Code</h1>
+            <span className="hidden font-mono text-xs text-ink-3 sm:inline">paper ⇄ code</span>
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-5 text-sm">
             <span
               data-testid="status-badge"
               title={health?.version ? `API v${health.version}` : undefined}
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                online ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
-              }`}
+              className="inline-flex items-center gap-2 text-ink-2"
             >
               <span
-                className={`h-1.5 w-1.5 rounded-full ${online ? "bg-emerald-500" : "bg-rose-500"}`}
+                className={`h-2 w-2 rounded-full ${online ? "bg-verdict-ok" : "bg-verdict-bad"}`}
               />
-              {online ? "online" : "offline"}
+              API {online ? "online" : "offline"}
             </span>
             {online && (
               <button
                 type="button"
                 onClick={() => setShowModel((s) => !s)}
                 aria-expanded={showModel}
-                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+                className="text-ink-2 hover:text-ink"
               >
-                Model
+                Model {showModel ? "▴" : "▾"}
               </button>
             )}
-            <button
-              type="button"
-              onClick={onOpenDemo}
-              className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
-            >
+            <button type="button" onClick={onOpenDemo} className="link">
               View sample analysis
             </button>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
+      <div className="mx-auto max-w-5xl px-4 pb-24 pt-8 sm:px-6">
         {error && (
-          <p
-            className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
-            data-testid="status-error"
-          >
+          <p className="error-note mb-6" data-testid="status-error">
             The API is not reachable ({error}). Start it with{" "}
             <code className="font-mono text-xs">make dev</code> or uvicorn, then reload.
           </p>
         )}
-        {online && showModel && <ModelProviderPanel />}
-
-        <Stepper step={step} />
+        {online && showModel && (
+          <div className="mb-8">
+            <ModelProviderPanel />
+          </div>
+        )}
 
         {!analysisId ? (
-          <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem]">
-            <UploadSection onUploaded={opened} />
-            <OpenAnalysisForm onOpened={opened} />
-          </div>
+          <>
+            <section className="max-w-3xl pb-8 pt-6">
+              <h2 className="font-serif text-3xl leading-tight tracking-tight sm:text-4xl">
+                Does the code do what the paper says?
+              </h2>
+              <p className="mt-4 text-[15px] leading-relaxed text-ink-2">
+                Give Claim2Code a paper and the repository that implements it. Each
+                claim comes back verified, partially verified, contradicted or
+                unverified, with the paper passage and the lines of code it rests on.
+              </p>
+            </section>
+            <Stepper step={step} />
+            <div className="mt-6 grid gap-6 md:grid-cols-[minmax(0,1fr)_17rem]">
+              <UploadSection onUploaded={opened} />
+              <OpenAnalysisForm onOpened={opened} />
+            </div>
+          </>
         ) : (
           <>
-            <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white text-sm shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
-                <span data-testid="upload-summary" className="text-slate-700">
-                  <span className="mr-2 font-medium text-slate-900">Paper</span>
-                  extracted {nClaims} claim{nClaims === 1 ? "" : "s"}
-                  <CopyId id={analysisId} />
-                </span>
-                <button
-                  type="button"
-                  onClick={startOver}
-                  className="text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline"
-                >
-                  Upload another
+            <section className="border-b border-rule pb-6">
+              <div className="flex flex-wrap items-baseline justify-between gap-3">
+                <p className="eyebrow">
+                  Analysis <CopyId id={analysisId} />
+                </p>
+                <button type="button" onClick={startOver} className="link text-sm">
+                  Upload another paper
                 </button>
               </div>
-              {repo && (
-                <div className="px-5 py-3 text-slate-700" data-testid="repo-summary">
-                  <span className="mr-2 font-medium text-slate-900">Repository</span>
-                  indexed{" "}
-                  <a
-                    href={repo.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-mono text-slate-900 underline decoration-slate-300 hover:decoration-slate-900"
-                  >
-                    {repo.owner}/{repo.name}
-                  </a>{" "}
-                  — {count(repo.n_files, "file")}, {count(repo.n_symbols, "symbol")}
-                </div>
-              )}
-            </div>
+              <dl className="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[7rem_minmax(0,1fr)]">
+                <dt className="text-ink-3">Paper</dt>
+                <dd data-testid="upload-summary">
+                  extracted {nClaims} claim{nClaims === 1 ? "" : "s"}
+                </dd>
+                <dt className="text-ink-3">Repository</dt>
+                <dd data-testid={repo ? "repo-summary" : undefined}>
+                  {repo ? (
+                    <>
+                      indexed{" "}
+                      <a href={repo.url} target="_blank" rel="noreferrer" className="link font-mono">
+                        {repo.owner}/{repo.name}
+                      </a>{" "}
+                      — {count(repo.n_files, "file")}, {count(repo.n_symbols, "symbol")}
+                    </>
+                  ) : (
+                    <span className="text-ink-3">not bound yet</span>
+                  )}
+                </dd>
+              </dl>
+            </section>
 
             {!repo && (
-              <RepositorySection
-                analysisId={analysisId}
-                onCloned={(created) => setRepo(created)}
-              />
+              <div className="mt-8">
+                <Stepper step={step} />
+                <div className="mt-6">
+                  <RepositorySection
+                    analysisId={analysisId}
+                    onCloned={(created) => setRepo(created)}
+                  />
+                </div>
+              </div>
             )}
 
             <nav
-              className="flex gap-1 overflow-x-auto border-b border-slate-200"
+              className="mt-8 flex flex-wrap gap-x-6 border-b border-rule"
               aria-label="Analysis views"
             >
               <TabButton current={tab} value="verify" onSelect={setTab}>
@@ -267,17 +271,19 @@ function Workbench({ onOpenDemo }: { onOpenDemo: () => void }) {
               )}
             </nav>
 
-            {tab === "verify" && (
-              <VerificationPanel analysisId={analysisId} repositoryBound={repo !== null} />
-            )}
-            {tab === "claims" && <ClaimsList analysisId={analysisId} />}
-            {tab === "symbols" && repo && <SymbolsList repositoryId={repo.repository_id} />}
-            {tab === "retrieval" && repo && (
-              <ClaimRetrievalPanel
-                repositoryId={repo.repository_id}
-                analysisId={analysisId}
-              />
-            )}
+            <div className="mt-6">
+              {tab === "verify" && (
+                <VerificationPanel analysisId={analysisId} repositoryBound={repo !== null} />
+              )}
+              {tab === "claims" && <ClaimsList analysisId={analysisId} />}
+              {tab === "symbols" && repo && <SymbolsList repositoryId={repo.repository_id} />}
+              {tab === "retrieval" && repo && (
+                <ClaimRetrievalPanel
+                  repositoryId={repo.repository_id}
+                  analysisId={analysisId}
+                />
+              )}
+            </div>
           </>
         )}
       </div>
@@ -290,37 +296,27 @@ function count(n: number | null, noun: string): string {
   return `${n.toLocaleString()} ${noun}${n === 1 ? "" : "s"}`;
 }
 
-const STEPS = ["Upload paper", "Bind repository", "Verify claims"];
+const STEPS = ["Paper", "Repository", "Verification"];
 
 function Stepper({ step }: { step: number }) {
   return (
-    <ol className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm" aria-label="Progress">
+    <ol className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm" aria-label="Progress">
       {STEPS.map((label, i) => {
         const n = i + 1;
         const done = n < step;
         const current = n === step;
         return (
-          <li key={label} className="flex items-center gap-3">
+          <li key={label} className="flex items-center gap-4">
             <span
               aria-current={current ? "step" : undefined}
-              className={`flex items-center gap-2 ${
-                current ? "font-medium text-slate-900" : done ? "text-slate-600" : "text-slate-400"
+              className={`flex items-baseline gap-2 ${
+                current ? "text-ink" : done ? "text-verdict-ok" : "text-ink-3"
               }`}
             >
-              <span
-                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
-                  done
-                    ? "bg-emerald-500 text-white"
-                    : current
-                      ? "bg-slate-900 text-white"
-                      : "bg-slate-200 text-slate-500"
-                }`}
-              >
-                {done ? "✓" : n}
-              </span>
-              {label}
+              <span className="font-mono text-xs">{done ? "✓" : `0${n}`}</span>
+              <span className={current ? "font-medium" : ""}>{label}</span>
             </span>
-            {n < STEPS.length && <span className="h-px w-6 bg-slate-300 sm:w-10" />}
+            {n < STEPS.length && <span className="h-px w-8 bg-rule-strong sm:w-14" />}
           </li>
         );
       })}
@@ -345,10 +341,10 @@ function TabButton({
       type="button"
       onClick={() => onSelect(value)}
       aria-pressed={active}
-      className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${
+      className={`-mb-px whitespace-nowrap border-b-2 pb-2 text-sm ${
         active
-          ? "border-slate-900 text-slate-900"
-          : "border-transparent text-slate-500 hover:text-slate-800"
+          ? "border-ink font-medium text-ink"
+          : "border-transparent text-ink-3 hover:text-ink"
       }`}
     >
       {children}
@@ -368,9 +364,9 @@ function CopyId({ id }: { id: string }) {
           window.setTimeout(() => setCopied(false), 1500);
         });
       }}
-      className="ml-3 rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-500 hover:bg-slate-200"
+      className="ml-2 font-mono normal-case tracking-normal text-ink-2 hover:text-ink"
     >
-      {copied ? "copied" : `id ${id.slice(0, 8)}…`}
+      {copied ? "copied" : `${id.slice(0, 8)} ⧉`}
     </button>
   );
 }

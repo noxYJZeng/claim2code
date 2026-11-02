@@ -112,161 +112,127 @@ export default function ClaimRetrievalPanel({
 
   if (claimsError) {
     return (
-      <section
-        className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-800"
-        data-testid="retrieval-claims-error"
-      >
+      <p className="error-note" data-testid="retrieval-claims-error">
         Failed to load claims: {claimsError}
-      </section>
+      </p>
     );
   }
 
   if (!claims) {
     return (
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500"
-        data-testid="retrieval-loading-claims"
-      >
+      <p className="text-sm text-ink-3" data-testid="retrieval-loading-claims">
         Loading claims…
-      </section>
+      </p>
     );
   }
 
   if (claims.length === 0) {
     return (
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600"
-        data-testid="retrieval-empty"
-      >
+      <p className="text-sm text-ink-2" data-testid="retrieval-empty">
         No claims available to retrieve against — upload a paper with extracted
         claims first.
-      </section>
+      </p>
     );
   }
 
   const selectedClaim = claims.find((c) => c.claim_id === selectedClaimId);
 
   return (
-    <section
-      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-      data-testid="retrieval-panel"
-    >
-      <div className="mb-4 flex items-baseline justify-between gap-2">
-        <h2 className="text-lg font-medium">Claim ↔ code retrieval</h2>
-        <span className="text-xs text-slate-500">
-          pgvector cosine over embedded symbols
-        </span>
-      </div>
+    <section data-testid="retrieval-panel">
+      <p className="text-sm text-ink-2">
+        The code symbols nearest to a claim in the embedding index (pgvector cosine).
+        Verification starts from a wider, reranked candidate set.
+      </p>
 
-      <label
-        htmlFor="claim-picker"
-        className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500"
-      >
-        Pick a claim
+      <label htmlFor="claim-picker" className="eyebrow mb-2 mt-6 block">
+        Claim
       </label>
       <select
         id="claim-picker"
         data-testid="claim-picker"
         value={selectedClaimId}
         onChange={(e) => setSelectedClaimId(e.target.value)}
-        className="mb-4 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm focus:border-slate-500 focus:outline-none"
+        className="field"
       >
         {claims.map((c) => (
           <option key={c.claim_id} value={c.claim_id}>
-            [{c.claim_type}] {c.text.slice(0, 80)}
-            {c.text.length > 80 ? "…" : ""}
+            {c.claim_id} · {c.text.slice(0, 90)}
+            {c.text.length > 90 ? "…" : ""}
           </option>
         ))}
       </select>
 
       {selectedClaim && (
         <blockquote
-          className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm italic text-slate-700"
+          className="mt-4 border-l-2 border-ink pl-3 font-serif text-[15px] leading-relaxed"
           data-testid="retrieval-claim-quote"
         >
           {selectedClaim.text}
         </blockquote>
       )}
 
-      {error && (
-        <div
-          className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"
-          data-testid="retrieval-error"
-        >
-          Retrieval failed: {error}
-        </div>
-      )}
+      <div className="mt-6">
+        {error && (
+          <p className="error-note" data-testid="retrieval-error">
+            Retrieval failed: {error}
+          </p>
+        )}
 
-      {loading && (
-        <div
-          className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500"
-          data-testid="retrieval-loading"
-        >
-          Searching the index…
-        </div>
-      )}
+        {loading && (
+          <p className="text-sm text-ink-3" data-testid="retrieval-loading">
+            Searching the index…
+          </p>
+        )}
 
-      {!loading && !error && matches && matches.length === 0 && (
-        <div
-          className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600"
-          data-testid="retrieval-empty-results"
-        >
-          No code symbols matched this claim — the repo may not yet be indexed
-          (check the <code>index_status</code> above) or the embedding model
-          returned no close hits.
-        </div>
-      )}
+        {!loading && !error && matches && matches.length === 0 && (
+          <p className="text-sm text-ink-2" data-testid="retrieval-empty-results">
+            No code symbols matched this claim — the repository may not be indexed yet,
+            or the embedding model returned no close hits.
+          </p>
+        )}
 
-      {!loading && !error && matches && matches.length > 0 && (
-        <ul className="space-y-2" data-testid="retrieval-matches">
-          {matches.map((m, idx) => (
-            <li
-              key={m.symbol_id}
-              data-testid="retrieval-match"
-              className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-            >
-              <div className="flex items-baseline justify-between gap-3">
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="shrink-0 rounded-full bg-slate-900 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-white">
-                    {m.kind}
-                  </span>
-                  <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-700">
-                    {m.language}
-                  </span>
+        {!loading && !error && matches && matches.length > 0 && (
+          <ol className="border-t border-rule" data-testid="retrieval-matches">
+            {matches.map((m, idx) => (
+              <li
+                key={m.symbol_id}
+                data-testid="retrieval-match"
+                className="grid grid-cols-[2rem_minmax(0,1fr)_4rem] gap-x-3 border-b border-rule py-3"
+              >
+                <span className="font-mono text-xs text-ink-3">{idx + 1}</span>
+                <div className="min-w-0">
                   <code
                     data-testid="retrieval-match-name"
-                    className="font-mono text-sm text-slate-900"
+                    className="block truncate font-mono text-[13px]"
                   >
                     {m.name}
-                    {m.signature && (
-                      <span className="text-slate-500">{m.signature}</span>
-                    )}
+                    {m.signature && <span className="text-ink-3">{m.signature}</span>}
                   </code>
+                  <p className="mt-0.5 text-xs text-ink-3">
+                    {m.kind} · <code data-testid="retrieval-match-path" className="font-mono">
+                      {m.file_path}:{m.start_line}:{m.start_col}
+                    </code>
+                  </p>
+                  {m.docstring && (
+                    <p
+                      className="mt-1 line-clamp-2 text-xs italic text-ink-2"
+                      data-testid="retrieval-match-docstring"
+                    >
+                      {m.docstring}
+                    </p>
+                  )}
                 </div>
                 <span
-                  className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
+                  className="text-right font-mono text-xs text-ink-2"
                   data-testid="retrieval-match-score"
                 >
                   {(scores?.[idx] ?? m.similarity).toFixed(3)}
                 </span>
-              </div>
-              <div className="mt-1 flex flex-wrap items-baseline gap-3 text-xs text-slate-500">
-                <code data-testid="retrieval-match-path">
-                  {m.file_path}:{m.start_line}:{m.start_col}
-                </code>
-                {m.docstring && (
-                  <span
-                    className="line-clamp-2 italic text-slate-600"
-                    data-testid="retrieval-match-docstring"
-                  >
-                    {m.docstring}
-                  </span>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
     </section>
   );
 }

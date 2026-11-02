@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { getClaims, getHealth, type Health, type RepoCreate } from "./api";
+import {
+  getAnalysisRepository,
+  getClaims,
+  getHealth,
+  type Health,
+} from "./api";
 import UploadSection from "./UploadSection";
 import ClaimsList from "./ClaimsList";
 import RepositorySection from "./RepositorySection";
@@ -10,31 +15,33 @@ import OpenAnalysisForm from "./OpenAnalysisForm";
 import ModelProviderPanel from "./ModelProviderPanel";
 import DemoAnalysis from "./DemoAnalysis";
 
-// Claim2Code — Phase 3 single-page UI.
+// Claim2Code — single-page workbench.
 //
-// Three sections stacked: <UploadSection/> → <ClaimsList/> →
-// <RepositorySection/> (+ <SymbolsList/> once a repo is bound).
-// After a successful paper upload the analysis_id flows into both
-// the claims list and the repository section; both sections are
-// read-only views onto the same analysis.
+// The flow has three steps, shown as a stepper under the top bar:
+// 1. upload a paper (claims are extracted), 2. bind its repository
+// (cloned and indexed), 3. verify claims against that repository.
+// Once a paper is open, the analysis view shows the repository card
+// and tabs for verdicts, extracted claims, indexed symbols and the
+// retrieval explorer.
 //
-// Phase 4 appends <ClaimRetrievalPanel/> below SymbolsList: once
-// a repo is bound, the user can pick one of the extracted claims
-// and the panel POSTs it to /repositories/{id}/retrieve, rendering
-// the top-k matching symbols with similarity scores.
-//
-// Phase 6 appends <VerificationPanel/>: per-claim verdicts against
-// the bound repository. An earlier analysis can be reopened by id
-// (<OpenAnalysisForm/>), since upload and indexing take minutes. The
-// open analysis is mirrored in the URL (?analysis=<id>), so a refresh
-// or a shared link lands on the same analysis.
-//
-// <ModelProviderPanel/> in the header picks the chat model the
-// backend uses (llm/providers.py).
-//
-// Phase 5+ will introduce react-router-dom when the repository page
-// becomes its own route; for now, the whole interaction is still
-// one screen.
+// The open analysis is mirrored in the URL (?analysis=<id>), so a
+// refresh or a shared link lands on the same analysis; its bound
+// repository is looked up from the API rather than asked for again.
+// ?demo=1 shows a static, read-only sample with no backend.
+
+// The bound repository as the workbench needs it, from either the
+// clone response or the analysis's stored repository.
+export type BoundRepo = {
+  repository_id: string;
+  url: string;
+  owner: string;
+  name: string;
+  n_files: number | null;
+  n_symbols: number | null;
+};
+
+type Tab = "verify" | "claims" | "symbols" | "retrieval";
+
 export default function App() {
   const [demo, setDemo] = useState(() =>
     new URLSearchParams(window.location.search).get("demo") === "1",
@@ -64,7 +71,9 @@ function Workbench({ onOpenDemo }: { onOpenDemo: () => void }) {
     new URLSearchParams(window.location.search).get("analysis"),
   );
   const [nClaims, setNClaims] = useState<number>(0);
-  const [repo, setRepo] = useState<RepoCreate | null>(null);
+  const [repo, setRepo] = useState<BoundRepo | null>(null);
+  const [tab, setTab] = useState<Tab>("verify");
+  const [showModel, setShowModel] = useState(false);
 
   // An analysis opened from the URL: count its claims for the summary,
   // and fall back to the upload screen if the id is unknown.
@@ -86,6 +95,18 @@ function Workbench({ onOpenDemo }: { onOpenDemo: () => void }) {
     window.history.replaceState(null, "", url);
   }, [analysisId]);
 
+  // A reopened analysis keeps the repository bound to it.
+  useEffect(() => {
+    if (!analysisId) return;
+    const controller = new AbortController();
+    getAnalysisRepository(analysisId, controller.signal).then((result) => {
+      if (result.ok && result.metadata.index_status === "done") {
+        setRepo((current) => current ?? result.metadata);
+      }
+    });
+    return () => controller.abort();
+  }, [analysisId]);
+
   useEffect(() => {
     const controller = new AbortController();
     getHealth(controller.signal).then((result) => {
@@ -102,115 +123,254 @@ function Workbench({ onOpenDemo }: { onOpenDemo: () => void }) {
 
   const online = health?.status === "ok";
 
+  function startOver() {
+    setAnalysisId(null);
+    setRepo(null);
+    setNClaims(0);
+    setTab("verify");
+  }
+
+  function opened(result: { analysisId: string; nClaims: number }) {
+    setAnalysisId(result.analysisId);
+    setNClaims(result.nClaims);
+  }
+
+  const step = !analysisId ? 1 : !repo ? 2 : 3;
+
   return (
     <main className="min-h-screen bg-slate-50 font-sans text-slate-900">
-      <div className="mx-auto max-w-3xl px-6 py-16">
-        <header className="mb-10">
-          <h1 className="text-4xl font-semibold tracking-tight">Claim2Code</h1>
-          <p className="mt-2 text-slate-600">
-            AI Research Agent for Paper–Code Verification and Reproducibility.
-          </p>
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <button
             type="button"
-            onClick={onOpenDemo}
-            className="mt-4 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            onClick={startOver}
+            className="flex items-baseline gap-2 text-left"
           >
-            View sample analysis
+            <h1 className="text-xl font-semibold tracking-tight">Claim2Code</h1>
+            <span className="hidden text-sm text-slate-500 sm:inline">
+              paper ↔ code verification
+            </span>
           </button>
-          <div className="mt-4 flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <span
               data-testid="status-badge"
-              className={
-                online
-                  ? "inline-flex items-center gap-2 rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-800"
-                  : "inline-flex items-center gap-2 rounded-full bg-rose-100 px-3 py-1 text-sm font-medium text-rose-800"
-              }
+              title={health?.version ? `API v${health.version}` : undefined}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                online ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
+              }`}
             >
               <span
-                className={
-                  online
-                    ? "h-2 w-2 rounded-full bg-emerald-500"
-                    : "h-2 w-2 rounded-full bg-rose-500"
-                }
+                className={`h-1.5 w-1.5 rounded-full ${online ? "bg-emerald-500" : "bg-rose-500"}`}
               />
               {online ? "online" : "offline"}
             </span>
-            {health?.version && (
-              <span className="text-sm text-slate-500">
-                API v{health.version}
-              </span>
-            )}
-          </div>
-          {error && (
-            <p
-              className="mt-3 text-sm text-rose-700"
-              data-testid="status-error"
-            >
-              {error}
-            </p>
-          )}
-          {online && <ModelProviderPanel />}
-        </header>
-
-        {!analysisId ? (
-          <div className="space-y-6">
-            <UploadSection
-              onUploaded={(result) => {
-                setAnalysisId(result.analysisId);
-                setNClaims(result.nClaims);
-              }}
-            />
-            <OpenAnalysisForm
-              onOpened={(result) => {
-                setAnalysisId(result.analysisId);
-                setNClaims(result.nClaims);
-              }}
-            />
-          </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="flex items-baseline justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-              <span data-testid="upload-summary">
-                Parsed and extracted {nClaims} claim
-                {nClaims === 1 ? "" : "s"} from your paper.
-              </span>
+            {online && (
               <button
                 type="button"
-                onClick={() => {
-                  setAnalysisId(null);
-                  setRepo(null);
-                }}
-                className="text-xs font-medium uppercase tracking-wide text-emerald-700 hover:underline"
+                onClick={() => setShowModel((s) => !s)}
+                aria-expanded={showModel}
+                className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
               >
-                Upload another
+                Model
               </button>
-            </div>
-            <ClaimsList analysisId={analysisId} />
-            <RepositorySection
-              analysisId={analysisId}
-              onCloned={(created) => setRepo(created)}
-            />
-            {repo && (
-              <div
-                className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800"
-                data-testid="repo-summary"
-              >
-                Cloned and indexed {repo.name} — {repo.n_files} file
-                {repo.n_files === 1 ? "" : "s"}, {repo.n_symbols} symbol
-                {repo.n_symbols === 1 ? "" : "s"}.
-              </div>
             )}
-            {repo && <SymbolsList repositoryId={repo.repository_id} />}
-            <VerificationPanel analysisId={analysisId} />
-            {repo && (
+            <button
+              type="button"
+              onClick={onOpenDemo}
+              className="rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100"
+            >
+              View sample analysis
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-5xl space-y-6 px-4 py-8 sm:px-6">
+        {error && (
+          <p
+            className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+            data-testid="status-error"
+          >
+            The API is not reachable ({error}). Start it with{" "}
+            <code className="font-mono text-xs">make dev</code> or uvicorn, then reload.
+          </p>
+        )}
+        {online && showModel && <ModelProviderPanel />}
+
+        <Stepper step={step} />
+
+        {!analysisId ? (
+          <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_18rem]">
+            <UploadSection onUploaded={opened} />
+            <OpenAnalysisForm onOpened={opened} />
+          </div>
+        ) : (
+          <>
+            <div className="divide-y divide-slate-100 rounded-2xl border border-slate-200 bg-white text-sm shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                <span data-testid="upload-summary" className="text-slate-700">
+                  <span className="mr-2 font-medium text-slate-900">Paper</span>
+                  extracted {nClaims} claim{nClaims === 1 ? "" : "s"}
+                  <CopyId id={analysisId} />
+                </span>
+                <button
+                  type="button"
+                  onClick={startOver}
+                  className="text-xs font-medium text-slate-600 hover:text-slate-900 hover:underline"
+                >
+                  Upload another
+                </button>
+              </div>
+              {repo && (
+                <div className="px-5 py-3 text-slate-700" data-testid="repo-summary">
+                  <span className="mr-2 font-medium text-slate-900">Repository</span>
+                  indexed{" "}
+                  <a
+                    href={repo.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-slate-900 underline decoration-slate-300 hover:decoration-slate-900"
+                  >
+                    {repo.owner}/{repo.name}
+                  </a>{" "}
+                  — {count(repo.n_files, "file")}, {count(repo.n_symbols, "symbol")}
+                </div>
+              )}
+            </div>
+
+            {!repo && (
+              <RepositorySection
+                analysisId={analysisId}
+                onCloned={(created) => setRepo(created)}
+              />
+            )}
+
+            <nav
+              className="flex gap-1 overflow-x-auto border-b border-slate-200"
+              aria-label="Analysis views"
+            >
+              <TabButton current={tab} value="verify" onSelect={setTab}>
+                Verification
+              </TabButton>
+              <TabButton current={tab} value="claims" onSelect={setTab}>
+                Claims
+              </TabButton>
+              {repo && (
+                <TabButton current={tab} value="symbols" onSelect={setTab}>
+                  Code symbols
+                </TabButton>
+              )}
+              {repo && (
+                <TabButton current={tab} value="retrieval" onSelect={setTab}>
+                  Retrieval
+                </TabButton>
+              )}
+            </nav>
+
+            {tab === "verify" && (
+              <VerificationPanel analysisId={analysisId} repositoryBound={repo !== null} />
+            )}
+            {tab === "claims" && <ClaimsList analysisId={analysisId} />}
+            {tab === "symbols" && repo && <SymbolsList repositoryId={repo.repository_id} />}
+            {tab === "retrieval" && repo && (
               <ClaimRetrievalPanel
                 repositoryId={repo.repository_id}
                 analysisId={analysisId}
               />
             )}
-          </div>
+          </>
         )}
       </div>
     </main>
+  );
+}
+
+function count(n: number | null, noun: string): string {
+  if (n === null) return `? ${noun}s`;
+  return `${n.toLocaleString()} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+const STEPS = ["Upload paper", "Bind repository", "Verify claims"];
+
+function Stepper({ step }: { step: number }) {
+  return (
+    <ol className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm" aria-label="Progress">
+      {STEPS.map((label, i) => {
+        const n = i + 1;
+        const done = n < step;
+        const current = n === step;
+        return (
+          <li key={label} className="flex items-center gap-3">
+            <span
+              aria-current={current ? "step" : undefined}
+              className={`flex items-center gap-2 ${
+                current ? "font-medium text-slate-900" : done ? "text-slate-600" : "text-slate-400"
+              }`}
+            >
+              <span
+                className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                  done
+                    ? "bg-emerald-500 text-white"
+                    : current
+                      ? "bg-slate-900 text-white"
+                      : "bg-slate-200 text-slate-500"
+                }`}
+              >
+                {done ? "✓" : n}
+              </span>
+              {label}
+            </span>
+            {n < STEPS.length && <span className="h-px w-6 bg-slate-300 sm:w-10" />}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function TabButton({
+  current,
+  value,
+  onSelect,
+  children,
+}: {
+  current: Tab;
+  value: Tab;
+  onSelect: (tab: Tab) => void;
+  children: React.ReactNode;
+}) {
+  const active = current === value;
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(value)}
+      aria-pressed={active}
+      className={`-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium ${
+        active
+          ? "border-slate-900 text-slate-900"
+          : "border-transparent text-slate-500 hover:text-slate-800"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function CopyId({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      title="Copy the analysis id to reopen it later"
+      onClick={() => {
+        navigator.clipboard?.writeText(id).then(() => {
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1500);
+        });
+      }}
+      className="ml-3 rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-500 hover:bg-slate-200"
+    >
+      {copied ? "copied" : `id ${id.slice(0, 8)}…`}
+    </button>
   );
 }

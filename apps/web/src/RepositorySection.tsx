@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { cloneRepo, type RepoCreate } from "./api";
+import Spinner from "./Spinner";
 
 type RepositorySectionProps = {
   analysisId: string;
@@ -53,11 +54,10 @@ export default function RepositorySection({
       className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
       data-testid="repository-section"
     >
-      <h2 className="text-lg font-medium">Bind a GitHub repo</h2>
+      <h2 className="text-lg font-medium">Bind the paper's repository</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Drop in a public GitHub URL — we'll clone it, walk every file,
-        and extract code symbols + dependencies. The whole pipeline
-        runs synchronously (small repos only; max 100 MB).
+        A public GitHub URL. The repository is cloned and its code indexed
+        for retrieval; it is never executed. Repositories up to 200 MB.
       </p>
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -69,17 +69,23 @@ export default function RepositorySection({
           data-testid="repo-url-input"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+          className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
         />
         <button
           type="submit"
           disabled={submitting}
           data-testid="repo-clone-button"
-          className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
         >
-          {submitting ? "Cloning…" : "Clone & index"}
+          {submitting && <Spinner />}
+          {submitting ? "Indexing…" : "Clone & index"}
         </button>
       </div>
+      {submitting && (
+        <p className="mt-3 text-xs text-slate-500">
+          Cloning, parsing and embedding the code — a few minutes for a large repository.
+        </p>
+      )}
 
       {error && (
         <p className="mt-3 text-sm text-rose-700" data-testid="repo-error">

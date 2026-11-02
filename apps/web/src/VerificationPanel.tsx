@@ -9,9 +9,13 @@ import {
 } from "./api";
 import CitedCode from "./CitedCode";
 import CitedPaper from "./CitedPaper";
+import Spinner from "./Spinner";
 
 type VerificationPanelProps = {
   analysisId: string;
+  // Verification needs the analysis's repository; until one is bound
+  // the stored verdicts are shown but no new run can start.
+  repositoryBound?: boolean;
 };
 
 // VerificationPanel — Phase 6 verdict view.
@@ -47,13 +51,23 @@ const STATUS_STYLE: Record<VerificationStatus, string> = {
   UNVERIFIED: "bg-slate-200 text-slate-700",
 };
 
+const STATUS_EDGE: Record<VerificationStatus, string> = {
+  VERIFIED: "border-l-emerald-400",
+  PARTIALLY_VERIFIED: "border-l-amber-400",
+  CONTRADICTED: "border-l-rose-400",
+  UNVERIFIED: "border-l-slate-300",
+};
+
 const SEVERITY_STYLE: Record<string, string> = {
   HIGH: "bg-rose-600 text-white",
   MEDIUM: "bg-amber-500 text-white",
   LOW: "bg-slate-400 text-white",
 };
 
-export default function VerificationPanel({ analysisId }: VerificationPanelProps) {
+export default function VerificationPanel({
+  analysisId,
+  repositoryBound = true,
+}: VerificationPanelProps) {
   const [claims, setClaims] = useState<Claim[] | null>(null);
   const [verdicts, setVerdicts] = useState<Record<string, Verification>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -61,6 +75,8 @@ export default function VerificationPanel({ analysisId }: VerificationPanelProps
   // Claim currently being verified, and the queue still waiting.
   const [running, setRunning] = useState<string | null>(null);
   const [queued, setQueued] = useState<string[]>([]);
+  const [batchSize, setBatchSize] = useState(0);
+  const [filter, setFilter] = useState<VerificationStatus | "PENDING" | null>(null);
   const stopRequested = useRef(false);
   const mounted = useRef(true);
 
@@ -93,6 +109,7 @@ export default function VerificationPanel({ analysisId }: VerificationPanelProps
   async function verify(claimIds: string[]) {
     stopRequested.current = false;
     setRunError(null);
+    setBatchSize(claimIds.length);
     for (let i = 0; i < claimIds.length; i++) {
       if (stopRequested.current || !mounted.current) break;
       const claimId = claimIds[i];
@@ -134,6 +151,11 @@ export default function VerificationPanel({ analysisId }: VerificationPanelProps
 
   const busy = running !== null;
   const pending = claims.filter((c) => !verdicts[c.claim_id]).map((c) => c.claim_id);
+  const shown = claims.filter((c) => {
+    if (!filter) return true;
+    const v = verdicts[c.claim_id];
+    return filter === "PENDING" ? !v : v?.status === filter;
+  });
   const counts = STATUSES.map(
     (s) => [s, Object.values(verdicts).filter((v) => v.status === s).length] as const,
   );
@@ -160,7 +182,7 @@ export default function VerificationPanel({ analysisId }: VerificationPanelProps
           ) : (
             <button
               type="button"
-              disabled={pending.length === 0}
+              disabled={pending.length === 0 || !repositoryBound}
               onClick={() => verify(pending)}
               className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
               data-testid="verify-all"
@@ -176,25 +198,68 @@ export default function VerificationPanel({ analysisId }: VerificationPanelProps
         code it rests on; UNVERIFIED means no supporting code was found, not that the
         code lacks it.
       </p>
+      {!repositoryBound && (
+        <p
+          className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+          data-testid="verification-needs-repo"
+        >
+          Bind the paper's repository above to verify claims.
+        </p>
+      )}
 
       <div className="mb-4 flex flex-wrap gap-2 text-xs" data-testid="verification-counts">
         {counts.map(([status, n]) => (
-          <span
+          <button
+            type="button"
             key={status}
-            className={`rounded-full px-2.5 py-1 font-medium ${STATUS_STYLE[status]}`}
+            onClick={() => setFilter((f) => (f === status ? null : status))}
+            aria-pressed={filter === status}
+            className={`rounded-full px-2.5 py-1 font-medium ${STATUS_STYLE[status]} ${
+              filter === status ? "ring-2 ring-slate-900 ring-offset-1" : ""
+            }`}
           >
             {STATUS_LABEL[status]}: {n}
-          </span>
+          </button>
         ))}
-        <span className="rounded-full bg-white px-2.5 py-1 font-medium text-slate-500 ring-1 ring-slate-200">
+        <button
+          type="button"
+          onClick={() => setFilter((f) => (f === "PENDING" ? null : "PENDING"))}
+          aria-pressed={filter === "PENDING"}
+          className={`rounded-full bg-white px-2.5 py-1 font-medium text-slate-500 ring-1 ring-slate-200 ${
+            filter === "PENDING" ? "ring-2 ring-slate-900" : ""
+          }`}
+        >
           Not checked: {pending.length}
-        </span>
+        </button>
+        {filter && (
+          <button
+            type="button"
+            onClick={() => setFilter(null)}
+            className="px-1 font-medium text-slate-500 hover:underline"
+          >
+            Show all
+          </button>
+        )}
       </div>
 
       {busy && (
-        <p className="mb-3 text-sm text-slate-600" data-testid="verification-progress">
-          Verifying {running}… {queued.length > 0 && `${queued.length} more queued.`}
-        </p>
+        <div className="mb-4" data-testid="verification-progress">
+          <div className="mb-1 flex justify-between text-xs text-slate-600">
+            <span className="inline-flex items-center gap-2">
+              <Spinner /> Verifying {running}…
+            </span>
+            <span>
+              {batchSize - queued.length - 1} of {batchSize} done
+              {queued.length > 0 && ` · ${queued.length} more queued`}
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-slate-200">
+            <div
+              className="h-full rounded-full bg-slate-900 transition-all"
+              style={{ width: `${((batchSize - queued.length - 1) / batchSize) * 100}%` }}
+            />
+          </div>
+        </div>
       )}
       {runError && (
         <p className="mb-3 text-sm text-rose-700" data-testid="verification-run-error">
@@ -203,7 +268,7 @@ export default function VerificationPanel({ analysisId }: VerificationPanelProps
       )}
 
       <ul className="space-y-3">
-        {claims.map((claim) => (
+        {shown.map((claim) => (
           <VerdictCard
             key={claim.claim_id}
             analysisId={analysisId}
@@ -216,7 +281,7 @@ export default function VerificationPanel({ analysisId }: VerificationPanelProps
                   ? "queued"
                   : "idle"
             }
-            disabled={busy}
+            disabled={busy || !repositoryBound}
             onVerify={() => verify([claim.claim_id])}
           />
         ))}
@@ -250,16 +315,21 @@ function VerdictCard({
   return (
     <li
       data-testid="verdict-card"
-      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+      className={`rounded-xl border border-l-4 border-slate-200 bg-slate-50 p-4 ${
+        verdict && state === "idle" ? STATUS_EDGE[verdict.status] : "border-l-slate-200"
+      }`}
     >
       <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-medium text-slate-900">
-          <span className="mr-2 text-xs text-slate-400">{claim.claim_id}</span>
-          {claim.text}
-        </p>
+        <div>
+          <p className="text-sm font-medium text-slate-900">{claim.text}</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {claim.claim_id} · {claim.claim_type.toLowerCase()} · p. {claim.paper_evidence.page}
+          </p>
+        </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           {state !== "idle" ? (
-            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">
+              {state === "running" && <Spinner />}
               {state === "running" ? "Verifying…" : "Queued"}
             </span>
           ) : verdict ? (

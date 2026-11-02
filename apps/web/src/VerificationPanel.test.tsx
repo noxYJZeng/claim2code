@@ -99,6 +99,26 @@ describe("VerificationPanel", () => {
     expect(screen.getByTestId("verify-all")).toHaveTextContent("Verify 2 unverified claims");
   });
 
+  it("filters the list by status when a count is clicked", async () => {
+    stubApi([verdict("C1", "CONTRADICTED")]);
+    render(<VerificationPanel analysisId={analysisId} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Contradicted: 1" }));
+    expect(screen.getAllByTestId("verdict-card")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Not checked: 2" }));
+    expect(screen.getAllByTestId("verdict-card")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+    expect(screen.getAllByTestId("verdict-card")).toHaveLength(3);
+  });
+
+  it("does not start a run until a repository is bound", async () => {
+    stubApi([]);
+    render(<VerificationPanel analysisId={analysisId} repositoryBound={false} />);
+
+    expect(await screen.findByTestId("verification-needs-repo")).toBeInTheDocument();
+    expect(screen.getByTestId("verify-all")).toBeDisabled();
+  });
+
   it("verifies the unchecked claims one request at a time", async () => {
     const posts = stubApi([verdict("C1", "VERIFIED")]);
     render(<VerificationPanel analysisId={analysisId} />);

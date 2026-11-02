@@ -204,6 +204,15 @@ def test_get_repository_422_for_malformed_id(client: TestClient) -> None:
     assert response.status_code == 422
 
 
+def test_get_analysis_repository_returns_the_bound_repo(client: TestClient) -> None:
+    with client.session_local() as s:  # type: ignore[attr-defined]
+        analysis_id = s.get(Repository, client.repo_id).analysis_id  # type: ignore[attr-defined]
+    response = client.get(f"/analyses/{analysis_id}/repository")
+    assert response.status_code == 200
+    assert response.json()["repository_id"] == str(client.repo_id)  # type: ignore[attr-defined]
+    assert client.get(f"/analyses/{uuid4()}/repository").status_code == 404
+
+
 def test_get_repository_route_is_registered(client: TestClient) -> None:
     schema = client.get("/openapi.json").json()
     assert "/repositories/{repository_id}" in schema["paths"]

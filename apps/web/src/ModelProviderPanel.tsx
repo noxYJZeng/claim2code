@@ -119,7 +119,7 @@ export default function ModelProviderPanel() {
 
   return (
     <section
-      className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm"
+      className="rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm"
       data-testid="provider-panel"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">

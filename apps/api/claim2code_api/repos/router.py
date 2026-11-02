@@ -208,6 +208,33 @@ def get_repository(
             status_code=404,
             detail=f"repository {repository_id} not found",
         )
+    return _metadata(row)
+
+
+@router.get(
+    "/analyses/{analysis_id}/repository",
+    response_model=RepoMetadataResponse,
+    responses={404: {"model": RepoErrorResponse, "description": "No repository bound"}},
+)
+def get_analysis_repository(
+    analysis_id: UUID,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> RepoMetadataResponse:
+    """Return the repository bound to an analysis.
+
+    A reopened analysis uses this to show its repository again
+    instead of asking for the URL a second time.
+    """
+    row = db.query(Repository).filter(Repository.analysis_id == analysis_id).one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"no repository bound to analysis {analysis_id}",
+        )
+    return _metadata(row)
+
+
+def _metadata(row: Repository) -> RepoMetadataResponse:
     return RepoMetadataResponse(
         repository_id=row.repository_id,
         analysis_id=row.analysis_id,

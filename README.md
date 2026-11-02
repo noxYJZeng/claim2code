@@ -107,6 +107,11 @@ REFERENCE_CHECK_PYTHON=/path/to/python   # an interpreter with the repo's depend
 REFERENCE_CHECK_TIMEOUT_SECONDS=60
 ```
 
+Packages the module imports but the interpreter lacks are replaced by
+stubs, so a loss in a file that also imports `wandb` or `transformers` can
+still be tested; on a machine without CUDA, `.cuda()` and `device="cuda"`
+run on the CPU. The result lists both, since they can change behaviour.
+
 The run gets an empty environment (no keys reach it), CPU and file-size
 limits and a timeout; on macOS it also has no network and can write only to
 a temporary directory, and on Linux it has no network when `unshare` is

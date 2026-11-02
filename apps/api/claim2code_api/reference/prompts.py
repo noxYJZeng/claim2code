@@ -57,6 +57,17 @@ configuration its __init__ (shown in class_context) accepts, and set
 any attribute the method reads. Leave instance_code empty for plain
 functions. make_inputs gives the arguments after self.
 
+The test environment section lists which of the module's imports are
+installed. A package listed as not installed is replaced by a stub:
+the module still imports, but anything taken from that package does
+nothing. If the object's __init__ needs such a package, build the
+object without it: `obj = Cls.__new__(Cls)`, then
+`torch.nn.Module.__init__(obj)` for a torch module, then set only the
+attributes the method reads. If the function's own computation needs
+it, set testable=false and name the package in the reason. Without
+CUDA, .cuda() and device="cuda" run on the CPU, so code that asks for
+a GPU can still be tested.
+
 In input_notes, describe each argument's type, shape and meaning in
 words. The author of the independent implementation reads these notes
 and your code, never the function body, so do not describe what the
@@ -117,7 +128,25 @@ def _cap(text: str, cap: int) -> str:
     return text if len(text) <= cap else text[:cap] + "\n[... truncated ...]"
 
 
-def build_inputs_payload(*, claim: Claim, target: RetrieveMatch, qualname: str) -> str:
+def describe_environment(packages: dict[str, str | None]) -> str:
+    """The test-environment section of the inputs payload."""
+    installed = [f"{n} {v}".strip() for n, v in packages.items() if v is not None and n != "__cuda__"]
+    missing = [n for n, v in packages.items() if v is None and n != "__cuda__"]
+    lines = [
+        f"installed: {', '.join(installed) or '(none of its third-party imports)'}",
+        f"not installed, replaced by stubs: {', '.join(missing) or '(none)'}",
+    ]
+    if "torch" in packages and packages["torch"] is not None:
+        lines.append(
+            "CUDA: available" if packages.get("__cuda__")
+            else 'CUDA: not available; .cuda(), .to("cuda") and device="cuda" run on the CPU',
+        )
+    return "\n".join(lines)
+
+
+def build_inputs_payload(
+    *, claim: Claim, target: RetrieveMatch, qualname: str, environment: str = "",
+) -> str:
     parts = [
         _claim_block(claim),
         f"# Function under test\n\n"
@@ -137,6 +166,8 @@ def build_inputs_payload(*, claim: Claim, target: RetrieveMatch, qualname: str) 
             f"callee_context (repo functions it calls):\n```\n"
             f"{_cap(target.callee_context, _CONTEXT_CAP)}\n```\n",
         )
+    if environment:
+        parts.append(f"# Test environment\n\n{environment}\n")
     return "\n".join(parts)
 
 
@@ -163,5 +194,6 @@ __all__ = [
     "REFERENCE_SYSTEM_PROMPT",
     "build_inputs_payload",
     "build_reference_payload",
+    "describe_environment",
     "reference_signature",
 ]

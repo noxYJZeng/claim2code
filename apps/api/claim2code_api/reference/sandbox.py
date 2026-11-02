@@ -177,4 +177,44 @@ def run_harness(
         )
 
 
-__all__ = ["SandboxRun", "run_harness"]
+_PROBE = """\
+import importlib.metadata as md, importlib.util as u, json, sys
+dists = md.packages_distributions()
+out = {}
+for name in sys.argv[1:]:
+    if u.find_spec(name) is None:
+        out[name] = None
+        continue
+    try:
+        out[name] = md.version(dists.get(name, [name])[0])
+    except Exception:
+        out[name] = ""
+if out.get("torch") is not None:
+    import torch
+    out["__cuda__"] = "yes" if torch.cuda.is_available() else None
+print(json.dumps(out))
+"""
+
+
+def probe_packages(python: str, names: list[str]) -> dict[str, str | None]:
+    """Installed version (``""`` if unknown) or ``None`` for each top-level name.
+
+    Nothing from the repository is on the path. Packages are only looked
+    up, except torch, which is imported to ask whether CUDA is available
+    (key ``__cuda__``).
+    """
+    if not names:
+        return {}
+    try:
+        proc = subprocess.run(  # noqa: S603 — fixed argv, no shell
+            [python, "-I", "-c", _PROBE, *names],
+            capture_output=True, text=True, timeout=30, check=False,
+            env={"PATH": "/usr/bin:/bin"}, stdin=subprocess.DEVNULL,
+        )
+        result = json.loads(proc.stdout)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        return {}
+    return {k: v for k, v in result.items() if isinstance(k, str)}
+
+
+__all__ = ["SandboxRun", "probe_packages", "run_harness"]

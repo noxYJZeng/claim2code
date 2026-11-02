@@ -1,6 +1,7 @@
 """The harness's comparison rules and the sandboxed run, on a throwaway repo."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -138,6 +139,81 @@ def test_compare_reports_the_largest_difference() -> None:
 
 
 # ---------------------------------------------------------------- runs
+
+
+_HEAVY = """\
+import numpy as np
+import wandb
+from transformers import Trainer, AutoModel
+from not_installed_pkg.sub import decorate
+
+
+class MyTrainer(Trainer):
+    pass
+
+
+@decorate
+def l2(x):
+    wandb.log({"x": 1})
+    return float(np.sqrt(np.sum(np.square(x))))
+
+
+def uses_missing(x):
+    return AutoModel.from_pretrained("gpt2")(x)
+
+
+def on_gpu(x):
+    import torch
+    t = torch.tensor(x, device="cuda").cuda()
+    return (t.to("cuda:0") * 2).cpu()
+"""
+
+
+def _heavy(repo: Path, qualname: str, reference: str, inputs: str, python: str = sys.executable):
+    (repo / "pkg" / "heavy.py").write_text(_HEAVY)
+    return run_harness(
+        python=python, repo_root=repo, module_file="pkg/heavy.py", qualname=qualname,
+        reference_code=reference, inputs_code=inputs, rtol=1e-6, atol=1e-9, timeout_seconds=60,
+    )
+
+
+def test_missing_packages_are_stubbed(repo: Path) -> None:
+    run = _heavy(
+        repo, "l2",
+        reference="import math\ndef reference(x):\n    return math.sqrt(sum(v * v for v in x))\n",
+        inputs="def make_inputs():\n    return [{'args': [[3.0, 4.0]]}]\n",
+    )
+    assert run.report is not None
+    assert run.report["cases"][0]["outcome"] == "match"
+    assert set(run.report["stubbed"]) == {"wandb", "transformers", "not_installed_pkg"}
+
+
+def test_output_from_a_stub_is_not_compared(repo: Path) -> None:
+    run = _heavy(
+        repo, "uses_missing",
+        reference="def reference(x):\n    return x\n",
+        inputs="def make_inputs():\n    return [{'args': [1]}]\n",
+    )
+    assert run.report is not None
+    case = run.report["cases"][0]
+    assert case["outcome"] == "target_error"
+    assert "not installed" in case["detail"]
+
+
+_TORCH_PYTHON = os.environ.get("C2C_TORCH_PYTHON", "")
+
+
+@pytest.mark.skipif(not _TORCH_PYTHON, reason="set C2C_TORCH_PYTHON to a python with torch")
+def test_cuda_calls_run_on_cpu(repo: Path) -> None:
+    run = _heavy(
+        repo, "on_gpu",
+        reference="import torch\ndef reference(x):\n    return torch.tensor(x) * 2\n",
+        inputs="def make_inputs():\n    return [{'args': [[1.0, 2.0]]}]\n",
+        python=_TORCH_PYTHON,
+    )
+    assert run.report is not None
+    assert run.report["cases"][0]["outcome"] == "match", run.report
+    assert run.report["cuda_on_cpu"] is True
 
 
 def test_matching_implementation(repo: Path) -> None:

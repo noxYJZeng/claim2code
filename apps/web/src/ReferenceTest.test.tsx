@@ -27,6 +27,7 @@ const MISMATCH: ReferenceCheck = {
     { index: 1, inputs: "{'args': [[3.0], [0.0]]}", outcome: "mismatch", actual: "3.0", expected: "2.5", detail: "3.0 != 2.5" },
   ],
   isolation: ["separate process with an empty environment", "no network"],
+  environment: ["Not installed, replaced by stubs: wandb"],
   generated_at: "2026-11-02T00:00:00Z",
 };
 
@@ -60,6 +61,7 @@ describe("ReferenceTest", () => {
     expect(screen.getByText("3.0 != 2.5")).toBeInTheDocument();
     expect(screen.getByText("Mean over elements.")).toBeInTheDocument();
     expect(screen.getByText(/Ran with: separate process/)).toBeInTheDocument();
+    expect(screen.getByTestId("reference-environment")).toHaveTextContent("replaced by stubs: wandb");
     expect(screen.getByTestId("reference-run")).toHaveTextContent("Run again");
   });
 

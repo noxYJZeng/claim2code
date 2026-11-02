@@ -204,6 +204,12 @@ function Result({ check }: { check: ReferenceCheck }) {
       <Code title="Inputs" source={check.inputs_code} />
       <Code title="Object setup" source={check.instance_code} />
 
+      {check.environment.length > 0 && (
+        <p className="mt-3 text-[13px]" data-testid="reference-environment">
+          Test environment: {check.environment.join("; ")}. A difference here can come from the
+          environment rather than the code.
+        </p>
+      )}
       {check.isolation.length > 0 && (
         <p className="mt-3 text-[12px] text-ink-muted">Ran with: {check.isolation.join(", ")}.</p>
       )}

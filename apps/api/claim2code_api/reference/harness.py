@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import copy
 import importlib
+import importlib.abc
 import importlib.util
 import inspect
 import json
@@ -53,6 +54,150 @@ def _seed(seed: int) -> None:
         torch.manual_seed(seed)
     except ImportError:
         pass
+
+
+# ---------------------------------------------------------------- stubs
+#
+# Research code imports far more than one function needs: a loss in
+# trainers.py drags in wandb, transformers and datasets at module level.
+# A package that is not installed is replaced by a stub, so the module
+# loads and the function under test can run. Numerical libraries are
+# never stubbed: without them there is nothing meaningful to compare.
+
+_NEVER_STUB = frozenset({
+    "numpy", "torch", "jax", "jaxlib", "tensorflow", "scipy", "pandas", "sklearn",
+    "einops", "math", "random",
+})
+STUBBED: list[str] = []
+
+
+class _StubMeta(type):
+    def __getattr__(cls, name: str) -> Any:
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        return _stub_class(f"{cls.__qualname__}.{name}")
+
+    def __call__(cls, *args: Any, **kwargs: Any) -> Any:
+        # Used as a bare decorator (``@stub``): keep the decorated function.
+        if len(args) == 1 and not kwargs and (inspect.isfunction(args[0]) or inspect.isclass(args[0])):
+            return args[0]
+        return super().__call__(*args, **kwargs)
+
+
+class _Stub(metaclass=_StubMeta):
+    """Stands in for anything from a missing package: callable, subclassable."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        pass
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        return _stub_class(f"{type(self).__qualname__}.{name}")()
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        if len(args) == 1 and not kwargs and (inspect.isfunction(args[0]) or inspect.isclass(args[0])):
+            return args[0]
+        return type(self)()
+
+    def __iter__(self) -> Any:
+        return iter(())
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __repr__(self) -> str:
+        return f"<stub {type(self).__qualname__}>"
+
+
+def _stub_class(qualname: str) -> type:
+    cls = _StubMeta(qualname.rsplit(".", 1)[-1], (_Stub,), {})
+    cls.__qualname__ = qualname
+    return cls
+
+
+class _StubModule(type(sys)):  # type: ignore[misc]
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        return _stub_class(f"{self.__name__}.{name}")
+
+
+class _StubLoader(importlib.abc.Loader):
+    def create_module(self, spec: Any) -> Any:
+        module = _StubModule(spec.name)
+        module.__path__ = []  # a package, so submodule imports resolve too
+        return module
+
+    def exec_module(self, module: Any) -> None:
+        pass
+
+
+class _StubFinder:
+    """Last on ``sys.meta_path``: only names no real finder could locate get here."""
+
+    def find_spec(self, name: str, path: Any = None, target: Any = None) -> Any:
+        top = name.split(".", 1)[0]
+        if top in _NEVER_STUB or top in sys.stdlib_module_names:
+            return None
+        if top not in STUBBED:
+            STUBBED.append(top)
+        return importlib.util.spec_from_loader(name, _StubLoader(), is_package=True)
+
+
+def is_stub(value: Any) -> bool:
+    return isinstance(value, _Stub) or (isinstance(value, type) and issubclass(value, _Stub))
+
+
+# ---------------------------------------------------------------- CUDA on CPU
+#
+# Research code often hard-codes ``.cuda()`` or ``.to("cuda")``. The test
+# inputs are tiny, so on a machine without CUDA those calls are sent to
+# the CPU instead; the arithmetic is the same.
+
+_FACTORIES = (
+    "tensor", "as_tensor", "zeros", "ones", "empty", "full", "rand", "randn", "randint",
+    "randperm", "arange", "linspace", "eye", "zeros_like", "ones_like", "empty_like",
+    "full_like", "rand_like", "randn_like",
+)
+
+
+def _cpu_device(device: Any) -> Any:
+    text = str(device) if device is not None else ""
+    return "cpu" if text.startswith("cuda") or isinstance(device, int) else device
+
+
+def install_cuda_shim() -> bool:
+    try:
+        import torch
+    except ImportError:
+        return False
+    if torch.cuda.is_available():
+        return False
+
+    def to(original: Any) -> Any:
+        def patched(self: Any, *args: Any, **kwargs: Any) -> Any:
+            args = tuple(_cpu_device(a) if isinstance(a, str | int | torch.device) else a for a in args)
+            if "device" in kwargs:
+                kwargs["device"] = _cpu_device(kwargs["device"])
+            return original(self, *args, **kwargs)
+        return patched
+
+    def factory(original: Any) -> Any:
+        def patched(*args: Any, **kwargs: Any) -> Any:
+            if "device" in kwargs:
+                kwargs["device"] = _cpu_device(kwargs["device"])
+            return original(*args, **kwargs)
+        return patched
+
+    torch.Tensor.to = to(torch.Tensor.to)  # type: ignore[method-assign]
+    torch.nn.Module.to = to(torch.nn.Module.to)  # type: ignore[method-assign]
+    torch.Tensor.cuda = lambda self, *a, **k: self  # type: ignore[method-assign]
+    torch.nn.Module.cuda = lambda self, *a, **k: self  # type: ignore[method-assign]
+    for name in _FACTORIES:
+        if hasattr(torch, name):
+            setattr(torch, name, factory(getattr(torch, name)))
+    return True
 
 
 def _to_array(value: Any) -> Any:
@@ -155,10 +300,12 @@ def _call(fn: Any, case: dict[str, Any]) -> Any:
 def run(spec: dict[str, Any]) -> dict[str, Any]:
     _seed(int(spec.get("seed", 0)))
     rtol, atol = float(spec["rtol"]), float(spec["atol"])
+    environment = {"stubbed": STUBBED, "cuda_on_cpu": install_cuda_shim()}
+    sys.meta_path.append(_StubFinder())
     try:
         target = _load_target(Path(spec["repo_root"]), spec["module_file"], spec["qualname"])
     except BaseException as exc:  # noqa: BLE001 — repository import side effects
-        return {"stage": "import", "error": _error(exc), "cases": []}
+        return {"stage": "import", "error": _error(exc), "cases": [], **environment}
 
     method = spec["qualname"].rsplit(".", 1)[-1]
     if _needs_instance(target) and not spec.get("instance_code", "").strip():
@@ -166,6 +313,7 @@ def run(spec: dict[str, Any]) -> dict[str, Any]:
             "stage": "import",
             "error": f"{spec['qualname']} is an instance method and no make_instance() was written",
             "cases": [],
+            **environment,
         }
 
     namespace: dict[str, Any] = {"__name__": "claim2code_reference"}
@@ -177,7 +325,7 @@ def run(spec: dict[str, Any]) -> dict[str, Any]:
         exec(spec["reference_code"], namespace)  # noqa: S102
         reference = namespace["reference"]
     except BaseException as exc:  # noqa: BLE001 — model-written code
-        return {"stage": "setup", "error": _error(exc), "cases": []}
+        return {"stage": "setup", "error": _error(exc), "cases": [], **environment}
 
     needs_instance = _needs_instance(target)
 
@@ -207,6 +355,11 @@ def run(spec: dict[str, Any]) -> dict[str, Any]:
         try:
             actual = side(target, case, seed, method_of=True)
             record["actual"] = _short(actual)
+            if is_stub(actual):
+                raise RuntimeError(
+                    f"the output comes from a package that is not installed "
+                    f"(stubbed: {', '.join(STUBBED)})",
+                )
         except BaseException as exc:  # noqa: BLE001
             record["outcome"], record["detail"] = "target_error", _error(exc)
             cases.append(record)
@@ -221,7 +374,7 @@ def run(spec: dict[str, Any]) -> dict[str, Any]:
         ok, why = compare(actual, expected, rtol, atol)
         record["outcome"], record["detail"] = ("match" if ok else "mismatch"), why
         cases.append(record)
-    return {"stage": "done", "error": None, "cases": cases}
+    return {"stage": "done", "error": None, "cases": cases, **environment}
 
 
 def main() -> None:

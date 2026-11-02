@@ -558,6 +558,7 @@ export type ReferenceCheck = {
   atol: number | null;
   cases: ReferenceCase[];
   isolation: string[];
+  environment: string[];
   generated_at: string;
 };
 

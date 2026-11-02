@@ -237,6 +237,36 @@ def test_summarise_errors() -> None:
     assert status == "ERROR"
 
 
+# ---------------------------------------------------------------- environment
+
+
+def test_third_party_imports_skip_stdlib_and_repo_modules(tmp_path: Path) -> None:
+    (tmp_path / "util").mkdir()
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "layers.py").write_text("")
+    (tmp_path / "models" / "net.py").write_text(
+        "from __future__ import annotations\nimport os, math\nimport torch.nn as nn\n"
+        "from timm.models import Block\nfrom util.misc import x\nfrom . import layers\n"
+        "import layers\nimport wandb\n",
+    )
+    assert workflow_mod.third_party_imports(tmp_path, "models/net.py") == ["torch", "timm", "wandb"]
+
+
+def test_environment_is_described_to_the_inputs_author() -> None:
+    from claim2code_api.reference.prompts import describe_environment
+    text = describe_environment({"torch": "2.11.0", "timm": None, "__cuda__": None})
+    assert "installed: torch 2.11.0" in text
+    assert "replaced by stubs: timm" in text
+    assert "run on the CPU" in text
+
+
+def test_environment_notes() -> None:
+    assert workflow_mod.environment_notes({"stubbed": ["timm"], "cuda_on_cpu": True}) == [
+        "Not installed, replaced by stubs: timm", "CUDA calls ran on the CPU",
+    ]
+    assert workflow_mod.environment_notes(None) == []
+
+
 # ---------------------------------------------------------------- target choice
 
 

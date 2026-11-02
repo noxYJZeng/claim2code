@@ -133,6 +133,9 @@ class ReferenceCheck(BaseModel):
     atol: float | None = None
     cases: list[ReferenceCase] = Field(default_factory=list)
     isolation: list[str] = Field(default_factory=list)
+    environment: list[str] = Field(default_factory=list)
+    """How the test environment differed from the repository's own, e.g.
+    packages replaced by stubs, or CUDA calls run on the CPU."""
     generated_at: datetime
 
 

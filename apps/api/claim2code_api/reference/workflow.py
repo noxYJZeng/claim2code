@@ -19,6 +19,7 @@ exception, so the UI can show it next to the claim like any other.
 """
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import sys
@@ -38,7 +39,7 @@ from claim2code_api.reference.exceptions import (
     ReferenceCheckLLMError,
     ReferenceCheckNotFoundError,
 )
-from claim2code_api.reference.sandbox import SandboxRun, run_harness
+from claim2code_api.reference.sandbox import SandboxRun, probe_packages, run_harness
 from claim2code_api.reference.schemas import (
     CaseOutcome,
     ReferenceCase,
@@ -122,11 +123,18 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
         qualname=qualname, signature=target.signature,
     )
 
+    settings = get_settings()
+    python = settings.reference_check_python or sys.executable
+    imports = third_party_imports(Path(repo.clone_path), target.file_path)
+    environment = prompts.describe_environment(probe_packages(python, imports)) if imports else ""
+
     client = get_llm_client()
     try:
         inputs = client.reference_inputs(
             system=prompts.INPUTS_SYSTEM_PROMPT,
-            payload=prompts.build_inputs_payload(claim=claim, target=target, qualname=qualname),
+            payload=prompts.build_inputs_payload(
+                claim=claim, target=target, qualname=qualname, environment=environment,
+            ),
         )
         if not inputs.testable or not inputs.inputs_code.strip():
             return result(ReferenceCheckStatus.UNTESTABLE, inputs.reason, target=target_info)
@@ -140,10 +148,9 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
     except ReferenceCheckLLMError as exc:
         return result(ReferenceCheckStatus.ERROR, f"The model call failed: {exc}", target=target_info)
 
-    settings = get_settings()
     rtol, atol = min(max(impl.rtol, 0.0), 1.0), min(max(impl.atol, 0.0), 1.0)
     run = run_harness(
-        python=settings.reference_check_python or sys.executable,
+        python=python,
         repo_root=Path(repo.clone_path),
         module_file=target.file_path,
         qualname=qualname,
@@ -165,7 +172,53 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
         rtol=rtol, atol=atol,
         cases=cases,
         isolation=run.isolation,
+        environment=environment_notes(run.report),
     )
+
+
+def environment_notes(report: dict[str, Any] | None) -> list[str]:
+    """What the harness changed about the repository's environment."""
+    if not report:
+        return []
+    notes = []
+    if report.get("stubbed"):
+        notes.append(f"Not installed, replaced by stubs: {', '.join(report['stubbed'])}")
+    if report.get("cuda_on_cpu"):
+        notes.append("CUDA calls ran on the CPU")
+    return notes
+
+
+def third_party_imports(root: Path, module_file: str) -> list[str]:
+    """Top-level packages the module imports, minus the stdlib and the repo's own.
+
+    Parsed with ``ast``; the file is read, never executed.
+    """
+    from claim2code_api.repos.storage import resolve_repo_file
+
+    path = resolve_repo_file(root, module_file)
+    if path is None:
+        return []
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, SyntaxError, ValueError):
+        return []
+    names: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names += [a.name.split(".")[0] for a in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            names.append(node.module.split(".")[0])
+
+    def local(name: str) -> bool:
+        return any(
+            (base / name).is_dir() or (base / f"{name}.py").is_file()
+            for base in (root, path.parent)
+        )
+
+    return [
+        n for n in dict.fromkeys(names)
+        if n not in sys.stdlib_module_names and n != "__future__" and not local(n)
+    ]
 
 
 def summarise(

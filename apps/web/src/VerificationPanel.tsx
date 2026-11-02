@@ -9,6 +9,7 @@ import {
 } from "./api";
 import CitedCode from "./CitedCode";
 import CitedPaper from "./CitedPaper";
+import ReferenceTest, { useReferenceChecks, type ReferenceChecks } from "./ReferenceTest";
 import Spinner from "./Spinner";
 import { STATUSES, STATUS_CELL, STATUS_LABEL, STATUS_PILL } from "./verdicts";
 
@@ -58,6 +59,7 @@ export default function VerificationPanel({
   const [selected, setSelected] = useState<string | null>(null);
   // On a narrow screen the list and the detail show one at a time.
   const [showDetail, setShowDetail] = useState(false);
+  const reference = useReferenceChecks(analysisId);
   const stopRequested = useRef(false);
   const mounted = useRef(true);
 
@@ -306,6 +308,8 @@ export default function VerificationPanel({
               }
               disabled={busy || !repositoryBound}
               onVerify={() => verify([current.claim_id])}
+              repositoryBound={repositoryBound}
+              reference={reference}
             />
           </div>
         )}
@@ -431,9 +435,13 @@ type ClaimDetailProps = {
   state: RowState;
   disabled: boolean;
   onVerify: () => void;
+  repositoryBound: boolean;
+  reference: ReferenceChecks;
 };
 
-function ClaimDetail({ analysisId, claim, verdict, state, disabled, onVerify }: ClaimDetailProps) {
+function ClaimDetail({
+  analysisId, claim, verdict, state, disabled, onVerify, repositoryBound, reference,
+}: ClaimDetailProps) {
   const shownVerdict = state === "idle" ? verdict : undefined;
   return (
     <article className="card p-5 sm:p-6" data-testid="verdict-details">
@@ -516,6 +524,8 @@ function ClaimDetail({ analysisId, claim, verdict, state, disabled, onVerify }: 
           )}
         </section>
       )}
+
+      <ReferenceTest claimId={claim.claim_id} repositoryBound={repositoryBound} reference={reference} />
     </article>
   );
 }

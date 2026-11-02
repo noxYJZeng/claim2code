@@ -89,6 +89,30 @@ curl -X POST http://localhost:8000/analyses/<analysis_id>/verifications \
   -H "Content-Type: application/json" -d '{"repository_id": "<repository_id>"}'
 ```
 
+### Reference tests
+
+A verdict is the model reading the code. A **reference test** runs it: for
+one claim, the model writes test inputs for the cited function (with its
+code in view) and a separate reference implementation from the paper
+passage and the function's signature only. Both run on the same inputs and
+the outputs are compared: same output, different output, could not run, or
+not testable. Open a claim in **Verification** and use **Run reference test**.
+
+This executes repository code and model-written code on your machine, so it
+is off by default. To turn it on, set in `.env`:
+
+```bash
+REFERENCE_CHECK_ENABLED=true
+REFERENCE_CHECK_PYTHON=/path/to/python   # an interpreter with the repo's dependencies (torch, ...)
+REFERENCE_CHECK_TIMEOUT_SECONDS=60
+```
+
+The run gets an empty environment (no keys reach it), CPU and file-size
+limits and a timeout; on macOS it also has no network and can write only to
+a temporary directory, and on Linux it has no network when `unshare` is
+available. This limits accidents; it is not a boundary against hostile
+code, so only enable it for repositories you would run anyway.
+
 ### Demo without a model
 
 `npm run dev` in `apps/web`, then open http://localhost:5173/?demo=1 for a

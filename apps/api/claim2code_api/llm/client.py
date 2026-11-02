@@ -34,7 +34,7 @@ import re
 import time
 from collections.abc import Callable
 from threading import Lock
-from typing import Any
+from typing import Any, TypeVar
 
 import anthropic
 from openai import (
@@ -58,6 +58,8 @@ from claim2code_api.observability import (
 )
 from claim2code_api.papers.exceptions import ClaimExtractionError
 from claim2code_api.papers.schemas import Claim, ClaimList, Paper, PaperEvidence
+from claim2code_api.reference.exceptions import ReferenceCheckLLMError
+from claim2code_api.reference.schemas import ReferenceImplementation, ReferenceInputs
 from claim2code_api.repos.schemas import RetrieveMatch
 from claim2code_api.safety import SafetyGate, SafetyViolation
 from claim2code_api.verification.context import MAX_VERIFY_PAYLOAD_CHAR_CAP
@@ -69,6 +71,8 @@ from claim2code_api.verification.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T", ReferenceInputs, ReferenceImplementation)
 
 # Per-candidate cap on the source body shown to the verifier. 3 000
 # chars (~750 tokens) x top-8 keeps the verify prompt well inside an
@@ -664,6 +668,84 @@ class LLMClient:
             self._on_violations("verdict", gate_result.violations)
 
         return verification
+
+    # ------------------------------------------------------------------
+    # Reference checks (differential tests)
+    # ------------------------------------------------------------------
+
+    def reference_inputs(self, *, system: str, payload: str) -> ReferenceInputs:
+        """Test inputs for a repository function, written with its body in view."""
+        return self._reference_call(
+            kind="reference_inputs", system=system, payload=payload, model=ReferenceInputs,
+        )
+
+    def reference_implementation(self, *, system: str, payload: str) -> ReferenceImplementation:
+        """A reference written from the paper passage and the signature only."""
+        return self._reference_call(
+            kind="reference_impl", system=system, payload=payload, model=ReferenceImplementation,
+        )
+
+    def _reference_call(
+        self, *, kind: str, system: str, payload: str, model: type[T],
+    ) -> T:
+        """One Structured Outputs call; same gate, span and error mapping as the verifier.
+
+        :raises ReferenceCheckLLMError: on any LLM / parse / validation failure.
+        """
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": payload},
+        ]
+        tracer = get_tracer(__name__)
+        with tracer.start_as_current_span(
+            f"llm.{kind}", attributes={"llm.method": kind, "llm.model": self._model},
+        ) as span:
+            gate_result = self._gate.wrap_messages(messages, kind=kind)
+            start = time.monotonic()
+            try:
+                response = self._client.chat.completions.create(
+                    model=self._model,
+                    messages=gate_result.messages,  # type: ignore[call-overload]
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {
+                            "name": kind,
+                            "strict": True,
+                            "schema": model.model_json_schema(),
+                        },
+                    },
+                )
+            except _CONNECTION_ERRORS as exc:
+                span.record_exception(exc)
+                raise ReferenceCheckLLMError(
+                    f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
+                ) from exc
+            except _AUTH_ERRORS as exc:
+                span.record_exception(exc)
+                raise ReferenceCheckLLMError(
+                    f"LLM auth error (check the provider's API key): {exc}"
+                ) from exc
+            except _STATUS_ERRORS as exc:
+                span.record_exception(exc)
+                raise ReferenceCheckLLMError(
+                    f"LLM returned {exc.status_code}: {exc.message}"
+                ) from exc
+            self._record_llm_metrics(
+                span=span, response=response, kind=kind,
+                duration_seconds=time.monotonic() - start,
+            )
+
+        raw = response.choices[0].message.content if response.choices else None
+        if not raw:
+            raise ReferenceCheckLLMError("LLM returned empty content")
+        try:
+            parsed = model.model_validate(json.loads(raw))
+        except (json.JSONDecodeError, ValidationError) as exc:
+            raise ReferenceCheckLLMError(f"LLM output failed schema validation: {exc}") from exc
+
+        if gate_result.violations and self._on_violations is not None:
+            self._on_violations(kind, gate_result.violations)
+        return parsed
 
     # ------------------------------------------------------------------
     # Related-work comparison (Phase 7)

@@ -527,6 +527,97 @@ export async function runVerification(
   }
 }
 
+export type ReferenceCheckStatus = "MATCH" | "MISMATCH" | "ERROR" | "UNTESTABLE";
+
+export type ReferenceCase = {
+  index: number;
+  inputs: string;
+  outcome: "match" | "mismatch" | "target_error" | "reference_error";
+  actual: string | null;
+  expected: string | null;
+  detail: string;
+};
+
+export type ReferenceCheck = {
+  claim_id: string;
+  status: ReferenceCheckStatus;
+  explanation: string;
+  target: {
+    symbol_id: string;
+    file_path: string;
+    start_line: number;
+    end_line: number;
+    qualname: string;
+    signature: string;
+  } | null;
+  reference_code: string;
+  inputs_code: string;
+  instance_code: string;
+  assumptions: string[];
+  rtol: number | null;
+  atol: number | null;
+  cases: ReferenceCase[];
+  isolation: string[];
+  generated_at: string;
+};
+
+export type ReferenceChecksResult =
+  { ok: true; enabled: boolean; checks: ReferenceCheck[] } | { ok: false; error: string };
+
+export type ReferenceCheckResult =
+  { ok: true; check: ReferenceCheck } | { ok: false; error: string };
+
+/** Stored reference checks, and whether this server may run new ones.
+ *  GET /analyses/{analysis_id}/reference-checks */
+export async function getReferenceChecks(
+  analysisId: string,
+  signal?: AbortSignal,
+): Promise<ReferenceChecksResult> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/reference-checks`,
+      { signal },
+    );
+    if (!response.ok) {
+      return { ok: false, error: `HTTP ${response.status}` };
+    }
+    const json: unknown = await response.json();
+    if (!isObject(json) || typeof json.enabled !== "boolean" || !Array.isArray(json.checks)) {
+      return { ok: false, error: "Invalid reference checks response" };
+    }
+    return { ok: true, enabled: json.enabled, checks: json.checks as ReferenceCheck[] };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "unknown error" };
+  }
+}
+
+/** Run the cited function next to a reference written from the paper.
+ *  POST /analyses/{analysis_id}/reference-checks — two LLM calls and a
+ *  sandboxed run, so it takes as long as a verification or longer. */
+export async function runReferenceCheck(
+  analysisId: string,
+  claimId: string,
+  signal?: AbortSignal,
+): Promise<ReferenceCheckResult> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/reference-checks`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ claim_id: claimId }),
+        signal,
+      },
+    );
+    if (!response.ok) {
+      return { ok: false, error: await errorDetail(response) };
+    }
+    return { ok: true, check: (await response.json()) as ReferenceCheck };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "unknown error" };
+  }
+}
+
 /** Chat-model providers, which have a key, and the active choice.
  *  GET /llm/providers — keys are never returned. */
 export async function getProviders(signal?: AbortSignal): Promise<ProvidersResult> {

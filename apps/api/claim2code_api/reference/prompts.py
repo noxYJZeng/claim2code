@@ -1,0 +1,167 @@
+"""Prompts and payloads for the two reference-check model calls.
+
+The split is the point of the design. The inputs author sees the
+function body, because valid inputs depend on types and shapes the
+signature rarely states. The reference author never sees the body:
+it gets the paper passage, the claim, the signature and the inputs,
+so a bug in the repository cannot leak into the reference that is
+meant to catch it.
+"""
+from __future__ import annotations
+
+import re
+
+from claim2code_api.papers.schemas import Claim
+from claim2code_api.repos.schemas import RetrieveMatch
+
+_SOURCE_CAP = 6000
+_CONTEXT_CAP = 3000
+
+INPUTS_SYSTEM_PROMPT = """\
+You write test inputs for a differential test. A repository function
+will be called on your inputs, and so will an independent
+implementation of the paper's description; their outputs are compared.
+
+Decide first whether the function can be checked this way. It can when
+it computes an output from its arguments: a loss, a score, an
+update rule, a transform, a sampling step with a seeded RNG. Set
+testable=false, with the reason, when it trains a model, reads files or
+datasets, needs network access or a GPU, needs an object it would have
+to construct with many dependencies, or the claim is about something
+the function does not compute.
+
+When testable, write Python source that defines
+
+    def make_inputs():
+        return [{"args": [...], "kwargs": {...}}, ...]
+
+with 4 to 8 small, deterministic cases. Rules:
+
+  - Use only the standard library, numpy, torch when the function
+    takes tensors, and the repository's own modules for make_instance.
+    Build every value inside the functions; no files.
+  - Match the function's real types and shapes, read from its body.
+  - Cover the cases the paper's description distinguishes (thresholds,
+    branches, boundary values, zeros, batch sizes above one), so a
+    wrong implementation would give a different output.
+  - Keep each tensor or array under 1000 elements.
+
+When the function is an instance method (its first parameter is
+self), also write Python source that defines
+
+    def make_instance():
+        return ...  # a small object of the method's class
+
+Import the class from its module path, build it with the smallest
+configuration its __init__ (shown in class_context) accepts, and set
+any attribute the method reads. Leave instance_code empty for plain
+functions. make_inputs gives the arguments after self.
+
+In input_notes, describe each argument's type, shape and meaning in
+words. The author of the independent implementation reads these notes
+and your code, never the function body, so do not describe what the
+function does with the arguments. For an instance method, the
+reference also receives a fresh copy of the object as `obj`: name the
+data attributes the result depends on (weights, buffers, configuration
+values such as a patch size or a flag) and say what each one is in the
+paper's terms, without saying how the method combines them.
+"""
+
+REFERENCE_SYSTEM_PROMPT = """\
+You write a reference implementation of what a paper describes, for a
+differential test against a repository function you cannot see.
+
+Write Python source that defines a function named `reference` with the
+same parameters, in the same order and with the same defaults, as the
+signature you are given. Rules:
+
+  - Implement the paper passage and the claim, nothing else. Do not
+    rely on what you remember about this paper, its code, or any
+    library that implements it; the point is an independent reading
+    of the text.
+  - Accept exactly the inputs that make_inputs builds, and return the
+    same kind of value the function returns (same type, and for
+    arrays or tensors the same shape and dtype family).
+  - Use only the standard library, numpy, and torch when the inputs
+    are tensors. Be deterministic.
+  - When the first parameter is `obj`, the function under test is a
+    method and `obj` is a fresh object of its class with the same
+    parameters the method sees. Read its data attributes (weights,
+    configuration) as the input notes describe. Never call obj's
+    methods or obj itself: they are the code under test.
+  - Where the paper leaves a choice open (reduction, epsilon, axis,
+    ordering), make the most literal reading and record it in
+    assumptions, one sentence each.
+
+Set rtol and atol for comparing outputs: about 1e-5 and 1e-8 for
+float64 arithmetic, 1e-4 and 1e-6 for float32 or tensors, 0 and 0 for
+exact integer or boolean results.
+"""
+
+
+def _claim_block(claim: Claim) -> str:
+    evidence = claim.paper_evidence
+    return (
+        f"# Claim\n\n"
+        f"type: {claim.claim_type}\n"
+        f"text: {claim.text}\n\n"
+        f"# Paper passage\n\n"
+        f"section: {evidence.section_title}\n"
+        f"page: {evidence.page}\n"
+        f"quote (verbatim):\n\n"
+        f">>> {evidence.quote} <<<\n"
+    )
+
+
+def _cap(text: str, cap: int) -> str:
+    return text if len(text) <= cap else text[:cap] + "\n[... truncated ...]"
+
+
+def build_inputs_payload(*, claim: Claim, target: RetrieveMatch, qualname: str) -> str:
+    parts = [
+        _claim_block(claim),
+        f"# Function under test\n\n"
+        f"file: {target.file_path}:{target.start_line}-{target.end_line}\n"
+        f"name: {qualname}\n"
+        f"signature: def {target.name}{target.signature}\n",
+    ]
+    if target.source:
+        parts.append(f"source:\n```\n{_cap(target.source, _SOURCE_CAP)}\n```\n")
+    if target.class_context:
+        parts.append(
+            f"class_context (setup methods of its class):\n```\n"
+            f"{_cap(target.class_context, _CONTEXT_CAP)}\n```\n",
+        )
+    if target.callee_context:
+        parts.append(
+            f"callee_context (repo functions it calls):\n```\n"
+            f"{_cap(target.callee_context, _CONTEXT_CAP)}\n```\n",
+        )
+    return "\n".join(parts)
+
+
+def reference_signature(target: RetrieveMatch) -> str:
+    """The signature the reference implements; a method's ``self`` becomes ``obj``."""
+    return re.sub(r"^\(\s*self\b", "(obj", target.signature or "()")
+
+
+def build_reference_payload(
+    *, claim: Claim, target: RetrieveMatch, qualname: str,
+    inputs_code: str, input_notes: str,
+) -> str:
+    return "\n".join([
+        _claim_block(claim),
+        f"# Signature to implement\n\n"
+        f"name: {qualname}\n"
+        f"signature: def reference{reference_signature(target)}\n",
+        f"# Inputs\n\nnotes: {input_notes}\n\n```python\n{inputs_code}\n```\n",
+    ])
+
+
+__all__ = [
+    "INPUTS_SYSTEM_PROMPT",
+    "REFERENCE_SYSTEM_PROMPT",
+    "build_inputs_payload",
+    "build_reference_payload",
+    "reference_signature",
+]

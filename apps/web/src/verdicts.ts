@@ -1,7 +1,8 @@
 import type { VerificationStatus } from "./api";
 
-// How each verdict is written: a margin mark in its own ink colour,
-// as a reviewer would annotate a proof.
+// Verdicts are status: a pale pill with dark text of the same hue in
+// lists, and a solid cell in the claim strip. Nothing else on the
+// screen uses these colours.
 
 export const STATUSES: VerificationStatus[] = [
   "VERIFIED",
@@ -17,23 +18,16 @@ export const STATUS_LABEL: Record<VerificationStatus, string> = {
   UNVERIFIED: "Unverified",
 };
 
-export const STATUS_MARK: Record<VerificationStatus, string> = {
-  VERIFIED: "✓",
-  PARTIALLY_VERIFIED: "◐",
-  CONTRADICTED: "✕",
-  UNVERIFIED: "?",
+export const STATUS_PILL: Record<VerificationStatus, string> = {
+  VERIFIED: "bg-positive-bg text-positive-ink",
+  PARTIALLY_VERIFIED: "bg-warning-bg text-warning-ink",
+  CONTRADICTED: "bg-negative-bg text-negative-ink",
+  UNVERIFIED: "bg-neutral-bg text-neutral-ink",
 };
 
-export const STATUS_INK: Record<VerificationStatus, string> = {
-  VERIFIED: "text-verdict-ok",
-  PARTIALLY_VERIFIED: "text-verdict-partial",
-  CONTRADICTED: "text-verdict-bad",
-  UNVERIFIED: "text-verdict-none",
-};
-
-export const STATUS_EDGE: Record<VerificationStatus, string> = {
-  VERIFIED: "border-verdict-ok",
-  PARTIALLY_VERIFIED: "border-verdict-partial",
-  CONTRADICTED: "border-verdict-bad",
-  UNVERIFIED: "border-verdict-none",
+export const STATUS_CELL: Record<VerificationStatus, string> = {
+  VERIFIED: "bg-positive",
+  PARTIALLY_VERIFIED: "bg-warning",
+  CONTRADICTED: "bg-negative",
+  UNVERIFIED: "bg-ink-faint",
 };

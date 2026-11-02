@@ -31,62 +31,70 @@ export default function ClaimsList({ analysisId }: ClaimsListProps) {
 
   if (error) {
     return (
-      <p className="error-note" data-testid="claims-error">
-        Failed to load claims: {error}
+      <p className="error-block" data-testid="claims-error">
+        Couldn't load the claims: {error}
       </p>
     );
   }
 
   if (!data) {
     return (
-      <p className="text-sm text-ink-3" data-testid="claims-loading">
+      <p className="text-ink-muted" data-testid="claims-loading">
         Loading claims…
       </p>
     );
   }
 
-  if (data.claims.length === 0) {
-    return (
-      <p className="text-sm text-ink-2" data-testid="claims-empty">
-        The paper parsed but no testable claims were extracted.
-      </p>
-    );
-  }
-
   return (
-    <section data-testid="claims-list">
-      <p className="text-sm text-ink-2">
-        {data.claims.length} claim{data.claims.length === 1 ? "" : "s"} extracted, each
-        with the passage it was taken from.
+    <section data-testid={data.claims.length ? "claims-list" : "claims-empty"}>
+      <h1 className="text-[22px] font-semibold leading-8">Claims</h1>
+      <p className="mt-1 text-ink-muted">
+        {data.claims.length === 0
+          ? "The paper parsed, but no testable claims were extracted."
+          : `${data.claims.length} claim${data.claims.length === 1 ? "" : "s"} extracted from the paper, each with the passage it comes from.`}
       </p>
-      <ol className="mt-6 border-t border-rule">
-        {data.claims.map((claim) => (
-          <ClaimCard key={claim.claim_id} claim={claim} />
-        ))}
-      </ol>
+
+      {data.claims.length > 0 && (
+        <div className="card mt-6 overflow-x-auto">
+          <table className="w-full min-w-[640px] text-left">
+            <thead>
+              <tr className="border-b border-line text-[12px] text-ink-muted">
+                <th className="w-14 py-2.5 pl-4 font-normal">Id</th>
+                <th className="py-2.5 pr-4 font-normal">Claim and passage</th>
+                <th className="w-32 py-2.5 pr-4 font-normal">Type</th>
+                <th className="w-16 py-2.5 pr-4 text-right font-normal">Page</th>
+                <th className="w-24 py-2.5 pr-4 text-right font-normal">Confidence</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.claims.map((claim) => (
+                <ClaimRow key={claim.claim_id} claim={claim} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
 
-function ClaimCard({ claim }: { claim: Claim }) {
+function ClaimRow({ claim }: { claim: Claim }) {
   const pct = Math.round(claim.confidence * 100);
+  const type = claim.claim_type.toLowerCase();
   return (
-    <li
-      data-testid="claim-card"
-      className="grid grid-cols-[3rem_minmax(0,1fr)] gap-x-4 border-b border-rule py-5 sm:grid-cols-[3.5rem_minmax(0,1fr)]"
-    >
-      <span className="pt-0.5 font-mono text-xs text-ink-3">{claim.claim_id}</span>
-      <div className="min-w-0">
-        <p className="font-serif text-[15px] leading-relaxed">{claim.text}</p>
-        <blockquote className="mt-3 border-l-2 border-rule-strong pl-3 font-serif text-sm italic leading-relaxed text-ink-2">
-          {claim.paper_evidence.quote}
-        </blockquote>
-        <p className="mt-2 text-xs text-ink-3">
-          {claim.claim_type.toLowerCase()} · {claim.paper_evidence.section_title || "preamble"},
-          p. {claim.paper_evidence.page} · confidence{" "}
-          <span data-testid="claim-confidence">{pct}%</span>
+    <tr data-testid="claim-card" className="border-b border-line-rule align-top last:border-b-0">
+      <td className="py-3 pl-4 font-mono text-[12px] text-ink-muted">{claim.claim_id}</td>
+      <td className="py-3 pr-4">
+        <p>{claim.text}</p>
+        <p className="mt-1 text-[13px] text-ink-muted">
+          “{claim.paper_evidence.quote}” — {claim.paper_evidence.section_title || "Preamble"}
         </p>
-      </div>
-    </li>
+      </td>
+      <td className="py-3 pr-4 text-ink-muted">{type.charAt(0).toUpperCase() + type.slice(1)}</td>
+      <td className="num py-3 pr-4 text-right">{claim.paper_evidence.page}</td>
+      <td className="num py-3 pr-4 text-right" data-testid="claim-confidence">
+        {pct}%
+      </td>
+    </tr>
   );
 }

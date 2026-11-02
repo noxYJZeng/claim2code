@@ -1,31 +1,30 @@
 /** @type {import('tailwindcss').Config} */
-// A proof-sheet palette: warm paper, ink, and coloured inks for the
-// four verdicts. Cited text is marked with a highlighter colour, the
-// same in the paper excerpt and in the code.
+// Framed-sheet app style: a stone-tinted frame (the paper) holds the
+// sidebar and top bar; the work sits on a white sheet. One teal hue
+// marks the trace between a claim's paper passage and its code, and the
+// selected claim; verdict colours are status and stay on data.
 export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        paper: "#f4f1ea",
-        surface: "#fbfaf7",
-        ink: { DEFAULT: "#1c1a16", 2: "#4f4a42", 3: "#8a8378" },
-        rule: { DEFAULT: "#e2dccf", strong: "#c8bfad" },
-        accent: "#2c4a86",
-        verdict: {
-          ok: "#2f6a4a",
-          partial: "#9a6512",
-          bad: "#a5352a",
-          none: "#6f695e",
-        },
-        hl: "#f2e4a2",
+        frame: "#f3f3f0",
+        sheet: "#ffffff",
+        raised: "#f6f6f4",
+        active: "#e9e9e5",
+        line: { DEFAULT: "#e6e6e2", rule: "#f0f0ed", control: "#cdcdc8" },
+        ink: { DEFAULT: "#131416", muted: "#5d5f60", faint: "#6b6b6b" },
+        accent: { DEFAULT: "#1b6c80", wash: "#e7f0f2" },
+        positive: { DEFAULT: "#1e7b4f", bg: "#dcfae5", ink: "#04250e" },
+        negative: { DEFAULT: "#c4242a", bg: "#ffedea", ink: "#831c1e" },
+        warning: { DEFAULT: "#a8650c", bg: "#fffbeb", ink: "#92400e", line: "#fde68a" },
+        neutral: { bg: "#ebedee", ink: "#353736" },
       },
       fontFamily: {
-        sans: ['"IBM Plex Sans"', "system-ui", "sans-serif"],
-        serif: ['"IBM Plex Serif"', "Georgia", "serif"],
+        sans: ['"IBM Plex Sans"', "Inter", "system-ui", "sans-serif"],
         mono: ['"IBM Plex Mono"', "ui-monospace", "Menlo", "monospace"],
       },
-      borderRadius: { sm: "3px" },
+      borderRadius: { card: "8px", control: "6px", chip: "4px", sheet: "16px" },
     },
   },
   plugins: [],

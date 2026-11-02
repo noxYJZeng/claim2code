@@ -57,61 +57,55 @@ export default function SymbolsList({ repositoryId }: SymbolsListProps) {
 
   if (error) {
     return (
-      <p className="error-note" data-testid="symbols-error">
-        Failed to load symbols: {error}
+      <p className="error-block" data-testid="symbols-error">
+        Couldn't load the symbols: {error}
       </p>
     );
   }
 
   if (!grouped) {
     return (
-      <p className="text-sm text-ink-3" data-testid="symbols-loading">
+      <p className="text-ink-muted" data-testid="symbols-loading">
         Loading symbols…
       </p>
     );
   }
 
-  if (grouped.length === 0) {
-    return (
-      <p className="text-sm text-ink-2" data-testid="symbols-empty">
-        The repo indexed but no code symbols were extracted (it might only contain
-        data or docs files).
-      </p>
-    );
-  }
-
   return (
-    <section data-testid="symbols-list">
-      <p className="text-sm text-ink-2">
-        {symbols?.length ?? 0} symbol{(symbols?.length ?? 0) === 1 ? "" : "s"} across{" "}
-        {grouped.length} file{grouped.length === 1 ? "" : "s"}.
+    <section data-testid={grouped.length ? "symbols-list" : "symbols-empty"}>
+      <h1 className="text-[22px] font-semibold leading-8">Code symbols</h1>
+      <p className="mt-1 text-ink-muted">
+        {grouped.length === 0
+          ? "The repository indexed, but no code symbols were found; it may hold only data or docs."
+          : `${(symbols?.length ?? 0).toLocaleString()} functions, classes and config entries across ${grouped.length} file${grouped.length === 1 ? "" : "s"}, as retrieval sees them.`}
       </p>
 
-      <ul className="mt-6 space-y-6">
-        {grouped.map((file) => (
-          <li key={file.path} data-testid="symbols-file">
-            <div className="flex items-baseline justify-between gap-2 border-b border-rule pb-1.5">
-              <code data-testid="symbols-file-path" className="font-mono text-sm font-medium">
-                {file.path}
-              </code>
-              <span className="text-xs text-ink-3">
-                {file.items.length + file.hidden} symbol
-                {file.items.length + file.hidden === 1 ? "" : "s"}
-              </span>
-            </div>
-            <ul className="mt-2 space-y-1">
-              {file.items.map((sym) => (
-                <SymbolRow key={`${sym.file_path}:${sym.start_line}`} sym={sym} />
-              ))}
-            </ul>
-            {file.hidden > 0 && (
-              <p className="mt-2 text-xs text-ink-3">
-                + {file.hidden} more symbol{file.hidden === 1 ? "" : "s"} not shown
-              </p>
-            )}
-          </li>
-        ))}
-      </ul>
+      {grouped.length > 0 && (
+        <div className="card mt-6 divide-y divide-line">
+          {grouped.map((file) => (
+            <section key={file.path} data-testid="symbols-file" className="px-4 py-3">
+              <h2 className="flex items-baseline justify-between gap-3">
+                <code data-testid="symbols-file-path" className="truncate font-mono text-[13px] font-medium">
+                  {file.path}
+                </code>
+                <span className="num flex-none text-[12px] text-ink-muted">
+                  {file.items.length + file.hidden}
+                </span>
+              </h2>
+              <ul className="mt-1.5">
+                {file.items.map((sym) => (
+                  <SymbolRow key={`${sym.file_path}:${sym.start_line}`} sym={sym} />
+                ))}
+              </ul>
+              {file.hidden > 0 && (
+                <p className="mt-1 text-[12px] text-ink-muted">
+                  {file.hidden} more not shown
+                </p>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -120,16 +114,14 @@ function SymbolRow({ sym }: { sym: CodeSymbol }) {
   return (
     <li
       data-testid="symbol-row"
-      className="grid grid-cols-[3.5rem_5rem_minmax(0,1fr)] items-baseline gap-3 text-sm"
+      className="grid grid-cols-[minmax(0,1fr)_6rem_4rem] items-baseline gap-3 py-0.5"
     >
-      <span className="text-right font-mono text-xs text-ink-3">L{sym.start_line}</span>
-      <span className="text-xs text-ink-3">
-        {sym.kind} · {sym.language}
-      </span>
       <code data-testid="symbol-name" className="truncate font-mono text-[13px]">
         {sym.name}
-        {sym.signature && <span className="text-ink-3">{sym.signature}</span>}
+        {sym.signature && <span className="text-ink-muted">{sym.signature}</span>}
       </code>
+      <span className="text-[12px] text-ink-muted">{sym.kind}</span>
+      <span className="num text-right text-[12px] text-ink-muted">line {sym.start_line}</span>
     </li>
   );
 }

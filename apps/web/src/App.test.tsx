@@ -9,10 +9,11 @@ afterEach(() => {
 });
 
 describe("App", () => {
-  it("renders the project title", () => {
+  it("names the product and opens on a new analysis", () => {
     render(<App />);
+    expect(screen.getAllByText("Claim2Code").length).toBeGreaterThan(0);
     expect(
-      screen.getByRole("heading", { level: 1, name: /claim2code/i }),
+      screen.getByRole("heading", { level: 1, name: "New analysis" }),
     ).toBeInTheDocument();
   });
 
@@ -356,7 +357,7 @@ describe("App", () => {
     // Repo summary banner appears.
     const summary = await screen.findByTestId("repo-summary");
     await waitFor(() =>
-      expect(summary).toHaveTextContent(/indexed acme\/demo/i),
+      expect(summary).toHaveTextContent(/acme\/demo/i),
     );
 
     // SymbolsList fetches and renders the symbols grouped by file.
@@ -595,7 +596,7 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByTestId("verification-panel")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /upload another/i }));
+    fireEvent.click(screen.getByRole("button", { name: /new analysis/i }));
     expect(window.location.search).toBe("");
   });
   it("restores the repository bound to a reopened analysis", async () => {
@@ -633,9 +634,9 @@ describe("App", () => {
     );
     render(<App />);
 
-    expect(await screen.findByTestId("repo-summary")).toHaveTextContent(
-      "acme/demo — 3 files, 7 symbols",
-    );
+    const summary = await screen.findByTestId("repo-summary");
+    expect(summary).toHaveTextContent("acme/demo");
+    expect(summary).toHaveTextContent("3 files, 7 symbols");
     expect(screen.queryByTestId("repository-section")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Code symbols" })).toBeInTheDocument();
   });

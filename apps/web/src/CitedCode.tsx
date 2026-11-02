@@ -46,15 +46,15 @@ export default function CitedCode({ analysisId, citation }: CitedCodeProps) {
   return (
     <div data-testid="code-citation">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="font-mono text-xs text-ink-2">
+        <p className="font-mono text-[13px]">
           {excerpt?.file_path ?? citation.file_path}:{range}
         </p>
-        <div className="flex gap-4 text-xs">
+        <div className="flex gap-4 text-[13px]">
           {excerpt && excerpt.lines.length < excerpt.total_lines && context === CONTEXT && (
             <button
               type="button"
               onClick={() => setContext(WIDE_CONTEXT)}
-              className="link"
+              className="text-accent hover:underline"
               data-testid="code-more-context"
             >
               More context
@@ -65,7 +65,7 @@ export default function CitedCode({ analysisId, citation }: CitedCodeProps) {
               href={excerpt.url}
               target="_blank"
               rel="noreferrer"
-              className="link"
+              className="text-accent hover:underline"
             >
               View on GitHub ↗
             </a>
@@ -75,7 +75,7 @@ export default function CitedCode({ analysisId, citation }: CitedCodeProps) {
 
       {excerpt ? (
         <pre
-          className="mt-1.5 max-h-96 overflow-auto rounded-sm border border-rule bg-paper py-2 font-mono text-xs leading-relaxed text-ink"
+          className="mt-1.5 max-h-96 overflow-auto rounded-control border border-line bg-raised py-2 font-mono text-[12px] leading-5"
           data-testid="code-excerpt"
         >
           {excerpt.lines.map((line) => {
@@ -83,10 +83,10 @@ export default function CitedCode({ analysisId, citation }: CitedCodeProps) {
             return (
               <div
                 key={line.number}
-                className={cited ? "border-l-2 border-ink bg-hl/45" : "border-l-2 border-transparent text-ink-3"}
+                className={cited ? "border-l-2 border-accent bg-accent-wash" : "border-l-2 border-transparent text-ink-muted"}
                 data-cited={cited || undefined}
               >
-                <span className="inline-block w-12 select-none pr-4 text-right text-ink-3">
+                <span className="num inline-block w-12 select-none pr-4 text-right text-ink-muted">
                   {line.number}
                 </span>
                 {line.text || " "}
@@ -96,15 +96,15 @@ export default function CitedCode({ analysisId, citation }: CitedCodeProps) {
         </pre>
       ) : error ? (
         <div className="mt-1" data-testid="code-excerpt-error">
-          <p className="text-xs text-verdict-bad">
+          <p className="text-[13px] text-negative">
             Could not load the file ({error}); showing the model's quote instead.
           </p>
-          <pre className="mt-1.5 overflow-x-auto rounded-sm bg-paper px-3 py-2 font-mono text-xs">
+          <pre className="mt-1.5 overflow-x-auto rounded-control bg-raised px-3 py-2 font-mono text-[12px]">
             {citation.quote}
           </pre>
         </div>
       ) : (
-        <p className="mt-1.5 text-xs text-ink-3">Loading code…</p>
+        <p className="mt-1.5 text-[13px] text-ink-muted">Loading code…</p>
       )}
     </div>
   );

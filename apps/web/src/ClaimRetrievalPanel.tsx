@@ -112,15 +112,15 @@ export default function ClaimRetrievalPanel({
 
   if (claimsError) {
     return (
-      <p className="error-note" data-testid="retrieval-claims-error">
-        Failed to load claims: {claimsError}
+      <p className="error-block" data-testid="retrieval-claims-error">
+        Couldn't load the claims: {claimsError}
       </p>
     );
   }
 
   if (!claims) {
     return (
-      <p className="text-sm text-ink-3" data-testid="retrieval-loading-claims">
+      <p className="text-ink-muted" data-testid="retrieval-loading-claims">
         Loading claims…
       </p>
     );
@@ -128,9 +128,8 @@ export default function ClaimRetrievalPanel({
 
   if (claims.length === 0) {
     return (
-      <p className="text-sm text-ink-2" data-testid="retrieval-empty">
-        No claims available to retrieve against — upload a paper with extracted
-        claims first.
+      <p className="text-ink-muted" data-testid="retrieval-empty">
+        No claims to retrieve against: the paper has no extracted claims.
       </p>
     );
   }
@@ -139,98 +138,93 @@ export default function ClaimRetrievalPanel({
 
   return (
     <section data-testid="retrieval-panel">
-      <p className="text-sm text-ink-2">
-        The code symbols nearest to a claim in the embedding index (pgvector cosine).
-        Verification starts from a wider, reranked candidate set.
+      <h1 className="text-[22px] font-semibold leading-8">Retrieval</h1>
+      <p className="mt-1 text-ink-muted">
+        The code nearest to a claim in the embedding index. Verification starts from a wider
+        candidate set, reranked by the chat model.
       </p>
 
-      <label htmlFor="claim-picker" className="eyebrow mb-2 mt-6 block">
-        Claim
-      </label>
-      <select
-        id="claim-picker"
-        data-testid="claim-picker"
-        value={selectedClaimId}
-        onChange={(e) => setSelectedClaimId(e.target.value)}
-        className="field"
-      >
-        {claims.map((c) => (
-          <option key={c.claim_id} value={c.claim_id}>
-            {c.claim_id} · {c.text.slice(0, 90)}
-            {c.text.length > 90 ? "…" : ""}
-          </option>
-        ))}
-      </select>
-
-      {selectedClaim && (
-        <blockquote
-          className="mt-4 border-l-2 border-ink pl-3 font-serif text-[15px] leading-relaxed"
-          data-testid="retrieval-claim-quote"
+      <div className="mt-6 max-w-3xl">
+        <label htmlFor="claim-picker" className="mb-2 block font-medium">
+          Claim
+        </label>
+        <select
+          id="claim-picker"
+          data-testid="claim-picker"
+          value={selectedClaimId}
+          onChange={(e) => setSelectedClaimId(e.target.value)}
+          className="field"
         >
-          {selectedClaim.text}
-        </blockquote>
-      )}
+          {claims.map((c) => (
+            <option key={c.claim_id} value={c.claim_id}>
+              {c.claim_id} · {c.text.slice(0, 90)}
+              {c.text.length > 90 ? "…" : ""}
+            </option>
+          ))}
+        </select>
+        {selectedClaim && (
+          <p className="mt-3 leading-[22px]" data-testid="retrieval-claim-quote">
+            {selectedClaim.text}
+          </p>
+        )}
+      </div>
 
-      <div className="mt-6">
+      <div className="mt-6 max-w-3xl">
         {error && (
-          <p className="error-note" data-testid="retrieval-error">
+          <p className="error-block" data-testid="retrieval-error">
             Retrieval failed: {error}
           </p>
         )}
-
         {loading && (
-          <p className="text-sm text-ink-3" data-testid="retrieval-loading">
+          <p className="text-ink-muted" data-testid="retrieval-loading">
             Searching the index…
           </p>
         )}
-
         {!loading && !error && matches && matches.length === 0 && (
-          <p className="text-sm text-ink-2" data-testid="retrieval-empty-results">
-            No code symbols matched this claim — the repository may not be indexed yet,
-            or the embedding model returned no close hits.
+          <p className="text-ink-muted" data-testid="retrieval-empty-results">
+            No code matched this claim. The repository may not be indexed yet, or nothing in it
+            is close.
           </p>
         )}
-
         {!loading && !error && matches && matches.length > 0 && (
-          <ol className="border-t border-rule" data-testid="retrieval-matches">
-            {matches.map((m, idx) => (
-              <li
-                key={m.symbol_id}
-                data-testid="retrieval-match"
-                className="grid grid-cols-[2rem_minmax(0,1fr)_4rem] gap-x-3 border-b border-rule py-3"
-              >
-                <span className="font-mono text-xs text-ink-3">{idx + 1}</span>
-                <div className="min-w-0">
-                  <code
-                    data-testid="retrieval-match-name"
-                    className="block truncate font-mono text-[13px]"
-                  >
-                    {m.name}
-                    {m.signature && <span className="text-ink-3">{m.signature}</span>}
-                  </code>
-                  <p className="mt-0.5 text-xs text-ink-3">
-                    {m.kind} · <code data-testid="retrieval-match-path" className="font-mono">
-                      {m.file_path}:{m.start_line}:{m.start_col}
-                    </code>
-                  </p>
-                  {m.docstring && (
-                    <p
-                      className="mt-1 line-clamp-2 text-xs italic text-ink-2"
-                      data-testid="retrieval-match-docstring"
-                    >
-                      {m.docstring}
-                    </p>
-                  )}
-                </div>
-                <span
-                  className="text-right font-mono text-xs text-ink-2"
-                  data-testid="retrieval-match-score"
+          <div className="card">
+            <div className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-line px-4 py-2.5 text-[12px] text-ink-muted">
+              <span>Rank</span>
+              <span>Symbol</span>
+              <span className="text-right">Similarity</span>
+            </div>
+            <ol data-testid="retrieval-matches">
+              {matches.map((m, idx) => (
+                <li
+                  key={m.symbol_id}
+                  data-testid="retrieval-match"
+                  className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-line-rule px-4 py-3 last:border-b-0"
                 >
-                  {(scores?.[idx] ?? m.similarity).toFixed(3)}
-                </span>
-              </li>
-            ))}
-          </ol>
+                  <span className="num text-ink-muted">{idx + 1}.</span>
+                  <div className="min-w-0">
+                    <code data-testid="retrieval-match-name" className="block truncate font-mono text-[13px]">
+                      {m.name}
+                      {m.signature && <span className="text-ink-muted">{m.signature}</span>}
+                    </code>
+                    <p className="mt-0.5 truncate text-[12px] text-ink-muted">
+                      {m.kind} in{" "}
+                      <code data-testid="retrieval-match-path" className="font-mono">
+                        {m.file_path}:{m.start_line}:{m.start_col}
+                      </code>
+                    </p>
+                    {m.docstring && (
+                      <p className="mt-1 line-clamp-2 text-[13px] text-ink-muted" data-testid="retrieval-match-docstring">
+                        {m.docstring}
+                      </p>
+                    )}
+                  </div>
+                  <span className="num text-right" data-testid="retrieval-match-score">
+                    {(scores?.[idx] ?? m.similarity).toFixed(3)}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
         )}
       </div>
     </section>

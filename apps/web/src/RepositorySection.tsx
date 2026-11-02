@@ -41,14 +41,13 @@ export default function RepositorySection({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="panel p-6" data-testid="repository-section">
-      <h3 className="font-serif text-lg font-medium">Bind the paper's repository</h3>
-      <p className="mt-1 text-sm text-ink-2">
-        A public GitHub URL. The code is cloned and indexed for retrieval, never
-        executed. Up to 200 MB.
+    <form onSubmit={handleSubmit} className="card p-5" data-testid="repository-section">
+      <h2 className="text-[16px] font-medium">Bind the paper's repository</h2>
+      <p className="mt-1 text-ink-muted">
+        Claims are verified against this code. It is cloned and indexed, never run; public
+        GitHub repositories up to 200 MB.
       </p>
-
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mt-4 flex max-w-2xl flex-col gap-2 sm:flex-row">
         <input
           type="url"
           inputMode="url"
@@ -59,24 +58,18 @@ export default function RepositorySection({
           onChange={(e) => setUrl(e.target.value)}
           className="field font-mono"
         />
-        <button
-          type="submit"
-          disabled={submitting}
-          data-testid="repo-clone-button"
-          className="btn-primary shrink-0"
-        >
+        <button type="submit" disabled={submitting} data-testid="repo-clone-button" className="btn-primary h-9">
           {submitting && <Spinner />}
-          {submitting ? "Indexing…" : "Clone & index"}
+          {submitting ? "Indexing…" : "Clone and index"}
         </button>
       </div>
       {submitting && (
-        <p className="mt-3 text-xs text-ink-3">
+        <p className="mt-2 text-[13px] text-ink-muted">
           Cloning, parsing and embedding the code — a few minutes for a large repository.
         </p>
       )}
-
       {error && (
-        <p className="error-note mt-4" data-testid="repo-error">
+        <p className="mt-2 text-[13px] text-negative" data-testid="repo-error">
           {error}
         </p>
       )}

@@ -54,12 +54,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="panel p-6" data-testid="upload-section">
-      <h3 className="font-serif text-lg font-medium">Upload a paper</h3>
-      <p className="mt-1 text-sm text-ink-2">
-        A digitally generated PDF (no scans), up to 50 MB.
-      </p>
-
+    <form onSubmit={handleSubmit} className="card p-5" data-testid="upload-section">
       <label
         onDragOver={(e) => {
           e.preventDefault();
@@ -71,8 +66,8 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
           setDragging(false);
           pick(e.dataTransfer.files?.[0]);
         }}
-        className={`mt-5 flex cursor-pointer flex-col items-center justify-center rounded-sm border border-dashed px-4 py-10 text-center transition-colors ${
-          dragging ? "border-ink bg-hl/40" : "border-rule-strong hover:border-ink-3"
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-card border border-dashed px-4 py-8 text-center transition-colors ${
+          dragging ? "border-accent bg-accent-wash" : "border-line-control bg-raised hover:border-ink-faint"
         }`}
       >
         <input
@@ -85,38 +80,31 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
         />
         {file ? (
           <>
-            <span className="font-mono text-sm">{file.name}</span>
-            <span className="mt-1 text-xs text-ink-3">
-              {(file.size / 1024 / 1024).toFixed(1)} MB · click to choose another
+            <span className="font-medium">{file.name}</span>
+            <span className="num mt-1 text-[12px] text-ink-muted">
+              {(file.size / 1024 / 1024).toFixed(1)} MB · choose another
             </span>
           </>
         ) : (
           <>
-            <span className="font-serif text-base italic text-ink-2">Drop the PDF here</span>
-            <span className="mt-1 text-xs text-ink-3">or click to choose a file</span>
+            <span className="font-medium">Drop the paper's PDF here</span>
+            <span className="mt-1 text-[12px] text-ink-muted">or click to choose a file</span>
           </>
         )}
       </label>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <span className="text-xs text-ink-3">
-          {submitting
-            ? "Parsing and extracting claims — a minute or two."
-            : "Claims are extracted with the passage each comes from."}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <span className="text-[13px] text-ink-muted">
+          {submitting ? "Reading the paper and extracting claims — a minute or two." : ""}
         </span>
-        <button
-          type="submit"
-          disabled={!file || submitting}
-          data-testid="upload-button"
-          className="btn-primary"
-        >
+        <button type="submit" disabled={!file || submitting} data-testid="upload-button" className="btn-primary">
           {submitting && <Spinner />}
-          {submitting ? "Extracting…" : "Extract claims"}
+          {submitting ? "Extracting claims…" : "Extract claims"}
         </button>
       </div>
 
       {error && (
-        <p className="error-note mt-4" data-testid="upload-error">
+        <p className="mt-3 text-[13px] text-negative" data-testid="upload-error">
           {error}
         </p>
       )}

@@ -49,13 +49,27 @@ with 4 to 8 small, deterministic cases. Rules:
 When the function is an instance method (its first parameter is
 self), also write Python source that defines
 
-    def make_instance():
+    def make_instance(**config):
         return ...  # a small object of the method's class
 
-Import the class from its module path, build it with the smallest
-configuration its __init__ (shown in class_context) accepts, and set
-any attribute the method reads. Leave instance_code empty for plain
-functions. make_inputs gives the arguments after self.
+Import the class from its module path and build it with the smallest
+configuration its __init__ (shown in class_context) accepts. A fresh
+object is built for every case: a case may add "instance": {...},
+whose keys are passed to make_instance as config, so different cases
+can use different configurations (a rank, a flag, a size). make_inputs
+gives the arguments after self, and they must fit that case's object.
+make_instance must return the object. Leave instance_code empty for
+plain functions.
+
+Parameters that start at zero or identity (a zero-initialised matrix,
+an all-ones scale) make part of the computation vanish, so a wrong
+implementation of that part would still give the same output. In
+make_instance, overwrite such parameters with small random values
+(torch.randn under torch.no_grad()), so every term the paper describes
+affects the output.
+
+Write runnable code only. Put any reasoning in reason or input_notes,
+not in comments, and never leave a function body as `pass`.
 
 The test environment section lists which of the module's imports are
 installed. A package listed as not installed is replaced by a stub:
@@ -75,7 +89,8 @@ function does with the arguments. For an instance method, the
 reference also receives a fresh copy of the object as `obj`: name the
 data attributes the result depends on (weights, buffers, configuration
 values such as a patch size or a flag) and say what each one is in the
-paper's terms, without saying how the method combines them.
+paper's terms, without saying how the method combines them. Say which
+configuration keys each case's "instance" may set.
 """
 
 REFERENCE_SYSTEM_PROMPT = """\

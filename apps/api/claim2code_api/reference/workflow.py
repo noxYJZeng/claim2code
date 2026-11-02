@@ -10,7 +10,10 @@ For one claim:
   2. **Inputs** — model call with the function body in view.
   3. **Reference** — model call with the paper passage and the
      signature, never the body.
-  4. **Run** both in the sandbox and compare outputs per input.
+  4. **Run** both in the sandbox and compare outputs per input. A
+     difference is only reported as confirmed when a second reference,
+     written separately, also disagrees with the code; if the second
+     one agrees with the code, the first is taken to be wrong.
   5. **Persist** to ``AnalysisState.reference_checks`` (one entry per
      claim, replaced on re-run).
 
@@ -45,6 +48,7 @@ from claim2code_api.reference.schemas import (
     ReferenceCase,
     ReferenceCheck,
     ReferenceCheckStatus,
+    ReferenceImplementation,
     ReferenceTarget,
 )
 from claim2code_api.repos.schemas import CodeSymbolKind, RetrieveMatch
@@ -148,24 +152,68 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
     except ReferenceCheckLLMError as exc:
         return result(ReferenceCheckStatus.ERROR, f"The model call failed: {exc}", target=target_info)
 
-    rtol, atol = min(max(impl.rtol, 0.0), 1.0), min(max(impl.atol, 0.0), 1.0)
-    run = run_harness(
-        python=python,
-        repo_root=Path(repo.clone_path),
-        module_file=target.file_path,
-        qualname=qualname,
-        reference_code=impl.reference_code,
-        inputs_code=inputs.inputs_code,
-        instance_code=inputs.instance_code,
-        rtol=rtol,
-        atol=atol,
-        timeout_seconds=settings.reference_check_timeout_seconds,
-    )
-    status, explanation, cases = summarise(run, qualname, settings.reference_check_timeout_seconds)
+    def execute(reference: ReferenceImplementation) -> tuple[
+        SandboxRun, ReferenceCheckStatus, str, list[ReferenceCase], float, float,
+    ]:
+        rtol, atol = min(max(reference.rtol, 0.0), 1.0), min(max(reference.atol, 0.0), 1.0)
+        run = run_harness(
+            python=python,
+            repo_root=Path(repo.clone_path),
+            module_file=target.file_path,
+            qualname=qualname,
+            reference_code=reference.reference_code,
+            inputs_code=inputs.inputs_code,
+            instance_code=inputs.instance_code,
+            rtol=rtol,
+            atol=atol,
+            timeout_seconds=settings.reference_check_timeout_seconds,
+        )
+        status, text, cases = summarise(run, qualname, settings.reference_check_timeout_seconds)
+        return run, status, text, cases, rtol, atol
+
+    run, status, explanation, cases, rtol, atol = execute(impl)
+    confirmed: bool | None = None
+    second: ReferenceImplementation | None = None
+    if status == ReferenceCheckStatus.MISMATCH:
+        # The reference is model-written too. Before blaming the repository,
+        # ask for a second one written from scratch and run it the same way.
+        try:
+            second = client.reference_implementation(
+                system=prompts.REFERENCE_SYSTEM_PROMPT,
+                payload=prompts.build_reference_payload(
+                    claim=claim, target=target, qualname=qualname,
+                    inputs_code=inputs.inputs_code, input_notes=inputs.input_notes,
+                ),
+            )
+        except ReferenceCheckLLMError as exc:
+            confirmed = False
+            explanation += f" A second reference could not be written to confirm this: {exc}"
+        if second is not None:
+            run2, status2, text2, cases2, rtol2, atol2 = execute(second)
+            if status2 == ReferenceCheckStatus.MISMATCH:
+                confirmed = True
+                explanation += (
+                    " A second reference, written separately, also gave a different output."
+                )
+            elif status2 == ReferenceCheckStatus.MATCH:
+                # The second reference agrees with the code: the first was wrong.
+                confirmed = False
+                impl, second = second, impl
+                run, status, cases, rtol, atol = run2, status2, cases2, rtol2, atol2
+                explanation = (
+                    f"{text2} A first reference gave a different output, but a second one "
+                    "written separately agrees with the code, so the first is taken to be wrong."
+                )
+            else:
+                confirmed = False
+                explanation += f" A second reference could not confirm this: {text2}"
+
     return result(
         status, explanation,
         target=target_info,
         reference_code=impl.reference_code,
+        second_reference_code=second.reference_code if second is not None else "",
+        confirmed=confirmed,
         inputs_code=inputs.inputs_code,
         instance_code=inputs.instance_code,
         assumptions=impl.assumptions,

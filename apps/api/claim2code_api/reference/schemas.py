@@ -126,6 +126,11 @@ class ReferenceCheck(BaseModel):
     explanation: str
     target: ReferenceTarget | None = None
     reference_code: str = ""
+    second_reference_code: str = ""
+    """The other reference when a difference was re-checked (see ``confirmed``)."""
+    confirmed: bool | None = None
+    """Set only when the first reference disagreed with the code: True if a
+    second reference also disagreed, False if it agreed or could not run."""
     inputs_code: str = ""
     instance_code: str = ""
     assumptions: list[str] = Field(default_factory=list)

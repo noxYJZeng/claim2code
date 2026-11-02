@@ -104,9 +104,15 @@ def _target(name: str) -> RetrieveMatch:
     )
 
 
+_WRONG_REFERENCE = "def reference(x, y, beta=1.0):\n    return -1.0\n"
+
+
 class _Client:
-    def __init__(self, *, testable: bool = True, fail: bool = False) -> None:
+    def __init__(
+        self, *, testable: bool = True, fail: bool = False, references: list[str] | None = None,
+    ) -> None:
         self.testable, self.fail = testable, fail
+        self.references = list(references or [_REFERENCE, _REFERENCE])
         self.payloads: list[str] = []
 
     def reference_inputs(self, *, system: str, payload: str) -> ReferenceInputs:
@@ -122,7 +128,8 @@ class _Client:
     def reference_implementation(self, *, system: str, payload: str) -> ReferenceImplementation:
         self.payloads.append(payload)
         return ReferenceImplementation(
-            reference_code=_REFERENCE, rtol=1e-6, atol=1e-9, assumptions=["mean reduction"],
+            reference_code=self.references.pop(0), rtol=1e-6, atol=1e-9,
+            assumptions=["mean reduction"],
         )
 
 
@@ -155,18 +162,49 @@ def test_matching_function(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> N
 def test_reference_author_never_sees_the_body(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
     db, state, client = _setup(monkeypatch, repo_dir)
     workflow_mod.run_reference_check(db=db, analysis_id=state.analysis_id, claim_id="c1")
-    inputs_payload, reference_payload = client.payloads
+    inputs_payload, reference_payload = client.payloads[:2]
     assert "source:" in inputs_payload
     assert "source:" not in reference_payload
     assert _QUOTE in reference_payload
     assert "def reference(x, y, beta=1.0)" in reference_payload
 
 
-def test_wrong_function_is_a_mismatch(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
-    db, state, _ = _setup(monkeypatch, repo_dir, name="plain_l1")
+def test_wrong_function_is_a_confirmed_mismatch(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
+    db, state, client = _setup(monkeypatch, repo_dir, name="plain_l1")
     check = workflow_mod.run_reference_check(db=db, analysis_id=state.analysis_id, claim_id="c1")
     assert check.status == ReferenceCheckStatus.MISMATCH
+    assert check.confirmed is True
     assert check.explanation.startswith("2 of 2 inputs gave a different output from plain_l1")
+    assert "second reference, written separately, also" in check.explanation
+    assert check.second_reference_code == _REFERENCE
+    assert len(client.payloads) == 3  # inputs, reference, second reference
+
+
+def test_a_wrong_reference_is_overruled(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
+    client = _Client(references=[_WRONG_REFERENCE, _REFERENCE])
+    db, state, _ = _setup(monkeypatch, repo_dir, client=client)
+    check = workflow_mod.run_reference_check(db=db, analysis_id=state.analysis_id, claim_id="c1")
+    assert check.status == ReferenceCheckStatus.MATCH
+    assert check.confirmed is False
+    assert check.reference_code == _REFERENCE
+    assert check.second_reference_code == _WRONG_REFERENCE
+    assert "the first is taken to be wrong" in check.explanation
+
+
+def test_an_unconfirmed_mismatch_says_so(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
+    client = _Client(references=[_WRONG_REFERENCE, "def reference(:\n"])
+    db, state, _ = _setup(monkeypatch, repo_dir, client=client)
+    check = workflow_mod.run_reference_check(db=db, analysis_id=state.analysis_id, claim_id="c1")
+    assert check.status == ReferenceCheckStatus.MISMATCH
+    assert check.confirmed is False
+    assert "second reference could not confirm" in check.explanation
+
+
+def test_a_match_needs_no_second_reference(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
+    db, state, client = _setup(monkeypatch, repo_dir)
+    check = workflow_mod.run_reference_check(db=db, analysis_id=state.analysis_id, claim_id="c1")
+    assert check.confirmed is None
+    assert len(client.payloads) == 2
 
 
 def test_rerun_replaces_the_entry(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:

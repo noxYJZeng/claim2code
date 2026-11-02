@@ -17,6 +17,8 @@ const MISMATCH: ReferenceCheck = {
     qualname: "smooth_l1", signature: "(x, y, beta=1.0)",
   },
   reference_code: "def reference(x, y, beta=1.0):\n    ...",
+  second_reference_code: "def reference(x, y, beta=1.0):\n    return 0",
+  confirmed: true,
   inputs_code: "def make_inputs():\n    ...",
   instance_code: "",
   assumptions: ["Mean over elements."],
@@ -58,6 +60,8 @@ describe("ReferenceTest", () => {
     expect(await screen.findByTestId("reference-status")).toHaveTextContent("Different output");
     expect(screen.getByText("smooth_l1 · losses.py:2")).toBeInTheDocument();
     expect(screen.getByText("Differs")).toBeInTheDocument();
+    expect(screen.getByTestId("reference-confirmed")).toHaveTextContent("Confirmed by a second reference");
+    expect(screen.getByText("Second reference")).toBeInTheDocument();
     expect(screen.getByText("3.0 != 2.5")).toBeInTheDocument();
     expect(screen.getByText("Mean over elements.")).toBeInTheDocument();
     expect(screen.getByText(/Ran with: separate process/)).toBeInTheDocument();

@@ -551,6 +551,8 @@ export type ReferenceCheck = {
     signature: string;
   } | null;
   reference_code: string;
+  second_reference_code: string;
+  confirmed: boolean | null;
   inputs_code: string;
   instance_code: string;
   assumptions: string[];

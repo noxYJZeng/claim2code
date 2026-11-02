@@ -338,7 +338,12 @@ def run(spec: dict[str, Any]) -> dict[str, Any]:
         _seed(seed)
         if not needs_instance:
             return _call(fn, case)
-        obj = namespace["make_instance"]()
+        obj = namespace["make_instance"](**dict(case.get("instance") or {}))
+        if obj is None or isinstance(obj, list | tuple | dict):
+            raise TypeError(
+                f"make_instance() returned {type(obj).__name__}; it must return one object "
+                '(give each case its own configuration with "instance": {...})',
+            )
         _seed(seed)
         if method_of:
             return _call(getattr(obj, method), case)
@@ -350,7 +355,13 @@ def run(spec: dict[str, Any]) -> dict[str, Any]:
         seed = int(spec.get("seed", 0)) + index
         record: dict[str, Any] = {
             "index": index,
-            "inputs": _short({"args": case.get("args", []), "kwargs": case.get("kwargs", {})}),
+            "inputs": _short({
+                k: v for k, v in (
+                    ("instance", case.get("instance")),
+                    ("args", case.get("args", [])),
+                    ("kwargs", case.get("kwargs", {})),
+                ) if v is not None
+            }),
         }
         try:
             actual = side(target, case, seed, method_of=True)

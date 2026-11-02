@@ -147,6 +147,11 @@ function Result({ check }: { check: ReferenceCheck }) {
         <span className={`pill ${STATUS_STYLE[check.status]}`} data-testid="reference-status">
           {STATUS_TEXT[check.status]}
         </span>
+        {check.status === "MISMATCH" && check.confirmed !== null && (
+          <span className="text-[13px] text-ink-muted" data-testid="reference-confirmed">
+            {check.confirmed ? "Confirmed by a second reference" : "Not confirmed by a second reference"}
+          </span>
+        )}
         {check.target && (
           <span className="font-mono text-[12px] text-ink-muted">
             {check.target.qualname} · {check.target.file_path}:{check.target.start_line}
@@ -201,6 +206,10 @@ function Result({ check }: { check: ReferenceCheck }) {
       )}
 
       <Code title="Reference implementation" source={check.reference_code} />
+      <Code
+        title={check.status === "MATCH" ? "Overruled first reference" : "Second reference"}
+        source={check.second_reference_code}
+      />
       <Code title="Inputs" source={check.inputs_code} />
       <Code title="Object setup" source={check.instance_code} />
 

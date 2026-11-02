@@ -43,8 +43,8 @@ def probe(x):
     return [net, fs, os.environ.get("C2C_SECRET", "no secret")]
 
 class Noisy:
-    def __init__(self):
-        self.w = np.random.rand(3)
+    def __init__(self, n=3):
+        self.w = np.random.rand(n)
 
     def apply(self, x):
         return self.w * x
@@ -214,6 +214,36 @@ def test_cuda_calls_run_on_cpu(repo: Path) -> None:
     assert run.report is not None
     assert run.report["cases"][0]["outcome"] == "match", run.report
     assert run.report["cuda_on_cpu"] is True
+
+
+def test_each_case_can_configure_its_object(repo: Path) -> None:
+    run = run_harness(
+        python=sys.executable, repo_root=repo, module_file="pkg/losses.py", qualname="Noisy.apply",
+        reference_code="def reference(obj, x):\n    return obj.w * x\n",
+        inputs_code=(
+            "def make_inputs():\n"
+            "    return [{'instance': {'n': 2}, 'args': [2.0]}, {'instance': {'n': 5}, 'args': [1.0]}]\n"
+        ),
+        instance_code="def make_instance(**config):\n    from pkg.losses import Noisy\n    return Noisy(**config)\n",
+        rtol=1e-9, atol=0, timeout_seconds=30,
+    )
+    assert run.report is not None
+    assert [c["outcome"] for c in run.report["cases"]] == ["match", "match"]
+    assert "'instance': {'n': 5}" in run.report["cases"][1]["inputs"]
+
+
+def test_make_instance_must_return_one_object(repo: Path) -> None:
+    run = run_harness(
+        python=sys.executable, repo_root=repo, module_file="pkg/losses.py", qualname="Noisy.apply",
+        reference_code="def reference(obj, x):\n    return x\n",
+        inputs_code="def make_inputs():\n    return [{'args': [1.0]}]\n",
+        instance_code="def make_instance(**config):\n    from pkg.losses import Noisy\n    return [Noisy()]\n",
+        rtol=0, atol=0, timeout_seconds=30,
+    )
+    assert run.report is not None
+    detail = run.report["cases"][0]["detail"]
+    assert "returned list" in detail
+    assert '"instance"' in detail
 
 
 def test_matching_implementation(repo: Path) -> None:

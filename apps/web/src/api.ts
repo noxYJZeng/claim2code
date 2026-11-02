@@ -542,6 +542,11 @@ export type ReferenceCheck = {
   claim_id: string;
   status: ReferenceCheckStatus;
   explanation: string;
+  // "property": the claim says two computations agree; check() ran both
+  // through the repository's code and there is no reference.
+  test_kind: "reference" | "property";
+  property_statement: string;
+  property_code: string;
   target: {
     symbol_id: string;
     file_path: string;

@@ -110,8 +110,9 @@ _WRONG_REFERENCE = "def reference(x, y, beta=1.0):\n    return -1.0\n"
 class _Client:
     def __init__(
         self, *, testable: bool = True, fail: bool = False, references: list[str] | None = None,
-        inputs: list[str] | None = None,
+        inputs: list[str] | None = None, property_code: str = "",
     ) -> None:
+        self.property_code = property_code
         self.testable, self.fail = testable, fail
         self.references = list(references or [_REFERENCE, _REFERENCE])
         self.inputs = list(inputs or [_INPUTS, _INPUTS])
@@ -125,6 +126,9 @@ class _Client:
             testable=self.testable, reason="It reads a dataset from disk." if not self.testable else "pure",
             inputs_code=self.inputs.pop(0) if self.testable else "", instance_code="",
             input_notes="two float lists",
+            test_kind="property" if self.property_code else "reference",
+            property_statement="Scaling x, y and beta by 2 doubles the loss" if self.property_code else "",
+            property_code=self.property_code, rtol=1e-6, atol=1e-9,
         )
 
     def reference_implementation(self, *, system: str, payload: str) -> ReferenceImplementation:
@@ -221,6 +225,36 @@ def test_repair_is_tried_only_once(monkeypatch: pytest.MonkeyPatch, repo_dir: Pa
     assert check.status == ReferenceCheckStatus.ERROR
     assert "still broken" in check.explanation
     assert len(client.payloads) == 4
+
+
+_HOMOGENEOUS = (
+    "def check(f, x, y, beta=1.0):\n"
+    "    import numpy as np\n"
+    "    return f(np.multiply(x, 2), np.multiply(y, 2), beta * 2), 2 * f(x, y, beta)\n"
+)
+
+
+def test_property_that_holds(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
+    client = _Client(property_code=_HOMOGENEOUS)
+    db, state, _ = _setup(monkeypatch, repo_dir, client=client)
+    check = workflow_mod.run_reference_check(db=db, analysis_id=state.analysis_id, claim_id="c1")
+    assert check.status == ReferenceCheckStatus.MATCH
+    assert check.test_kind.value == "property"
+    assert check.explanation.startswith("The property held on all 2 inputs: Scaling x, y and beta")
+    assert check.reference_code == ""
+    assert check.property_code == _HOMOGENEOUS
+    assert len(client.payloads) == 1  # no reference is written for a property
+
+
+def test_property_that_fails(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
+    # Without scaling beta the quadratic region does not scale linearly.
+    broken = _HOMOGENEOUS.replace("beta * 2", "beta")
+    client = _Client(property_code=broken)
+    db, state, _ = _setup(monkeypatch, repo_dir, client=client)
+    check = workflow_mod.run_reference_check(db=db, analysis_id=state.analysis_id, claim_id="c1")
+    assert check.status == ReferenceCheckStatus.MISMATCH
+    assert check.confirmed is None
+    assert "read check()" in check.explanation
 
 
 def test_a_match_needs_no_second_reference(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:

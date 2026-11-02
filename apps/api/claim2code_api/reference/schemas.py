@@ -9,6 +9,10 @@ the model wrote from the paper passage alone:
     calls on purpose: the inputs are written with the function body
     in view (so they match its types and shapes); the reference is
     written WITHOUT it, so it cannot copy the code it is checking.
+  - A claim that two computations agree (merging weights changes
+    nothing, two forms are equivalent) is tested as a **property**
+    instead: the inputs author also writes ``check()``, which runs both
+    computations through the repository's code; no reference is written.
   - :class:`ReferenceCheck` is the persisted result, one per claim,
     stored in ``AnalysisState.reference_checks`` (JSONB).
 """
@@ -38,6 +42,11 @@ class ReferenceCheckStatus(StrEnum):
     UNTESTABLE = "UNTESTABLE"
 
 
+class TestKind(StrEnum):
+    REFERENCE = "reference"
+    PROPERTY = "property"
+
+
 class CaseOutcome(StrEnum):
     MATCH = "match"
     MISMATCH = "mismatch"
@@ -59,6 +68,23 @@ class ReferenceInputs(BaseModel):
     reason: str = Field(
         description="Why the function can or cannot be checked by calling it on inputs.",
     )
+    test_kind: TestKind = Field(
+        description=(
+            "reference: compare with an implementation written from the paper. property: "
+            "the claim says two computations give the same result; check() computes both."
+        ),
+    )
+    property_statement: str = Field(
+        description="For a property test: the equality the paper claims, in one sentence. Else empty.",
+    )
+    property_code: str = Field(
+        description=(
+            "For a property test: Python source defining check(subject, *args, **kwargs) "
+            "returning (first, second). Else empty."
+        ),
+    )
+    rtol: float = Field(description="For a property test: relative tolerance, e.g. 1e-5.")
+    atol: float = Field(description="For a property test: absolute tolerance, e.g. 1e-6.")
     inputs_code: str = Field(
         description=(
             "Python source defining make_inputs() -> list of "
@@ -124,6 +150,9 @@ class ReferenceCheck(BaseModel):
     claim_id: str
     status: ReferenceCheckStatus
     explanation: str
+    test_kind: TestKind = TestKind.REFERENCE
+    property_statement: str = ""
+    property_code: str = ""
     target: ReferenceTarget | None = None
     reference_code: str = ""
     second_reference_code: str = ""
@@ -172,4 +201,5 @@ __all__ = [
     "ReferenceImplementation",
     "ReferenceInputs",
     "ReferenceTarget",
+    "TestKind",
 ]

@@ -31,6 +31,30 @@ datasets, needs network access or a GPU, needs an object it would have
 to construct with many dependencies, or the claim is about something
 the function does not compute.
 
+Then choose the kind of test:
+
+  - test_kind="property" when the claim says two computations give the
+    same result: merged and unmerged weights give the same output, two
+    forms of an equation are equivalent, a result does not depend on
+    the order of its inputs, a cached path equals the uncached one.
+    Write property_code defining
+
+        def check(subject, *args, **kwargs):
+            ...
+            return first, second
+
+    where subject is a fresh object for an instance method (the
+    function itself otherwise). Compute first and second along the two
+    paths the claim compares, using the repository's own code, for
+    example the output before and after merging. They must come from
+    different code paths; returning the same computation twice tests
+    nothing. Copy tensors you need before a step changes them in place.
+    State the equality in property_statement and set rtol and atol.
+    No reference implementation is written for a property test.
+  - test_kind="reference" otherwise: an independent implementation of
+    the paper is compared with the function. Leave property_code and
+    property_statement empty.
+
 When testable, write Python source that defines
 
     def make_inputs():

@@ -12,6 +12,9 @@ const MISMATCH: ReferenceCheck = {
   claim_id: "c1",
   status: "MISMATCH",
   explanation: "1 of 2 inputs gave a different output from smooth_l1 than from the reference.",
+  test_kind: "reference",
+  property_statement: "",
+  property_code: "",
   target: {
     symbol_id: "s1", file_path: "losses.py", start_line: 2, end_line: 4,
     qualname: "smooth_l1", signature: "(x, y, beta=1.0)",
@@ -77,6 +80,26 @@ describe("ReferenceTest", () => {
     expect(screen.getByTestId("reference-status")).toHaveTextContent("Same output");
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
     expect(JSON.parse(post?.[1]?.body as string)).toEqual({ claim_id: "c1" });
+  });
+
+  it("labels a property test by its two sides", async () => {
+    stubFetch(true, [{
+      ...MISMATCH,
+      status: "MATCH",
+      test_kind: "property",
+      property_statement: "Merging BA into W leaves the output unchanged.",
+      property_code: "def check(obj, x):\n    ...",
+      reference_code: "",
+      second_reference_code: "",
+      confirmed: null,
+      assumptions: [],
+    }]);
+    render(<Harness />);
+    expect(await screen.findByTestId("reference-status")).toHaveTextContent("Property holds");
+    expect(screen.getByTestId("reference-property")).toHaveTextContent("Merging BA into W");
+    expect(screen.getByText("First side")).toBeInTheDocument();
+    expect(screen.getByText("Property check")).toBeInTheDocument();
+    expect(screen.queryByText("Reference implementation")).not.toBeInTheDocument();
   });
 
   it("cannot run without a repository", async () => {

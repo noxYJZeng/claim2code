@@ -28,7 +28,9 @@ type ReferenceTestProps = {
 // The server picks the function the claim cites, has the model write
 // inputs for it (with the code in view) and a reference implementation
 // (from the paper passage and the signature only), runs both in a
-// sandboxed process and compares outputs per input. This shows the
+// sandboxed process and compares outputs per input. A claim that two
+// computations agree (merged vs unmerged weights) is a property test
+// instead: the two columns are the two sides, both run by the repo. This shows the
 // outcome, each input side by side, what the reference had to assume,
 // and the isolation that was actually applied. Running is off unless
 // the server enables it, because it executes repository code.
@@ -140,12 +142,18 @@ export default function ReferenceTest({ claimId, repositoryBound, reference }: R
   );
 }
 
+const PROPERTY_TEXT: Partial<Record<ReferenceCheckStatus, string>> = {
+  MATCH: "Property holds",
+  MISMATCH: "Property fails",
+};
+
 function Result({ check }: { check: ReferenceCheck }) {
+  const property = check.test_kind === "property";
   return (
     <div className="mt-3" data-testid="reference-result">
       <p className="flex flex-wrap items-center gap-2">
         <span className={`pill ${STATUS_STYLE[check.status]}`} data-testid="reference-status">
-          {STATUS_TEXT[check.status]}
+          {(property && PROPERTY_TEXT[check.status]) || STATUS_TEXT[check.status]}
         </span>
         {check.status === "MISMATCH" && check.confirmed !== null && (
           <span className="text-[13px] text-ink-muted" data-testid="reference-confirmed">
@@ -158,6 +166,11 @@ function Result({ check }: { check: ReferenceCheck }) {
           </span>
         )}
       </p>
+      {property && check.property_statement && (
+        <p className="mt-2 text-[13px] text-ink-muted" data-testid="reference-property">
+          Property test: {check.property_statement}
+        </p>
+      )}
       <p className="mt-2 leading-[22px]">{check.explanation}</p>
 
       {check.cases.length > 0 && (
@@ -166,8 +179,8 @@ function Result({ check }: { check: ReferenceCheck }) {
             <thead className="bg-raised text-ink-muted">
               <tr>
                 <th className="px-3 py-2 font-medium">Input</th>
-                <th className="px-3 py-2 font-medium">Repository</th>
-                <th className="px-3 py-2 font-medium">Reference</th>
+                <th className="px-3 py-2 font-medium">{property ? "First side" : "Repository"}</th>
+                <th className="px-3 py-2 font-medium">{property ? "Second side" : "Reference"}</th>
                 <th className="px-3 py-2 font-medium">Result</th>
               </tr>
             </thead>
@@ -206,6 +219,7 @@ function Result({ check }: { check: ReferenceCheck }) {
       )}
 
       <Code title="Reference implementation" source={check.reference_code} />
+      <Code title="Property check" source={check.property_code} />
       <Code
         title={check.status === "MATCH" ? "Overruled first reference" : "Second reference"}
         source={check.second_reference_code}

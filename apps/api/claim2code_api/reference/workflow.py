@@ -10,6 +10,10 @@ For one claim:
   2. **Inputs** — model call with the function body in view.
   3. **Reference** — model call with the paper passage and the
      signature, never the body.
+     A claim that two computations agree (merged vs unmerged weights)
+     is tested as a property instead: the inputs author writes
+     ``check()``, which computes both through the repository's code,
+     and no reference is written.
   4. **Run** both in the sandbox and compare outputs per input. A
      difference is only reported as confirmed when a second reference,
      written separately, also disagrees with the code; if the second
@@ -51,6 +55,7 @@ from claim2code_api.reference.schemas import (
     ReferenceImplementation,
     ReferenceInputs,
     ReferenceTarget,
+    TestKind,
 )
 from claim2code_api.repos.schemas import CodeSymbolKind, RetrieveMatch
 
@@ -138,9 +143,13 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
         claim=claim, target=target, qualname=qualname, environment=environment,
     )
 
+    def is_property(written: ReferenceInputs) -> bool:
+        return written.test_kind == TestKind.PROPERTY and bool(written.property_code.strip())
+
     def write(payload: str) -> tuple[ReferenceInputs, ReferenceImplementation | None]:
+        """Inputs, plus a reference unless the test is untestable or a property."""
         written = client.reference_inputs(system=prompts.INPUTS_SYSTEM_PROMPT, payload=payload)
-        if not written.testable or not written.inputs_code.strip():
+        if not written.testable or not written.inputs_code.strip() or is_property(written):
             return written, None
         return written, client.reference_implementation(
             system=prompts.REFERENCE_SYSTEM_PROMPT,
@@ -150,31 +159,39 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
             ),
         )
 
+    def testable(written: ReferenceInputs, reference: ReferenceImplementation | None) -> bool:
+        return reference is not None or (written.testable and is_property(written))
+
     try:
-        inputs, maybe_impl = write(inputs_payload)
+        inputs, impl = write(inputs_payload)
     except ReferenceCheckLLMError as exc:
         return result(ReferenceCheckStatus.ERROR, f"The model call failed: {exc}", target=target_info)
-    if maybe_impl is None:
+    if not testable(inputs, impl):
         return result(ReferenceCheckStatus.UNTESTABLE, inputs.reason, target=target_info)
-    impl = maybe_impl
 
-    def execute(reference: ReferenceImplementation) -> tuple[
+    def execute(reference: ReferenceImplementation | None) -> tuple[
         SandboxRun, ReferenceCheckStatus, str, list[ReferenceCase], float, float,
     ]:
-        rtol, atol = min(max(reference.rtol, 0.0), 1.0), min(max(reference.atol, 0.0), 1.0)
+        # No reference means a property test: check() computes both sides.
+        tolerances = (reference or inputs).rtol, (reference or inputs).atol
+        rtol, atol = (min(max(t, 0.0), 1.0) for t in tolerances)
         run = run_harness(
             python=python,
             repo_root=Path(repo.clone_path),
             module_file=target.file_path,
             qualname=qualname,
-            reference_code=reference.reference_code,
+            reference_code=reference.reference_code if reference else "",
             inputs_code=inputs.inputs_code,
             instance_code=inputs.instance_code,
+            property_code="" if reference else inputs.property_code,
             rtol=rtol,
             atol=atol,
             timeout_seconds=settings.reference_check_timeout_seconds,
         )
-        status, text, cases = summarise(run, qualname, settings.reference_check_timeout_seconds)
+        status, text, cases = summarise(
+            run, qualname, settings.reference_check_timeout_seconds,
+            property_statement="" if reference else inputs.property_statement,
+        )
         return run, status, text, cases, rtol, atol
 
     run, status, explanation, cases, rtol, atol = execute(impl)
@@ -189,12 +206,13 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
         except ReferenceCheckLLMError as exc:
             logger.warning("reference_check repair failed claim=%s: %s", claim.claim_id, exc)
         else:
-            if repaired_impl is not None:
+            if testable(repaired, repaired_impl):
                 inputs, impl = repaired, repaired_impl
                 run, status, explanation, cases, rtol, atol = execute(impl)
+
     confirmed: bool | None = None
     second: ReferenceImplementation | None = None
-    if status == ReferenceCheckStatus.MISMATCH:
+    if impl is not None and status == ReferenceCheckStatus.MISMATCH:
         # The reference is model-written too. Before blaming the repository,
         # ask for a second one written from scratch and run it the same way.
         try:
@@ -228,21 +246,30 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
                 confirmed = False
                 explanation += f" A second reference could not confirm this: {text2}"
     if status == ReferenceCheckStatus.MISMATCH:
-        # Both references come from the same model and can share a blind spot.
-        explanation += (
-            " Before treating this as a bug, check the assumptions: a difference can also come "
-            "from a convention the paper leaves out, such as a bias term or an epsilon."
-        )
+        if impl is not None:
+            # Both references come from the same model and can share a blind spot.
+            explanation += (
+                " Before treating this as a bug, check the assumptions: a difference can also "
+                "come from a convention the paper leaves out, such as a bias term or an epsilon."
+            )
+        else:
+            explanation += (
+                " Both sides ran the repository's own code, so the difference is in the code "
+                "or in how check() set the two paths up; read check() before treating it as a bug."
+            )
 
     return result(
         status, explanation,
+        test_kind=TestKind.REFERENCE if impl is not None else TestKind.PROPERTY,
+        property_statement="" if impl is not None else inputs.property_statement,
+        property_code="" if impl is not None else inputs.property_code,
         target=target_info,
-        reference_code=impl.reference_code,
+        reference_code=impl.reference_code if impl is not None else "",
         second_reference_code=second.reference_code if second is not None else "",
         confirmed=confirmed,
         inputs_code=inputs.inputs_code,
         instance_code=inputs.instance_code,
-        assumptions=impl.assumptions,
+        assumptions=impl.assumptions if impl is not None else [],
         rtol=rtol, atol=atol,
         cases=cases,
         isolation=run.isolation,
@@ -313,9 +340,14 @@ def third_party_imports(root: Path, module_file: str) -> list[str]:
 
 
 def summarise(
-    run: SandboxRun, qualname: str, timeout_seconds: int,
+    run: SandboxRun, qualname: str, timeout_seconds: int, *, property_statement: str = "",
 ) -> tuple[ReferenceCheckStatus, str, list[ReferenceCase]]:
-    """Status, one-paragraph explanation and per-input cases for a harness run."""
+    """Status, one-paragraph explanation and per-input cases for a harness run.
+
+    With ``property_statement`` the run was a property test: the two
+    values per input are the two sides of that equality, not the
+    function against a reference.
+    """
     report = run.report
     if report is None:
         if run.timed_out:
@@ -348,6 +380,22 @@ def summarise(
         first = next((c for c in cases if c.detail), None)
         detail = f" First error: {first.detail}" if first else ""
         return ReferenceCheckStatus.ERROR, f"No input could be compared.{detail}", cases
+    claimed = property_statement.strip().rstrip(".")
+    if claimed and mismatched:
+        first = mismatched[0]
+        why = f": {first.detail}" if first.detail else ""
+        return (
+            ReferenceCheckStatus.MISMATCH,
+            f"The property did not hold on {len(mismatched)} of {_inputs(len(compared))}: "
+            f"{claimed}. First difference, input {first.index + 1}{why}.{tail}",
+            cases,
+        )
+    if claimed:
+        return (
+            ReferenceCheckStatus.MATCH,
+            f"The property held on all {_inputs(len(compared))}: {claimed}.{tail}",
+            cases,
+        )
     if mismatched:
         first = mismatched[0]
         why = f": {first.detail}" if first.detail else ""

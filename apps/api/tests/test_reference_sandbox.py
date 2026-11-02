@@ -246,6 +246,59 @@ def test_make_instance_must_return_one_object(repo: Path) -> None:
     assert '"instance"' in detail
 
 
+class_merge = """
+class Merging:
+    def __init__(self, broken=False):
+        self.w = np.random.rand(3)
+        self.d = np.random.rand(3)
+        self.merged = False
+        self.broken = broken
+
+    def merge(self):
+        self.w = self.w + (self.d * 1.5 if self.broken else self.d)
+        self.merged = True
+
+    def forward(self, x):
+        return self.w * x if self.merged else self.w * x + self.d * x
+"""
+
+_MERGE_CHECK = (
+    "def check(obj, x):\n"
+    "    before = obj.forward(x)\n"
+    "    obj.merge()\n"
+    "    return before, obj.forward(x)\n"
+)
+
+
+def _merge_run(repo: Path, check: str, broken: bool):
+    (repo / "pkg" / "merging.py").write_text("import numpy as np\n" + class_merge)
+    return run_harness(
+        python=sys.executable, repo_root=repo, module_file="pkg/merging.py", qualname="Merging.forward",
+        reference_code="", property_code=check,
+        inputs_code=f"def make_inputs():\n    return [{{'instance': {{'broken': {broken}}}, 'args': [2.0]}}]\n",
+        instance_code="def make_instance(**c):\n    from pkg.merging import Merging\n    return Merging(**c)\n",
+        rtol=1e-9, atol=0, timeout_seconds=30,
+    )
+
+
+def test_property_holds_for_a_correct_merge(repo: Path) -> None:
+    run = _merge_run(repo, _MERGE_CHECK, broken=False)
+    assert run.report is not None
+    assert run.report["cases"][0]["outcome"] == "match"
+
+
+def test_property_catches_a_wrong_merge(repo: Path) -> None:
+    run = _merge_run(repo, _MERGE_CHECK, broken=True)
+    assert run.report is not None
+    assert run.report["cases"][0]["outcome"] == "mismatch"
+
+
+def test_property_must_compute_two_sides(repo: Path) -> None:
+    run = _merge_run(repo, "def check(obj, x):\n    y = obj.forward(x)\n    return y, y\n", broken=False)
+    assert run.report is not None
+    assert "same object twice" in run.report["cases"][0]["detail"]
+
+
 def test_matching_implementation(repo: Path) -> None:
     run = _run(repo, "smooth_l1")
     assert run.report is not None

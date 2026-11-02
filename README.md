@@ -98,6 +98,12 @@ passage and the function's signature only. Both run on the same inputs and
 the outputs are compared: same output, different output, could not run, or
 not testable. Open a claim in **Verification** and use **Run reference test**.
 
+A claim that two computations agree, such as "the low-rank update can be
+merged into the weights with no change in output", is tested as a
+**property** instead: the model writes a `check()` that runs both paths
+through the repository's own code (before and after merging), and the two
+results are compared. No reference implementation is involved.
+
 This executes repository code and model-written code on your machine, so it
 is off by default. To turn it on, set in `.env`:
 

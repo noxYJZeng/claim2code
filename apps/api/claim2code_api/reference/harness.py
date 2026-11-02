@@ -7,13 +7,16 @@ installed, and the cloned repository.
 
 It imports the repository function under test, builds the inputs from
 the model-written ``make_inputs``, calls both the repository function
-and the model-written ``reference`` on a fresh copy of each input, and
-writes one JSON report to ``spec["result_path"]``. Output printed by
+and the model-written ``reference`` on a fresh copy of each input (or,
+in property mode, the model-written ``check`` that computes two values
+the paper says are equal), and writes one JSON report to
+``spec["result_path"]``. Output printed by
 the code under test goes to the child's stdout and is ignored.
 """
 from __future__ import annotations
 
 import copy
+import functools
 import importlib
 import importlib.abc
 import importlib.util
@@ -322,12 +325,21 @@ def run(spec: dict[str, Any]) -> dict[str, Any]:
         if _needs_instance(target):
             exec(spec["instance_code"], namespace)  # noqa: S102
         raw_cases = namespace["make_inputs"]()
-        exec(spec["reference_code"], namespace)  # noqa: S102
-        reference = namespace["reference"]
+        if spec.get("property_code", "").strip():
+            exec(spec["property_code"], namespace)  # noqa: S102
+            check = namespace["check"]
+        else:
+            exec(spec["reference_code"], namespace)  # noqa: S102
+            reference = namespace["reference"]
     except BaseException as exc:  # noqa: BLE001 — model-written code
         return {"stage": "setup", "error": _error(exc), "cases": [], **environment}
 
     needs_instance = _needs_instance(target)
+    if spec.get("property_code", "").strip():
+        return {
+            "stage": "done", "error": None, **environment,
+            "cases": _property_cases(spec, target, method, needs_instance, namespace, check, raw_cases),
+        }
 
     def side(fn: Any, case: dict[str, Any], seed: int, *, method_of: bool) -> Any:
         """Call one side on a fresh object built from the same seed.
@@ -386,6 +398,55 @@ def run(spec: dict[str, Any]) -> dict[str, Any]:
         record["outcome"], record["detail"] = ("match" if ok else "mismatch"), why
         cases.append(record)
     return {"stage": "done", "error": None, "cases": cases, **environment}
+
+
+def _property_cases(
+    spec: dict[str, Any], target: Any, method: str, needs_instance: bool,
+    namespace: dict[str, Any], check: Any, raw_cases: Any,
+) -> list[dict[str, Any]]:
+    """Property mode: ``check(subject, *args)`` returns two values that must be equal.
+
+    ``subject`` is a fresh object for an instance method, else the function.
+    Both values come from the repository's code along two different paths
+    (for example unmerged and merged weights); there is no reference.
+    """
+    rtol, atol = float(spec["rtol"]), float(spec["atol"])
+    cases = []
+    for index, raw in enumerate(list(raw_cases)[: int(spec["max_cases"])]):
+        case = raw if isinstance(raw, dict) else {"args": list(raw)}
+        record: dict[str, Any] = {"index": index, "inputs": _short({
+            k: v for k, v in (
+                ("instance", case.get("instance")),
+                ("args", case.get("args", [])),
+                ("kwargs", case.get("kwargs", {})),
+            ) if v is not None
+        })}
+        seed = int(spec.get("seed", 0)) + index
+        try:
+            _seed(seed)
+            subject = target
+            if needs_instance:
+                subject = namespace["make_instance"](**dict(case.get("instance") or {}))
+                if subject is None or isinstance(subject, list | tuple | dict):
+                    raise TypeError(f"make_instance() returned {type(subject).__name__}; it must return one object")
+            _seed(seed)
+            pair = _call(functools.partial(check, subject), case)
+            if not isinstance(pair, tuple) or len(pair) != 2:
+                raise TypeError(f"check() must return a pair (first, second), got {type(pair).__name__}")
+            first, second = pair
+            if first is second:
+                raise ValueError("check() returned the same object twice; the two sides must be computed separately")
+            if is_stub(first) or is_stub(second):
+                raise RuntimeError(f"a side comes from a package that is not installed (stubbed: {', '.join(STUBBED)})")
+        except BaseException as exc:  # noqa: BLE001 — repository and model-written code
+            record["outcome"], record["detail"] = "target_error", _error(exc)
+            cases.append(record)
+            continue
+        record["actual"], record["expected"] = _short(first), _short(second)
+        ok, why = compare(first, second, rtol, atol)
+        record["outcome"], record["detail"] = ("match" if ok else "mismatch"), why
+        cases.append(record)
+    return cases
 
 
 def main() -> None:

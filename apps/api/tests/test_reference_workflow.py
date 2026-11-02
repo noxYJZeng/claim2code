@@ -483,3 +483,28 @@ def test_get_reports_enabled_and_skips_bad_rows(monkeypatch: pytest.MonkeyPatch)
 def test_get_unknown_analysis() -> None:
     res = _client_with(None).get(f"/analyses/{uuid4()}/reference-checks")
     assert res.status_code == 404
+
+
+# ---------------------------------------------------------------- model reply
+
+
+def test_a_truncated_reply_is_reported_as_such() -> None:
+    from types import SimpleNamespace
+
+    from claim2code_api.llm.client import LLMClient
+    from claim2code_api.safety import SafetyGate
+
+    reply = SimpleNamespace(
+        choices=[SimpleNamespace(
+            message=SimpleNamespace(content='{"reference_code": "def reference(x):\\n  ret"}'),
+            finish_reason="length",
+        )],
+        usage=None,
+    )
+    client = object.__new__(LLMClient)
+    client._model, client._gate, client._on_violations = "m", SafetyGate(), None
+    client._client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_: reply)),
+    )
+    with pytest.raises(ReferenceCheckLLMError, match="cut off"):
+        client.reference_implementation(system="s", payload="p")

@@ -738,6 +738,12 @@ class LLMClient:
         raw = response.choices[0].message.content if response.choices else None
         if not raw:
             raise ReferenceCheckLLMError("LLM returned empty content")
+        # A reply cut off at the token limit can still parse; its code would not.
+        if getattr(response.choices[0], "finish_reason", None) in ("length", "max_tokens"):
+            raise ReferenceCheckLLMError(
+                "the model's reply was cut off at its output token limit; raise the limit "
+                "in the model server or use a model with a longer output"
+            )
         try:
             parsed = model.model_validate(json.loads(raw))
         except (json.JSONDecodeError, ValidationError) as exc:

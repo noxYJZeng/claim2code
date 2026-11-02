@@ -110,9 +110,11 @@ _WRONG_REFERENCE = "def reference(x, y, beta=1.0):\n    return -1.0\n"
 class _Client:
     def __init__(
         self, *, testable: bool = True, fail: bool = False, references: list[str] | None = None,
+        inputs: list[str] | None = None,
     ) -> None:
         self.testable, self.fail = testable, fail
         self.references = list(references or [_REFERENCE, _REFERENCE])
+        self.inputs = list(inputs or [_INPUTS, _INPUTS])
         self.payloads: list[str] = []
 
     def reference_inputs(self, *, system: str, payload: str) -> ReferenceInputs:
@@ -121,7 +123,7 @@ class _Client:
             raise ReferenceCheckLLMError("LLM returned 500: boom")
         return ReferenceInputs(
             testable=self.testable, reason="It reads a dataset from disk." if not self.testable else "pure",
-            inputs_code=_INPUTS if self.testable else "", instance_code="",
+            inputs_code=self.inputs.pop(0) if self.testable else "", instance_code="",
             input_notes="two float lists",
         )
 
@@ -198,6 +200,27 @@ def test_an_unconfirmed_mismatch_says_so(monkeypatch: pytest.MonkeyPatch, repo_d
     assert check.status == ReferenceCheckStatus.MISMATCH
     assert check.confirmed is False
     assert "second reference could not confirm" in check.explanation
+
+
+def test_broken_test_code_gets_one_repair(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
+    broken = "def make_inputs():\n    raise ValueError('shapes do not fit')\n"
+    client = _Client(inputs=[broken, _INPUTS])
+    db, state, _ = _setup(monkeypatch, repo_dir, client=client)
+    check = workflow_mod.run_reference_check(db=db, analysis_id=state.analysis_id, claim_id="c1")
+    assert check.status == ReferenceCheckStatus.MATCH
+    repair_payload = client.payloads[2]
+    assert "# Your previous attempt failed" in repair_payload
+    assert "shapes do not fit" in repair_payload
+
+
+def test_repair_is_tried_only_once(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:
+    broken = "def make_inputs():\n    raise ValueError('still broken')\n"
+    client = _Client(inputs=[broken, broken])
+    db, state, _ = _setup(monkeypatch, repo_dir, client=client)
+    check = workflow_mod.run_reference_check(db=db, analysis_id=state.analysis_id, claim_id="c1")
+    assert check.status == ReferenceCheckStatus.ERROR
+    assert "still broken" in check.explanation
+    assert len(client.payloads) == 4
 
 
 def test_a_match_needs_no_second_reference(monkeypatch: pytest.MonkeyPatch, repo_dir: Path) -> None:

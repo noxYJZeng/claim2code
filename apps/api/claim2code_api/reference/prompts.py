@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 
 from claim2code_api.papers.schemas import Claim
+from claim2code_api.reference.schemas import ReferenceInputs
 from claim2code_api.repos.schemas import RetrieveMatch
 
 _SOURCE_CAP = 6000
@@ -67,6 +68,11 @@ implementation of that part would still give the same output. In
 make_instance, overwrite such parameters with small random values
 (torch.randn under torch.no_grad()), so every term the paper describes
 affects the output.
+
+Build objects only in make_instance; make_inputs returns plain values
+and tensors. Turn off randomness the claim is not about (dropout
+probability 0, the object in eval mode), since the two sides cannot
+draw the same random masks.
 
 Write runnable code only. Put any reasoning in reason or input_notes,
 not in comments, and never leave a function body as `pass`.
@@ -193,6 +199,17 @@ def build_inputs_payload(
     return "\n".join(parts)
 
 
+def build_repair_section(previous: ReferenceInputs, error: str) -> str:
+    """Appended to the inputs payload when the previous attempt's code failed."""
+    return (
+        "\n# Your previous attempt failed\n\n"
+        f"```python\n{previous.inputs_code}\n```\n\n"
+        + (f"```python\n{previous.instance_code}\n```\n\n" if previous.instance_code.strip() else "")
+        + f"error: {error}\n\n"
+        "Write corrected code. Build objects only in make_instance, never in make_inputs.\n"
+    )
+
+
 def reference_signature(target: RetrieveMatch) -> str:
     """The signature the reference implements; a method's ``self`` becomes ``obj``."""
     return re.sub(r"^\(\s*self\b", "(obj", target.signature or "()")
@@ -216,6 +233,7 @@ __all__ = [
     "REFERENCE_SYSTEM_PROMPT",
     "build_inputs_payload",
     "build_reference_payload",
+    "build_repair_section",
     "describe_environment",
     "reference_signature",
 ]

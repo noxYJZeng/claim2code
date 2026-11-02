@@ -49,6 +49,7 @@ from claim2code_api.reference.schemas import (
     ReferenceCheck,
     ReferenceCheckStatus,
     ReferenceImplementation,
+    ReferenceInputs,
     ReferenceTarget,
 )
 from claim2code_api.repos.schemas import CodeSymbolKind, RetrieveMatch
@@ -133,24 +134,29 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
     environment = prompts.describe_environment(probe_packages(python, imports)) if imports else ""
 
     client = get_llm_client()
-    try:
-        inputs = client.reference_inputs(
-            system=prompts.INPUTS_SYSTEM_PROMPT,
-            payload=prompts.build_inputs_payload(
-                claim=claim, target=target, qualname=qualname, environment=environment,
-            ),
-        )
-        if not inputs.testable or not inputs.inputs_code.strip():
-            return result(ReferenceCheckStatus.UNTESTABLE, inputs.reason, target=target_info)
-        impl = client.reference_implementation(
+    inputs_payload = prompts.build_inputs_payload(
+        claim=claim, target=target, qualname=qualname, environment=environment,
+    )
+
+    def write(payload: str) -> tuple[ReferenceInputs, ReferenceImplementation | None]:
+        written = client.reference_inputs(system=prompts.INPUTS_SYSTEM_PROMPT, payload=payload)
+        if not written.testable or not written.inputs_code.strip():
+            return written, None
+        return written, client.reference_implementation(
             system=prompts.REFERENCE_SYSTEM_PROMPT,
             payload=prompts.build_reference_payload(
                 claim=claim, target=target, qualname=qualname,
-                inputs_code=inputs.inputs_code, input_notes=inputs.input_notes,
+                inputs_code=written.inputs_code, input_notes=written.input_notes,
             ),
         )
+
+    try:
+        inputs, maybe_impl = write(inputs_payload)
     except ReferenceCheckLLMError as exc:
         return result(ReferenceCheckStatus.ERROR, f"The model call failed: {exc}", target=target_info)
+    if maybe_impl is None:
+        return result(ReferenceCheckStatus.UNTESTABLE, inputs.reason, target=target_info)
+    impl = maybe_impl
 
     def execute(reference: ReferenceImplementation) -> tuple[
         SandboxRun, ReferenceCheckStatus, str, list[ReferenceCase], float, float,
@@ -172,6 +178,20 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
         return run, status, text, cases, rtol, atol
 
     run, status, explanation, cases, rtol, atol = execute(impl)
+    failure = setup_failure(run)
+    if failure is not None:
+        # Generated test code that does not run says nothing about the
+        # repository. Show the model its error once and try again.
+        try:
+            repaired, repaired_impl = write(
+                inputs_payload + prompts.build_repair_section(inputs, failure),
+            )
+        except ReferenceCheckLLMError as exc:
+            logger.warning("reference_check repair failed claim=%s: %s", claim.claim_id, exc)
+        else:
+            if repaired_impl is not None:
+                inputs, impl = repaired, repaired_impl
+                run, status, explanation, cases, rtol, atol = execute(impl)
     confirmed: bool | None = None
     second: ReferenceImplementation | None = None
     if status == ReferenceCheckStatus.MISMATCH:
@@ -228,6 +248,23 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
         isolation=run.isolation,
         environment=environment_notes(run.report),
     )
+
+
+def setup_failure(run: SandboxRun) -> str | None:
+    """The error to show the inputs author when its own code is what failed.
+
+    That is: the inputs or the object setup did not run, or every input
+    raised in the target (most often a badly built object or wrong shapes).
+    """
+    report = run.report
+    if not report:
+        return None
+    if report.get("stage") == "setup":
+        return str(report.get("error"))
+    cases = report.get("cases") or []
+    if report.get("stage") == "done" and cases and all(c.get("outcome") == "target_error" for c in cases):
+        return str(cases[0].get("detail"))
+    return None
 
 
 def environment_notes(report: dict[str, Any] | None) -> list[str]:

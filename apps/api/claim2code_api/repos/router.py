@@ -70,6 +70,7 @@ from claim2code_api.indexing.lexical import lexical_search
 from claim2code_api.indexing.retriever import retrieve_semantic
 from claim2code_api.repos import cloner
 from claim2code_api.repos.exceptions import (
+    RepoAlreadyExistsError,
     RepoCloneError,
     RepoInvalidUrlError,
     RepoTooLargeError,
@@ -120,6 +121,7 @@ router = APIRouter(tags=["repositories"])
     status_code=200,
     responses={
         404: {"model": RepoErrorResponse, "description": "Analysis not found"},
+        409: {"model": RepoErrorResponse, "description": "Repo already ingested"},
         413: {"model": RepoErrorResponse, "description": "Repo too large"},
         422: {"model": RepoErrorResponse, "description": "Invalid URL"},
         500: {"model": RepoErrorResponse, "description": "Clone / index failed"},
@@ -151,9 +153,12 @@ def create_repository(
             db=db,
             analysis_id=body.analysis_id,
             url=body.url,
+            exclude_paths=body.exclude_paths,
         )
     except RepoInvalidUrlError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RepoAlreadyExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RepoTooLargeError as exc:
         raise HTTPException(status_code=413, detail=str(exc)) from exc
     except RepoCloneError as exc:

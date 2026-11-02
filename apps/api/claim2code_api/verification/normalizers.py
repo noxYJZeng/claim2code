@@ -86,6 +86,9 @@ class _AliasNormalizer:
     # Populated at construction:
     _canonical_to_variants: dict[str, list[str]] = field(default_factory=dict)
     _variant_to_canonical: dict[str, str] = field(default_factory=dict)
+    # Task canonical -> the benchmark canonicals that contain it
+    # (``mnli`` -> ``{"glue"}``), from the alias file's ``_members``.
+    _member_of: dict[str, set[str]] = field(default_factory=dict)
     _fuzzy_threshold: float = FUZZY_THRESHOLD
 
     def __post_init__(self) -> None:
@@ -120,8 +123,14 @@ class _AliasNormalizer:
             for variant in variants:
                 variant_to_canonical[variant.lower()] = canonical
 
+        member_of: dict[str, set[str]] = {}
+        for parent, members in raw.get("_members", {}).items():
+            for member in members:
+                member_of.setdefault(member, set()).add(parent)
+
         object.__setattr__(self, "_canonical_to_variants", canonical_to_variants)
         object.__setattr__(self, "_variant_to_canonical", variant_to_canonical)
+        object.__setattr__(self, "_member_of", member_of)
 
     # ------------------------------------------------------------
     # Public API
@@ -178,12 +187,13 @@ class _AliasNormalizer:
     ) -> list[Discrepancy]:
         """Cross-check names mentioned in claim vs. in candidates.
 
-        If both sides mention a name and the canonicals differ,
-        emit one :class:`Discrepancy` of this normalizer's
-        :attr:`_discrepancy_type`. MEDIUM severity when both
-        names resolve to known canonicals (different models
-        / datasets / metrics); LOW severity is reserved for the
-        case where a fuzzy match was used (signals uncertainty).
+        A paper name is covered when any candidate names it, or names
+        one of its member tasks (code on ``mnli`` covers a claim about
+        ``glue``). Each uncovered paper name emits one
+        :class:`Discrepancy` of this normalizer's
+        :attr:`_discrepancy_type`, listing what the code names instead.
+        Candidates are a top-k mix, so a candidate naming some *other*
+        model alongside one that names the claim's is not a mismatch.
         """
         paper_names = self.extract_names(claim_text)
         if not paper_names:
@@ -201,23 +211,23 @@ class _AliasNormalizer:
         if not code_names:
             return []
 
+        covered = set(code_names)
+        for name in code_names:
+            covered |= self._member_of.get(name, set())
+
         out: list[Discrepancy] = []
-        for paper_name in paper_names:
-            for code_name in code_names:
-                if paper_name == code_name:
-                    continue  # canonical agreement — no discrepancy
-                # Build a human-readable detail line.
-                detail = (
-                    f"paper mentions '{paper_name}', "
-                    f"code references '{code_name}'"
+        for paper_name in sorted(paper_names - covered):
+            detail = (
+                f"paper mentions '{paper_name}', "
+                f"code references only {', '.join(repr(n) for n in sorted(code_names))}"
+            )
+            out.append(
+                Discrepancy(
+                    type=self._discrepancy_type,
+                    severity=self._default_severity,
+                    detail=detail,
                 )
-                out.append(
-                    Discrepancy(
-                        type=self._discrepancy_type,
-                        severity=self._default_severity,
-                        detail=detail,
-                    )
-                )
+            )
         return out
 
 

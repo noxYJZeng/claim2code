@@ -50,6 +50,12 @@ class CodeLanguage(StrEnum):
     JAVA = "java"
     GO = "go"
     RUST = "rust"
+    # Launch scripts: no grammar, just the ``--flag value`` arguments of
+    # each command (see :func:`claim2code_api.repos.parser._parse_shell`).
+    SHELL = "shell"
+    # YAML / JSON / TOML / INI files, one symbol per file (see
+    # :func:`claim2code_api.repos.configs.config_symbol`).
+    CONFIG = "config"
 
 
 class CodeSymbolKind(StrEnum):
@@ -172,6 +178,10 @@ class RepoCreateRequest(BaseModel):
 
     url: str = Field(min_length=1)
     analysis_id: UUID
+    # Repo-relative paths / fnmatch globs to leave out of parsing and
+    # indexing, e.g. ``["examples/NLU/src/transformers"]`` for a
+    # vendored library copy. See ``storage.walk_repo_files``.
+    exclude_paths: list[str] = Field(default_factory=list)
 
 
 class RepoCreateResponse(BaseModel):
@@ -291,6 +301,24 @@ class RetrieveWeights(BaseModel):
     structural: float = Field(default=0.20, ge=0.0, le=1.0)
 
 
+class SourceSpan(BaseModel):
+    """Source of one symbol shown to the verifier as context.
+
+    ``class_context`` and ``callee_context`` are prompt text; these
+    spans record where each piece came from, so a citation of
+    context code can be checked against the real file location.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol_id: UUID
+    file_path: str
+    start_line: int
+    end_line: int
+    name: str
+    source: str
+
+
 class RetrieveMatch(BaseModel):
     """One hit in the returned retrieval list.
 
@@ -321,6 +349,20 @@ class RetrieveMatch(BaseModel):
     signature: str
     docstring: str | None
     similarity: float = Field(ge=0.0)
+    # Source body (``start_line``..``end_line``). Only the verification
+    # workflow fills it, so the verifier LLM can judge the
+    # implementation rather than just signature + docstring;
+    # ``/retrieve`` leaves it ``None``.
+    source: str | None = None
+    # For a method: the source of its class's setup methods
+    # (``__init__``, ``reset_parameters``, ...), where initialisation
+    # and scaling usually live. Also verification-only.
+    class_context: str | None = None
+    # The source of repo functions/methods this symbol calls, where a
+    # claimed detail often lives one call away. Also verification-only.
+    callee_context: str | None = None
+    # Where the class and callee context came from. Verification-only.
+    context_spans: list[SourceSpan] = Field(default_factory=list)
 
 
 class ScoreBreakdown(BaseModel):

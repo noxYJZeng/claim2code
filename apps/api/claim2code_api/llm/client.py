@@ -30,18 +30,18 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from collections.abc import Callable
 from threading import Lock
 from typing import Any
 
-import httpx
+import anthropic
 from openai import (
     APIConnectionError,
     APIStatusError,
     APITimeoutError,
     AuthenticationError,
-    OpenAI,
 )
 from opentelemetry.trace import Span
 from pydantic import ValidationError
@@ -49,6 +49,8 @@ from pydantic import ValidationError
 from claim2code_api.app.config import Settings, get_settings
 from claim2code_api.literature.exceptions import LiteratureComparisonError
 from claim2code_api.literature.schemas import Comparison, ScholarPaper
+from claim2code_api.llm import providers
+from claim2code_api.llm.chat_backends import build_backend
 from claim2code_api.observability import (
     get_tracer,
     llm_request_duration_seconds,
@@ -58,6 +60,7 @@ from claim2code_api.papers.exceptions import ClaimExtractionError
 from claim2code_api.papers.schemas import Claim, ClaimList, Paper, PaperEvidence
 from claim2code_api.repos.schemas import RetrieveMatch
 from claim2code_api.safety import SafetyGate, SafetyViolation
+from claim2code_api.verification.context import MAX_VERIFY_PAYLOAD_CHAR_CAP
 from claim2code_api.verification.exceptions import VerificationLLMError
 from claim2code_api.verification.schemas import (
     Discrepancy,
@@ -67,9 +70,13 @@ from claim2code_api.verification.schemas import (
 
 logger = logging.getLogger(__name__)
 
-# Default timeout for one LLM call. Keep tight so a hung call doesn't
-# burn the entire ``workflow_timeout_paper`` budget on a single attempt.
-_DEFAULT_REQUEST_TIMEOUT_SECONDS = 60.0
+# Per-candidate cap on the source body shown to the verifier. 3 000
+# chars (~750 tokens) x top-8 keeps the verify prompt well inside an
+# 8k-32k context while covering most functions/methods in full.
+_VERIFY_SOURCE_CHAR_CAP = 3000
+# Cap on a candidate's callee_context: smaller than the body cap so
+# eight candidates with callees still fit a 32k context.
+_VERIFY_CALLEE_CHAR_CAP = 2000
 
 # System prompt for claim extraction. Phrased as a rubric so the model
 # knows the granularity boundary between METHOD vs IMPLEMENTATION, and
@@ -102,7 +109,7 @@ specifics. If a section contains no testable claim, omit it.
 _VERIFY_SYSTEM_PROMPT = """\
 You are a meticulous paper-to-code verifier. Given (1) a technical
 claim extracted from a paper, (2) a verbatim snippet of the paper
-that grounds it, and (3) up to 5 candidate code symbols retrieved
+that grounds it, and (3) candidate code symbols retrieved
 from the reference implementation, judge whether the code actually
 implements the claim.
 
@@ -111,22 +118,26 @@ RULES (non-negotiable):
   1. **No model knowledge.** Every piece of paper evidence you cite
      must be a verbatim substring of the paper_evidence.quote
      provided. Every piece of code evidence you cite must reference
-     a specific candidate from the list provided (its symbol_id,
-     file_path, line numbers, signature, or docstring). You MAY NOT
+     a specific located source block from the list provided (its
+     symbol_id, file_path, line numbers, and source). Signatures and
+     docstrings guide interpretation; they cannot replace implementation
+     evidence. You MAY NOT
      use knowledge of the paper, the library, or the algorithm
      beyond what is explicitly given in the inputs.
 
   2. **One of four verdicts:**
        VERIFIED, PARTIALLY_VERIFIED, CONTRADICTED, UNVERIFIED.
 
-       - VERIFIED only when >=1 candidate's signature/docstring
-         directly implements the claim and no HIGH-severity
-         discrepancies exist.
+       - VERIFIED only when the provided implementation supports the
+         claim's substantive, code-testable statements and no concrete
+         mismatch exists. A matching function name alone is insufficient.
        - PARTIALLY_VERIFIED when >=1 candidate is relevant but
          discrepancies (LOW or MEDIUM severity) exist.
        - CONTRADICTED when a candidate clearly contradicts the
          claim or a HIGH-severity discrepancy exists.
-       - UNVERIFIED when no candidate is relevant.
+       - UNVERIFIED when the implementation evidence is insufficient,
+         including when relevant names are present but the required body,
+         wiring, or configuration cannot be established.
 
   3. **Extract structured hyperparameters** as part of your
      response: for any hyperparameter mentioned in the claim or
@@ -137,8 +148,10 @@ RULES (non-negotiable):
 
   4. **Cite deterministically.** Each ``code_evidence`` entry must
      include ``symbol_id`` (UUID string), ``quote`` (verbatim from
-     candidate.signature or candidate.docstring), and
-     ``file_path`` + line numbers that match the candidate.
+     located source), and ``file_path`` + line numbers from the source
+     block containing it. Context blocks have their own identities and
+     locations. Quote implementation statements, not just a ``def`` line
+     or docstring. Combine citations when the claim spans several helpers.
 
   5. The deterministic checker has already produced the following
      discrepancies (if any). You MAY add more of any severity, but
@@ -146,8 +159,69 @@ RULES (non-negotiable):
      judgement, novel discrepancies, or AMBIGUOUS cases where the
      deterministic check is uncertain.
 
+  6. **Same scope or UNVERIFIED.** CONTRADICTED requires a candidate
+     that implements the *same* model / experiment / setting the
+     claim describes and disagrees with it. If the claim is about,
+     say, GPT-3 175B training and the candidates are a GPT-2 or GLUE
+     script, they are not evidence either way: return UNVERIFIED.
+     Default argument values in an unrelated script never contradict
+     a paper's reported hyperparameters.
+
+  7. **Missing code is not a discrepancy.** Only emit a discrepancy
+     for a concrete mismatch between the claim and a relevant
+     candidate. "No candidate implements X" or "results cannot be
+     checked from code" is a reason for UNVERIFIED, not a
+     discrepancy. A comment in the code stating it deviates from the
+     paper IS a discrepancy. Never emit discrepancies like "the code
+     does not explicitly compute the gradient", "no dataset count is
+     present in the code", "the candidates do not reference the
+     dataset", or "the theorem is not implemented" — a detail the
+     candidates do not show is silence, even when you can quote
+     neighbouring code. Check the claim's code-testable clauses against
+     the implementation before choosing a status. If an essential clause
+     remains unproven, return UNVERIFIED and identify the missing evidence.
+     Treat algebraically equivalent operations or different local variable
+     names as equivalent only when that equivalence follows from supplied
+     source. If the claim is purely a theorem, a dataset statistic, or a
+     measured result, return UNVERIFIED.
+     The converse also holds: when a relevant candidate for the
+     same setting hard-codes a different value for a quantity the
+     claim states (a loop bound ``while step < 50`` where the claim
+     says 30 steps, a default of 5 where it says 6), that IS a
+     concrete mismatch — emit it, do not fall back to UNVERIFIED.
+     Every discrepancy you emit must set ``code_quote`` to the
+     verbatim candidate code that conflicts with the claim (e.g.
+     ``lr: 5e-7``). If you cannot quote such code, the code is
+     silent on the point and you must not emit the discrepancy;
+     discrepancies whose quote is not found in a candidate are
+     discarded.
+
+  8. **Calibrate severity and type.** HIGH only when the mismatch
+     falsifies the claim's central statement (a different formula,
+     objective, or model). When the core matches and one detail
+     differs (e.g. the forward pass and scaling match but an
+     initialisation distribution differs, or one of several
+     hyperparameters differs), use MEDIUM — that is
+     PARTIALLY_VERIFIED, not CONTRADICTED. Pick the type by what
+     differs: numeric training settings → HYPERPARAMETER_MISMATCH;
+     initialisation, architecture or wiring details →
+     CONFIGURATION_MISMATCH; METRIC_MISMATCH only for evaluation
+     metrics.
+
+  9. **Use the actual configuration scope.** A supplied launch command
+     overrides parser defaults for that run. An unset required value
+     (such as ``???``) is not a conflicting numeric default. Distinguish
+     memory capacity from iteration count, and model architecture from a
+     training recipe. Training-recipe/default differences are MEDIUM
+     unless supplied evidence shows they change the central algorithm.
+
+ 10. **State the evidence chain.** In the explanation, identify which
+     operations support each code-testable clause, then list any concrete
+     mismatches or remaining gaps. Review all supplied located context
+     blocks before calling a definition or dispatch mapping missing.
+
 Output schema is enforced via Structured Outputs
-(\`response_format\`.json_schema with strict=True). Any deviation
+(``response_format``.json_schema with strict=True). Any deviation
 fails the call. If insufficient evidence is available, return
 UNVERIFIED with an empty code_evidence list — do NOT guess.
 """
@@ -193,23 +267,57 @@ sparse-field placeholders — do NOT guess.
 """
 
 
+# Errors from either SDK a backend may raise (llm/chat_backends.py).
+# Both SDKs' status errors carry ``status_code`` and ``message``.
+_CONNECTION_ERRORS = (
+    APIConnectionError, APITimeoutError, anthropic.APIConnectionError,
+)
+_AUTH_ERRORS = (AuthenticationError, anthropic.AuthenticationError)
+_STATUS_ERRORS = (APIStatusError, anthropic.APIStatusError)
+
+
+class RerankLLMError(RuntimeError):
+    """The rerank call failed; callers keep the retrieval order."""
+
+
+_RERANK_SYSTEM_PROMPT = """\
+You rank code symbols from one repository by how directly each implements a claim from a machine-learning paper.
+
+The best match is the symbol whose own code carries out what the claim describes: the function computing the claimed loss or operation, the class defining the claimed module, or the place that sets the claimed value or configuration. Rank callers, tests, demos, generic utilities and unrelated code below it. Judge only from the code shown, never from what you know about the paper.
+
+Return JSON {"ranking": [candidate numbers]} listing up to 10 candidates, most direct implementation first."""
+
+# Candidates the model may name in its ranking.
+_RERANK_SHOWN = 10
+_RERANK_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "ranking": {"type": "array", "items": {"type": "integer"}, "maxItems": _RERANK_SHOWN},
+    },
+    "required": ["ranking"],
+    "additionalProperties": False,
+}
+
+
 class LLMClient:
     """OpenAI wrapper that exposes a typed ``extract_claims`` method."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        provider: providers.ResolvedProvider | None = None,
+    ) -> None:
         self._settings = settings
-        # ``proxy=None`` disables proxying via env vars
-        # (``all_proxy``/``HTTPS_PROXY``). Necessary because httpx 0.28
-        # does not understand ``socks://`` — see module docstring.
-        self._client = OpenAI(
-            api_key=settings.openai_api_key,
-            base_url=settings.openai_base_url,
-            # ``OpenAI`` ships its own vendored ``httpx2`` and (in newer
-            # SDK versions) annotates ``http_client`` as ``httpx2.Client``.
-            # Our ``httpx.Client(proxy=None)`` is API-compatible at
-            # runtime; tell mypy to stop checking.
-            http_client=httpx.Client(proxy=None),  # type: ignore[arg-type]
-            timeout=_DEFAULT_REQUEST_TIMEOUT_SECONDS,
+        # The chat provider is a runtime choice (llm/providers.py);
+        # without one, the client uses the OPENAI_* settings from .env.
+        self._provider = provider or providers.resolve(settings, preset_id="env")
+        self._model = self._provider.model
+        # Every backend keeps the OpenAI ``chat.completions.create``
+        # call shape (llm/chat_backends.py). Keep the timeout tight so
+        # a hung call doesn't burn the whole ``workflow_timeout_paper``
+        # budget on a single attempt.
+        self._client = build_backend(
+            self._provider, timeout=settings.llm_request_timeout_seconds,
         )
         # Phase 8: SafetyGate wraps every LLM call at the SDK seam
         # (see docs/architecture/phase-8-design.md §2). The gate
@@ -241,7 +349,7 @@ class LLMClient:
         ``chat.completions.create(...)`` — it includes the SDK's
         own retries on 429 / 5xx.
         """
-        model = self._settings.openai_model_chat
+        model = self._model
         usage = getattr(response, "usage", None)
         if usage is not None:
             prompt = getattr(usage, "prompt_tokens", None) or 0
@@ -261,12 +369,30 @@ class LLMClient:
     # ------------------------------------------------------------------
 
     def extract_claims(self, paper: Paper) -> list[Claim]:
-        """Call OpenAI with the ``ClaimList`` JSON schema and parse the response.
+        """Extract claims, retrying once if the output is wrapped.
+
+        A schema-constrained local model sometimes satisfies the
+        schema by writing its whole answer — prose plus a JSON array
+        in some other shape — into one claim's ``text``. That is
+        schema-valid but useless, so it gets one fresh sample.
 
         :raises ClaimExtractionError: if the API call fails, the
-            response fails schema validation, or the parsed list is
-            empty.
+            response fails schema validation, the parsed list is
+            empty, or both attempts come back wrapped.
         """
+        claims = self._extract_claims_once(paper)
+        if not any(_is_wrapped_output(c.text) for c in claims):
+            return claims
+        logger.warning("extract_claims: wrapped output in claim text; retrying once")
+        claims = self._extract_claims_once(paper)
+        if any(_is_wrapped_output(c.text) for c in claims):
+            raise ClaimExtractionError(
+                "LLM wrapped its answer inside a claim's text on two attempts"
+            )
+        return claims
+
+    def _extract_claims_once(self, paper: Paper) -> list[Claim]:
+        """Call OpenAI with the ``ClaimList`` JSON schema and parse the response."""
         user_payload = _build_user_payload(paper)
         schema = ClaimList.model_json_schema()
 
@@ -286,7 +412,7 @@ class LLMClient:
             "llm.extract_claims",
             attributes={
                 "llm.method": "extract_claims",
-                "llm.model": self._settings.openai_model_chat,
+                "llm.model": self._model,
             },
         ) as span:
             gate_result = self._gate.wrap_messages(messages, kind="extract_claims")
@@ -308,7 +434,7 @@ class LLMClient:
             start = time.monotonic()
             try:
                 response = self._client.chat.completions.create(
-                    model=self._settings.openai_model_chat,
+                    model=self._model,
                     messages=gate_result.messages,  # type: ignore[call-overload]
                     response_format={
                         "type": "json_schema",
@@ -319,17 +445,17 @@ class LLMClient:
                         },
                     },
                 )
-            except (APIConnectionError, APITimeoutError) as exc:
+            except _CONNECTION_ERRORS as exc:
                 span.record_exception(exc)
                 raise ClaimExtractionError(
                     f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
                 ) from exc
-            except AuthenticationError as exc:
+            except _AUTH_ERRORS as exc:
                 span.record_exception(exc)
                 raise ClaimExtractionError(
-                    f"LLM auth error (check OPENAI_API_KEY): {exc}"
+                    f"LLM auth error (check the provider's API key): {exc}"
                 ) from exc
-            except APIStatusError as exc:
+            except _STATUS_ERRORS as exc:
                 span.record_exception(exc)
                 raise ClaimExtractionError(
                     f"LLM returned {exc.status_code}: {exc.message}"
@@ -364,7 +490,12 @@ class LLMClient:
         if gate_result.violations and self._on_violations is not None:
             self._on_violations("extract_claims", gate_result.violations)
 
-        return claim_list.claims
+        # The model's own ids come back as "c001", "C10" or even
+        # "}]}" (a JSON fragment), so number the claims ourselves.
+        return [
+            claim.model_copy(update={"claim_id": f"C{i}"})
+            for i, claim in enumerate(claim_list.claims, start=1)
+        ]
 
     # ------------------------------------------------------------------
     # Verification (Phase 6)
@@ -406,6 +537,9 @@ class LLMClient:
             deterministic_discrepancies=deterministic_discrepancies,
         )
         schema = Verification.model_json_schema()
+        # ``code_quote`` is optional for deterministic checkers but
+        # mandatory for the LLM (see rule 7).
+        schema["$defs"]["Discrepancy"]["required"].append("code_quote")
 
         # Phase 8: redact secrets + detect injections in the
         # claim text, paper evidence quote, candidate signatures,
@@ -425,7 +559,7 @@ class LLMClient:
             "llm.verdict",
             attributes={
                 "llm.method": "verdict",
-                "llm.model": self._settings.openai_model_chat,
+                "llm.model": self._model,
                 "llm.candidate_count": len(candidates),
             },
         ) as span:
@@ -446,7 +580,7 @@ class LLMClient:
             start = time.monotonic()
             try:
                 response = self._client.chat.completions.create(
-                    model=self._settings.openai_model_chat,
+                    model=self._model,
                     messages=gate_result.messages,  # type: ignore[call-overload]
                     response_format={
                         "type": "json_schema",
@@ -457,17 +591,17 @@ class LLMClient:
                         },
                     },
                 )
-            except (APIConnectionError, APITimeoutError) as exc:
+            except _CONNECTION_ERRORS as exc:
                 span.record_exception(exc)
                 raise VerificationLLMError(
                     f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
                 ) from exc
-            except AuthenticationError as exc:
+            except _AUTH_ERRORS as exc:
                 span.record_exception(exc)
                 raise VerificationLLMError(
-                    f"LLM auth error (check OPENAI_API_KEY): {exc}"
+                    f"LLM auth error (check the provider's API key): {exc}"
                 ) from exc
-            except APIStatusError as exc:
+            except _STATUS_ERRORS as exc:
                 span.record_exception(exc)
                 raise VerificationLLMError(
                     f"LLM returned {exc.status_code}: {exc.message}"
@@ -580,7 +714,7 @@ class LLMClient:
             "llm.compare",
             attributes={
                 "llm.method": "compare",
-                "llm.model": self._settings.openai_model_chat,
+                "llm.model": self._model,
                 "llm.paper_id": paper.paper_id,
             },
         ) as span:
@@ -601,7 +735,7 @@ class LLMClient:
             start = time.monotonic()
             try:
                 response = self._client.chat.completions.create(
-                    model=self._settings.openai_model_chat,
+                    model=self._model,
                     messages=gate_result.messages,  # type: ignore[call-overload]
                     response_format={
                         "type": "json_schema",
@@ -612,17 +746,17 @@ class LLMClient:
                         },
                     },
                 )
-            except (APIConnectionError, APITimeoutError) as exc:
+            except _CONNECTION_ERRORS as exc:
                 span.record_exception(exc)
                 raise LiteratureComparisonError(
                     f"LLM connection/timeout: {exc.__class__.__name__}: {exc}"
                 ) from exc
-            except AuthenticationError as exc:
+            except _AUTH_ERRORS as exc:
                 span.record_exception(exc)
                 raise LiteratureComparisonError(
-                    f"LLM auth error (check OPENAI_API_KEY): {exc}"
+                    f"LLM auth error (check the provider's API key): {exc}"
                 ) from exc
-            except APIStatusError as exc:
+            except _STATUS_ERRORS as exc:
                 span.record_exception(exc)
                 raise LiteratureComparisonError(
                     f"LLM returned {exc.status_code}: {exc.message}"
@@ -660,6 +794,64 @@ class LLMClient:
 
         return comparison
 
+    def rank_candidates(self, *, claim: str, candidates: str, n_candidates: int) -> list[int]:
+        """Ask the model which numbered candidates implement ``claim``.
+
+        ``candidates`` is the numbered listing built by
+        :mod:`claim2code_api.retrieval.reranker`. Returns up to
+        ``_RERANK_SHOWN`` distinct 1-based candidate numbers, most
+        direct implementation first; numbers outside
+        ``1..n_candidates`` are dropped.
+
+        :raises RerankLLMError: on any LLM / parse failure.
+        """
+        messages = [
+            {"role": "system", "content": _RERANK_SYSTEM_PROMPT},
+            {"role": "user", "content": f"Claim: {claim}\n\nCandidates:\n\n{candidates}"},
+        ]
+        tracer = get_tracer(__name__)
+        with tracer.start_as_current_span(
+            "llm.rerank",
+            attributes={
+                "llm.method": "rerank",
+                "llm.model": self._model,
+                "llm.rerank.n_candidates": n_candidates,
+            },
+        ) as span:
+            gate_result = self._gate.wrap_messages(messages, kind="rerank")
+            start = time.monotonic()
+            try:
+                response = self._client.chat.completions.create(
+                    model=self._model,
+                    messages=gate_result.messages,  # type: ignore[call-overload]
+                    temperature=0,
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {"name": "ranking", "strict": True, "schema": _RERANK_SCHEMA},
+                    },
+                )
+            except (*_CONNECTION_ERRORS, *_AUTH_ERRORS, *_STATUS_ERRORS) as exc:
+                span.record_exception(exc)
+                raise RerankLLMError(f"{exc.__class__.__name__}: {exc}") from exc
+            self._record_llm_metrics(
+                span=span, response=response, kind="rerank",
+                duration_seconds=time.monotonic() - start,
+            )
+        raw = response.choices[0].message.content if response.choices else None
+        try:
+            ranking = json.loads(raw or "")["ranking"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise RerankLLMError(f"LLM returned no ranking: {exc}") from exc
+        if not isinstance(ranking, list):
+            raise RerankLLMError("LLM ranking is not a list")
+        if gate_result.violations and self._on_violations is not None:
+            self._on_violations("rerank", gate_result.violations)
+        out: list[int] = []
+        for n in ranking:
+            if isinstance(n, int) and 1 <= n <= n_candidates and n not in out:
+                out.append(n)
+        return out[:_RERANK_SHOWN]
+
     # ------------------------------------------------------------------
     # Readiness probe
     # ------------------------------------------------------------------
@@ -672,12 +864,7 @@ class LLMClient:
         so future phases can wire LLM readiness into ``/health/ready``.
         """
         try:
-            self._client.chat.completions.create(
-                model=self._settings.openai_model_chat,
-                messages=[{"role": "user", "content": "ping"}],
-                max_tokens=1,
-                timeout=10.0,
-            )
+            self._client.ping(self._model)
         except Exception as exc:  # noqa: BLE001 — probe is best-effort
             return False, f"{exc.__class__.__name__}: {str(exc)[:200]}"
         return True, None
@@ -697,8 +884,17 @@ def get_llm_client() -> LLMClient:
     if _client is None:
         with _client_lock:
             if _client is None:
-                _client = LLMClient(get_settings())
+                settings = get_settings()
+                _client = LLMClient(settings, providers.active(settings))
     return _client
+
+
+def reset_llm_client() -> None:
+    """Drop the cached client; the next ``get_llm_client`` rebuilds it
+    with the currently selected provider (llm/providers.py)."""
+    global _client
+    with _client_lock:
+        _client = None
 
 
 def reset_llm_for_tests() -> None:
@@ -717,16 +913,24 @@ def reset_llm_for_tests() -> None:
 # ----------------------------------------------------------------------
 
 
+_REFERENCES_TITLE = re.compile(r"^\s*(\d+\.?\s*)?(references|bibliography)\s*$", re.IGNORECASE)
+
+
 def _build_user_payload(paper: Paper) -> str:
     """Serialize the parsed paper into the user-message text.
 
-    Phase 2 v1 includes only sections + text — equations and tables
+    Phase 2 v1 includes only sections + text (minus the references
+    section) — equations and tables
     are part of the parsed ``Paper`` but are not surfaced in the v1
     claim-extraction prompt (see ``docs/architecture/phase-2-design.md``
     §3 "what we explicitly do NOT do").
     """
     sections_md = []
     for section in paper.sections:
+        # The bibliography holds no testable claim and costs ~10k chars
+        # of a local model's context window.
+        if _REFERENCES_TITLE.match(section.title or ""):
+            continue
         heading = section.title or "(preamble)"
         sections_md.append(f"## {heading}\n\n{section.text}\n")
     return (
@@ -734,6 +938,16 @@ def _build_user_payload(paper: Paper) -> str:
         f"Pages: {paper.n_pages}  Chars: {paper.n_chars}\n\n"
         + "\n".join(sections_md)
     )
+
+
+# A JSON object key or a Markdown code fence inside a claim's text: the
+# model nested its real answer in the field instead of filling the schema.
+_WRAPPED_OUTPUT = re.compile(r'```|[\[{]\s*"\w+"\s*:')
+
+
+def _is_wrapped_output(text: str) -> bool:
+    """True when a claim's ``text`` holds a nested answer, not a claim."""
+    return bool(_WRAPPED_OUTPUT.search(text))
 
 
 def _build_verify_payload(
@@ -752,9 +966,10 @@ def _build_verify_payload(
       - **# Deterministic discrepancies** — what the regex-based
         checkers already found. The LLM is told not to re-emit
         these (per the system prompt rule 5).
-      - **# Candidates** — up to 5 RetrieveMatch entries,
+      - **# Candidates** — up to ``top_k`` (default 8) RetrieveMatch entries,
         rendered with symbol_id, file_path, line range, name,
-        signature, and docstring. The LLM must cite from this
+        signature, docstring, and (when available) source body and
+        class context. The LLM must cite from this
         list when emitting code_evidence (per the system prompt
         rule 1).
 
@@ -793,11 +1008,43 @@ def _build_verify_payload(
             )
             if c.docstring:
                 parts.append(f"docstring: {c.docstring}\n")
+            if c.source:
+                body = c.source
+                if len(body) > _VERIFY_SOURCE_CHAR_CAP:
+                    body = body[:_VERIFY_SOURCE_CHAR_CAP] + "\n[... truncated ...]"
+                parts.append(f"source:\n```\n{body}\n```\n")
+            if c.context_spans:
+                for span in c.context_spans:
+                    parts.append(
+                        "located_context:\n"
+                        f"symbol_id: {span.symbol_id}\n"
+                        f"file: {span.file_path}:{span.start_line}-{span.end_line}\n"
+                        f"name: {span.name}\n"
+                        f"source:\n```\n{span.source}\n```\n"
+                    )
+            if c.class_context:
+                ctx = c.class_context
+                if len(ctx) > _VERIFY_SOURCE_CHAR_CAP:
+                    ctx = ctx[:_VERIFY_SOURCE_CHAR_CAP] + "\n[... truncated ...]"
+                parts.append(f"class_context (setup methods of its class):\n```\n{ctx}\n```\n")
+            if c.callee_context:
+                ctx = c.callee_context
+                if len(ctx) > _VERIFY_CALLEE_CHAR_CAP:
+                    ctx = ctx[:_VERIFY_CALLEE_CHAR_CAP] + "\n[... truncated ...]"
+                parts.append(f"callee_context (repo functions it calls):\n```\n{ctx}\n```\n")
             parts.append("")
     else:
         parts.append("# Candidates\n\n(none — top-K retrieval returned empty)\n")
 
-    return "\n".join(parts)
+    payload = "\n".join(parts)
+    if len(payload) > MAX_VERIFY_PAYLOAD_CHAR_CAP:
+        # Fail explicitly instead of silently trimming claim semantics or
+        # showing less source than the downstream validator can inspect.
+        raise VerificationLLMError(
+            "Verification input exceeds the bounded prompt budget; "
+            "shorten the claim/paper excerpt or prepare fewer source candidates."
+        )
+    return payload
 
 
 def _build_compare_payload(*, claim: Claim, paper: ScholarPaper) -> str:

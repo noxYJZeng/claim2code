@@ -14,8 +14,15 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# apps/api/claim2code_api/app/config.py → project root is 3 levels up.
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+# apps/api/claim2code_api/app/config.py → the project root (with
+# ``.env``) is 4 levels up in a checkout. Search upward for ``.env``
+# rather than hard-indexing; fall back to ``parents[3]`` (``/app`` in
+# the Docker image, which gets its config from env vars instead).
+_HERE = Path(__file__).resolve()
+_PROJECT_ROOT = next(
+    (p for p in _HERE.parents if (p / ".env").is_file()),
+    _HERE.parents[3],
+)
 _DEFAULT_ENV_FILE = _PROJECT_ROOT / ".env"
 
 
@@ -37,6 +44,7 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_log_level: str = "info"
+    api_read_only: bool = False
     cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
 
     # ---- Database ----
@@ -62,6 +70,24 @@ class Settings(BaseSettings):
     openai_model_chat: str = "gpt-4o"
     openai_model_embed: str = "text-embedding-3-small"
     openai_embed_dim: int = 1536
+    # Per-call chat timeout. 60s suits hosted gpt-4o; a local model
+    # (e.g. LM Studio) prefilling a whole paper needs several minutes.
+    llm_request_timeout_seconds: float = 60.0
+
+    # ---- Switchable chat providers (llm/providers.py) ----
+    # The OPENAI_* block above is the default chat model AND the
+    # embedding model. The UI can switch the chat model to one of these
+    # providers; each key is optional and only needed for its provider.
+    anthropic_api_key: str = ""
+    openai_platform_api_key: str = ""
+    gemini_api_key: str = ""
+    deepseek_api_key: str = ""
+    openrouter_api_key: str = ""
+    # Model management changes process-wide settings and can make network
+    # requests. Public instances leave both options unset (read-only).
+    # Local opt-in accepts only the actual peer's loopback address.
+    llm_management_allow_local: bool = False
+    llm_management_token: str = Field(default="", repr=False)
 
     # ---- Web (Vite reads these at build/dev time; declared here so a
     # shared ``.env`` does not trip extra="forbid") ----
@@ -98,6 +124,8 @@ class Settings(BaseSettings):
             ".java",
             ".go",
             ".rs",
+            ".sh",
+            ".bash",
         ]
     )
     # Directory basenames the walk skips — see
@@ -115,10 +143,20 @@ class Settings(BaseSettings):
             ".vscode",
             "venv",
             "env",
+            # Vendored third-party code: indexing it floods retrieval
+            # with symbols the paper's authors did not write.
+            "third_party",
+            "vendor",
         ]
     )
     # HTTP timeout for the GitHub HEAD pre-flight size guard.
     repo_size_estimate_timeout_seconds: float = 5.0
+
+    # ---- Retrieval ----
+    # Before verification, the chat model reorders hybrid's wider
+    # candidate pool (retrieval/reranker.py). One extra model call
+    # per claim; off keeps the plain hybrid order.
+    retrieval_rerank: bool = True
 
     # ---- Paper ingestion (Phase 2) ----
     max_pdf_size_mb: int = 50

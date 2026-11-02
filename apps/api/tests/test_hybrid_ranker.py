@@ -22,17 +22,23 @@ tests stub them via ``unittest.mock.patch``.
 
 from __future__ import annotations
 
+import importlib
+import re
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
 
+from claim2code_api.db.models import CodeSymbol, RepositoryDependency
 from claim2code_api.indexing.exceptions import EmbeddingError
 from claim2code_api.retrieval.hybrid_ranker import (
     HybridWeights,
     hybrid_ranker,
 )
+
+# ``claim2code_api.retrieval`` re-exports the function under the module's name.
+hybrid_ranker_mod = importlib.import_module("claim2code_api.retrieval.hybrid_ranker")
 
 # ============================================================
 # Helpers
@@ -50,18 +56,35 @@ def _lex_result(score: float, symbol_id):
     return (symbol_id, score)
 
 
-def _build_session(*, code_symbols: list[SimpleNamespace]) -> MagicMock:
-    """Build a MagicMock session that mimics the bulk-fetch query.
+def _build_session(
+    *,
+    code_symbols: list[SimpleNamespace],
+    dependencies: list[str] | None = None,
+    manifests: list[str] | None = None,
+) -> MagicMock:
+    """Build a MagicMock session that mimics the ranker's queries.
 
-    The hybrid_ranker runs one query after RRF: a CodeSymbol
-    bulk-fetch by id. We return ``code_symbols`` for that.
+    After RRF the hybrid_ranker bulk-fetches CodeSymbol rows by id
+    (we return ``code_symbols``), reads the repo's dependency names
+    (``dependencies``, default none) and, when there are any, the
+    build-manifest paths (``manifests``); every manifest directory is
+    reported as holding a dependency-named package.
     """
     session = MagicMock(name="session")
     queue = [code_symbols]
 
-    def _query(_model):
+    def _query(model):
         q = MagicMock()
-        q.filter.return_value.all.return_value = queue.pop(0)
+        if model is RepositoryDependency.name:
+            q.filter.return_value.all.return_value = [(n,) for n in dependencies or []]
+        elif model is CodeSymbol.file_path:
+            q.filter.return_value.distinct.return_value.all.return_value = [
+                (p,) for p in manifests or []
+            ]
+        elif model is CodeSymbol.symbol_id:
+            q.filter.return_value.first.return_value = (uuid4(),)
+        else:
+            q.filter.return_value.all.return_value = queue.pop(0)
         return q
 
     session.query.side_effect = _query
@@ -93,10 +116,10 @@ def test_hybrid_ranker_whitespace_claim_returns_empty() -> None:
 
 
 def test_hybrid_ranker_single_candidate_in_semantic_only() -> None:
-    """1 candidate in semantic at rank 1 → final_score = 0.55.
+    """1 candidate in semantic at rank 1 → final_score = 0.40.
 
-    Formula: rrf = w / (k + rank) = 0.55 / 61 = ~ 0.00902.
-    Normalised: rrf * 61 * boost = 0.55 * 1.0 = 0.55.
+    Formula: rrf = w / (k + rank) = 0.40 / 61 = ~ 0.00656.
+    Normalised: rrf * 61 * boost = 0.40 * 1.0 = 0.40.
     """
     sid = uuid4()
     syms = [SimpleNamespace(symbol_id=sid)]
@@ -119,14 +142,14 @@ def test_hybrid_ranker_single_candidate_in_semantic_only() -> None:
 
     assert len(out) == 1
     assert out[0].symbol_id == sid
-    assert out[0].final_score == pytest.approx(0.55, abs=1e-6)
+    assert out[0].final_score == pytest.approx(0.40, abs=1e-6)
     assert out[0].rank_semantic == 1
     assert out[0].score_semantic == pytest.approx(0.9)
     assert out[0].rank_lexical is None
 
 
 def test_hybrid_ranker_single_candidate_in_lexical_only() -> None:
-    """1 candidate in lexical at rank 1 → final_score = 0.25."""
+    """1 candidate in lexical at rank 1 → final_score = 0.40."""
     sid = uuid4()
     syms = [SimpleNamespace(symbol_id=sid)]
 
@@ -147,7 +170,7 @@ def test_hybrid_ranker_single_candidate_in_lexical_only() -> None:
         out = hybrid_ranker(_build_session(code_symbols=syms), uuid4(), "x")
 
     assert len(out) == 1
-    assert out[0].final_score == pytest.approx(0.25, abs=1e-6)
+    assert out[0].final_score == pytest.approx(0.40, abs=1e-6)
     assert out[0].rank_lexical == 1
     assert out[0].rank_semantic is None
 
@@ -158,7 +181,7 @@ def test_hybrid_ranker_single_candidate_in_lexical_only() -> None:
 
 
 def test_hybrid_ranker_candidate_in_both_legs_at_rank_one() -> None:
-    """1 candidate in both legs at rank 1 → final_score = 0.55 + 0.25 = 0.80.
+    """1 candidate in both legs at rank 1 → final_score = 0.40 + 0.40 = 0.80.
 
     (sum of weights at default configuration).
     """
@@ -213,12 +236,12 @@ def test_hybrid_ranker_rank_two_contributes_less_than_rank_one() -> None:
     ):
         out = hybrid_ranker(_build_session(code_symbols=syms), uuid4(), "x")
 
-    # rank1: 0.55 / 61 * 61 = 0.55
-    # rank2: 0.55 / 62 * 61 ≈ 0.5411
+    # rank1: 0.40 / 61 * 61 = 0.40
+    # rank2: 0.40 / 62 * 61 ≈ 0.3935
     assert out[0].symbol_id == sid_rank1
-    assert out[0].final_score == pytest.approx(0.55, abs=1e-6)
+    assert out[0].final_score == pytest.approx(0.40, abs=1e-6)
     assert out[1].symbol_id == sid_rank2
-    assert out[1].final_score == pytest.approx(0.5411, abs=1e-3)
+    assert out[1].final_score == pytest.approx(0.3935, abs=1e-3)
 
 
 # ============================================================
@@ -247,8 +270,8 @@ def test_hybrid_ranker_structural_boost_multiplies_score() -> None:
     ):
         out = hybrid_ranker(_build_session(code_symbols=syms), uuid4(), "x")
 
-    # baseline: 0.55 → boosted: 1.10
-    assert out[0].final_score == pytest.approx(1.10, abs=1e-6)
+    # baseline: 0.40 → boosted: 0.80
+    assert out[0].final_score == pytest.approx(0.80, abs=1e-6)
     assert out[0].struct_boost == 2.0
 
 
@@ -350,11 +373,11 @@ def test_hybrid_ranker_results_sorted_by_final_score_desc() -> None:
     ]
 
     # semantic ranks high < mid < low; lexical ranks low < mid.
-    # With k=60 + default weights {0.55, 0.25, 0.20}:
-    #   high: rank1 sem + none lex → 0.55/61 = 0.009016 → 0.55 final
-    #   mid:  rank2 sem + rank2 lex → 0.55/62 + 0.25/62 = 0.012903 → 0.787
-    #   low:  rank3 sem + rank1 lex → 0.55/63 + 0.25/61 = 0.012828 → 0.783
-    # Therefore the expected order is mid > low > high.
+    # With k=60 + default weights {0.40, 0.40, 0.20}:
+    #   high: rank1 sem + none lex → 0.40/61 = 0.006557 → 0.400 final
+    #   mid:  rank2 sem + rank2 lex → 0.40/62 + 0.40/62 = 0.012903 → 0.787
+    #   low:  rank3 sem + rank1 lex → 0.40/63 + 0.40/61 = 0.012906 → 0.787
+    # Therefore the expected order is low > mid > high.
     with (
         patch(
             "claim2code_api.retrieval.hybrid_ranker.retrieve_semantic",
@@ -378,7 +401,172 @@ def test_hybrid_ranker_results_sorted_by_final_score_desc() -> None:
     ):
         out = hybrid_ranker(_build_session(code_symbols=syms), uuid4(), "x")
 
-    assert [m.symbol_id for m in out] == [sid_mid, sid_low, sid_high]
+    assert [m.symbol_id for m in out] == [sid_low, sid_mid, sid_high]
+
+
+def test_hybrid_ranker_drops_import_symbols() -> None:
+    """An import line is not evidence; the next symbol takes its slot."""
+    sid_import = uuid4()
+    sid_func = uuid4()
+    syms = [
+        SimpleNamespace(symbol_id=sid_import, kind="import"),
+        SimpleNamespace(symbol_id=sid_func, kind="function"),
+    ]
+
+    with (
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.retrieve_semantic",
+            return_value=[_sem_result(0.9, sid_import), _sem_result(0.8, sid_func)],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.lexical_search",
+            return_value=[],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.structural_boost",
+            return_value={sid_import: 1.0, sid_func: 1.0},
+        ),
+    ):
+        out = hybrid_ranker(_build_session(code_symbols=syms), uuid4(), "x", top_k=1)
+
+    assert [m.symbol_id for m in out] == [sid_func]
+
+
+def test_hybrid_ranker_reserves_a_slot_for_each_legs_top_hit() -> None:
+    """A lexical rank-1 hit the semantic leg missed outranks nothing
+    under RRF, but still gets a top-k slot."""
+    both = [uuid4() for _ in range(3)]
+    lex_only = uuid4()
+    syms = [SimpleNamespace(symbol_id=s, kind="function") for s in [*both, lex_only]]
+
+    with (
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.retrieve_semantic",
+            return_value=[_sem_result(0.9, s) for s in both],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.lexical_search",
+            return_value=[_lex_result(1.0, lex_only)] + [_lex_result(0.5, s) for s in both],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.structural_boost",
+            return_value={s: 1.0 for s in [*both, lex_only]},
+        ),
+    ):
+        out = hybrid_ranker(_build_session(code_symbols=syms), uuid4(), "x", top_k=2)
+
+    assert [m.symbol_id for m in out] == [both[0], lex_only]
+
+
+def test_hybrid_ranker_down_weights_vendored_dependency_dirs() -> None:
+    """A symbol under a directory named after a declared dependency
+    (a vendored copy of that library) is scored at half weight."""
+    own, vendored = uuid4(), uuid4()
+    syms = [
+        SimpleNamespace(symbol_id=vendored, kind="function", file_path="src/transformers/models/bert.py"),
+        SimpleNamespace(symbol_id=own, kind="function", file_path="loralib/layers.py"),
+    ]
+
+    with (
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.retrieve_semantic",
+            return_value=[_sem_result(0.9, vendored), _sem_result(0.8, own)],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.lexical_search",
+            return_value=[],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.structural_boost",
+            return_value={vendored: 1.0, own: 1.0},
+        ),
+    ):
+        db = _build_session(code_symbols=syms, dependencies=["Transformers", "torch"])
+        out = hybrid_ranker(db, uuid4(), "x")
+
+    assert [m.symbol_id for m in out] == [own, vendored]
+    assert out[1].final_score == pytest.approx(0.40 / 61 * 61 * 0.5)
+
+
+def test_hybrid_ranker_down_weights_a_vendored_sub_project_wholesale() -> None:
+    """A sub-project with its own manifest and a dependency-named package
+    is a vendored library: its tests and examples are down-weighted too."""
+    own, lib_test = uuid4(), uuid4()
+    syms = [
+        SimpleNamespace(symbol_id=lib_test, kind="method", file_path="examples/NLU/tests/test_trainer.py"),
+        SimpleNamespace(symbol_id=own, kind="function", file_path="loralib/utils.py"),
+    ]
+
+    with (
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.retrieve_semantic",
+            return_value=[_sem_result(0.9, lib_test), _sem_result(0.8, own)],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.lexical_search",
+            return_value=[],
+        ),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.structural_boost",
+            return_value={lib_test: 1.0, own: 1.0},
+        ),
+    ):
+        db = _build_session(
+            code_symbols=syms, dependencies=["transformers"], manifests=["examples/NLU/setup.py"],
+        )
+        out = hybrid_ranker(db, uuid4(), "x")
+
+    assert [m.symbol_id for m in out] == [own, lib_test]
+
+
+def test_hybrid_ranker_runs_each_leg_over_the_repos_own_code_too() -> None:
+    """When vendored code fills a leg's top-k, a second pass that excludes
+    it brings the repo's own symbols into the pool at their own-code rank."""
+    lib = [uuid4() for _ in range(3)]
+    own = uuid4()
+    syms = [
+        *(SimpleNamespace(symbol_id=s, kind="method", file_path="src/transformers/m.py") for s in lib),
+        SimpleNamespace(symbol_id=own, kind="class", file_path="loralib/layers.py"),
+    ]
+    sem_calls: list[str | None] = []
+
+    def _sem(*_a, exclude_path_pattern=None, **_k):
+        sem_calls.append(exclude_path_pattern)
+        if exclude_path_pattern is None:
+            return [_sem_result(0.9 - i / 10, s) for i, s in enumerate(lib)]
+        return [_sem_result(0.5, own)]
+
+    with (
+        patch("claim2code_api.retrieval.hybrid_ranker.retrieve_semantic", side_effect=_sem),
+        patch("claim2code_api.retrieval.hybrid_ranker.lexical_search", return_value=[]),
+        patch(
+            "claim2code_api.retrieval.hybrid_ranker.structural_boost",
+            return_value={s: 1.0 for s in [*lib, own]},
+        ),
+    ):
+        db = _build_session(code_symbols=syms, dependencies=["transformers"])
+        out = hybrid_ranker(db, uuid4(), "x", top_k=2)
+
+    assert sem_calls[0] is None and sem_calls[1] is not None
+    assert out[0].symbol_id == own
+    assert out[0].rank_semantic == 1
+
+
+def test_vendored_pattern_matches_dependency_dirs_and_sub_project_roots() -> None:
+    db = _build_session(
+        code_symbols=[], dependencies=["PyYAML", "sentence-transformers", "transformers"], manifests=["examples/NLU/setup.py"],
+    )
+    pattern = hybrid_ranker_mod._vendored_pattern(db, uuid4())
+    hits = [
+        "examples/NLU/src/transformers/models/bert.py",
+        "examples/NLU/tests/test_trainer.py",
+        "third_party/PyYAML/loader.py",
+        "vendor/sentence_transformers/util.py",
+    ]
+    misses = ["loralib/layers.py", "examples/NLG/src/model.py", "examples/NLU2/run.py"]
+    assert all(re.search(pattern, p, re.IGNORECASE) for p in hits)
+    assert not any(re.search(pattern, p, re.IGNORECASE) for p in misses)
+    assert hybrid_ranker_mod._vendored_pattern(_build_session(code_symbols=[]), uuid4()) is None
 
 
 # ============================================================

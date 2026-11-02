@@ -8,11 +8,9 @@ The pipeline for one claim:
      looking up the underlying ``CodeSymbol`` row.
   2. **Deterministic checks** (commits 3 + 4) — hyperparameter
      + 3 name normalizers.
-  3. **Skip LLM if decisive** — when the deterministic
-     checkers produced a HIGH-severity discrepancy, the
-     verdict is already CONTRADICTED; skip the OpenAI call
-     to save the round-trip + cost.
-  4. **LLM verdict** (commit 5) — reuses the same
+  3. **Prepare located source** — retain bounded prefixes and
+     claim-focused implementation windows with their real lines.
+  4. **LLM verdict** — reuses the same
      ``LLMClient`` as Phase 2's ``extract_claims``.
   5. **Compose** the final ``Verification`` via
      :func:`claim2code_api.verification.verifier.compose_verification`.
@@ -44,19 +42,27 @@ drillable per claim in the trace UI.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from claim2code_api.app.config import get_settings
 from claim2code_api.db.models import AnalysisState, CodeSymbol, Repository
 from claim2code_api.indexing.embedding_client import get_embedding_client
+from claim2code_api.indexing.indexer import _read_source_range
 from claim2code_api.llm.client import get_llm_client
 from claim2code_api.observability import get_tracer
 from claim2code_api.papers.schemas import Claim
-from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch
+from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch, SourceSpan
 from claim2code_api.retrieval.hybrid_ranker import HybridWeights, hybrid_ranker
+from claim2code_api.retrieval.reranker import POOL_SIZE as RERANK_POOL_SIZE
+from claim2code_api.retrieval.reranker import rerank
+from claim2code_api.verification.context import _tokens, prepare_candidates
 from claim2code_api.verification.exceptions import VerificationNotFoundError
 from claim2code_api.verification.schemas import (
+    Discrepancy,
     Verification,
     VerificationStatus,
 )
@@ -95,7 +101,7 @@ def run_verification_workflow(
     db: Session,
     analysis_id: UUID,
     claim_ids: list[str] | None = None,
-    top_k: int = 5,
+    top_k: int = 8,
 ) -> VerificationWorkflowResult:
     """Run the verify pipeline for one analysis.
 
@@ -194,8 +200,14 @@ def run_verification_workflow(
 
         # Persist to JSONB. The AnalysisState.verifications column
         # was pre-staged in Phase 1's 0001_init migration; Phase 6
-        # only writes to it.
-        state.verifications = [v.model_dump(mode="json") for v in verifications]
+        # only writes to it. A subset run replaces only its own
+        # claims' entries; earlier verdicts for other claims stay.
+        rerun = {v.claim_id for v in verifications}
+        kept = [e for e in (state.verifications or []) if e.get("claim_id") not in rerun]
+        state.verifications = sorted(
+            kept + [v.model_dump(mode="json") for v in verifications],
+            key=lambda e: e["claim_id"],
+        )
         state.errors = (state.errors or []) + [
             {"stage": "verify", "message": e} for e in errors
         ]
@@ -254,12 +266,14 @@ def _verify_one_claim(
 
       2. Deterministic checkers produce discrepancies.
 
-      3. Skip the LLM call if any HIGH-severity discrepancy
-         was produced (the verdict is already CONTRADICTED).
+      3. Prepare source windows shared by the LLM and validator.
 
-      4. Otherwise call LLMClient.verdict_for_claim.
+      4. Call LLMClient.verdict_for_claim to obtain source citations.
 
       5. Compose the final Verification.
+
+      6. If evidence is insufficient, expand retrieval once and ask
+         again only when additional source symbols were found.
 
     :returns: ``(verification, llm_error_or_none)``. The
         ``llm_error`` string is ``None`` unless the LLM call
@@ -271,55 +285,25 @@ def _verify_one_claim(
     retrieve_matches: list[RetrieveMatch] = []
     if repository_id is not None:
         try:
-            hybrid_matches = hybrid_ranker(
-                db=db,
-                repository_id=repository_id,
-                claim=claim.text,
-                top_k=top_k,
-                weights=HybridWeights(),
-                embedding_client=get_embedding_client(),
-            )
+            hybrid_matches = _retrieve(db, repository_id, claim.text, top_k=top_k)
         except Exception:
             hybrid_matches = []
-        retrieve_matches = _hybrid_to_retrieve_matches(db=db, matches=hybrid_matches)
+        retrieve_matches = _hybrid_to_retrieve_matches(
+            db=db, matches=hybrid_matches, repository_id=repository_id, claim=claim.text,
+        )
 
-    # 2 + 3. Deterministic checkers; skip LLM on HIGH-severity.
+    retrieve_matches = prepare_candidates(retrieve_matches, claim.text)
+
+    # A deterministic mismatch alone does not provide a source citation.
+    # Still obtain a verdict: skipping here used to force a decisive
+    # discrepancy through compose's no-evidence -> UNVERIFIED guard.
     from claim2code_api.verification.verifier import run_deterministic_checkers
     deterministic_discrepancies = run_deterministic_checkers(
         claim=claim, candidates=retrieve_matches,
     )
-    has_high = any(d.severity == "HIGH" for d in deterministic_discrepancies)
-
-    # 4. LLM verdict (or None if HIGH-severity already decided).
-    llm_verdict: Verification | None = None
-    llm_error: str | None = None
-    if not has_high:
-        # Phase 8: arm the safety violation callback so any secrets /
-        # injection patterns detected in the claim / candidate
-        # signatures are logged on ``state.errors``. The callback is
-        # scoped to this single LLM call (cleared in the finally).
-        from claim2code_api.llm.safety_bridge import make_violation_callback
-        llm_client = get_llm_client()
-        llm_client._on_violations = make_violation_callback(
-            db, analysis_id=analysis_id,
-        )
-        try:
-            llm_verdict = llm_client.verdict_for_claim(
-                claim=claim,
-                paper_evidence=claim.paper_evidence,
-                candidates=retrieve_matches,
-                deterministic_discrepancies=deterministic_discrepancies,
-            )
-        except Exception as exc:  # noqa: BLE001 — per-claim isolation
-            logger.warning(
-                "LLM verdict failed for claim=%s: %s", claim.claim_id, exc,
-            )
-            # Don't abort the workflow; the composition step will
-            # treat llm_verdict=None and default to UNVERIFIED if
-            # there are no code evidence or HIGH discrepancies.
-            llm_error = f"{exc.__class__.__name__}: {exc}"
-        finally:
-            llm_client._on_violations = None
+    llm_verdict, llm_error = _obtain_verdict(
+        db, analysis_id, claim, retrieve_matches, deterministic_discrepancies,
+    )
 
     # 5. Compose.
     verification = compose_verification(
@@ -328,13 +312,104 @@ def _verify_one_claim(
         deterministic_discrepancies=deterministic_discrepancies,
         llm_verdict=llm_verdict,
     )
+    if (
+        verification.status == VerificationStatus.UNVERIFIED
+        and repository_id is not None and llm_error is None and top_k < 24
+    ):
+        expanded = _expanded_candidates(
+            db=db, repository_id=repository_id, claim=claim,
+            previous=retrieve_matches, top_k=top_k,
+        )
+        if expanded:
+            with get_tracer(__name__).start_as_current_span(
+                "verification.evidence_retry",
+                attributes={"verification.candidate_count": len(expanded)},
+            ):
+                retry_discrepancies = run_deterministic_checkers(claim=claim, candidates=expanded)
+                retry_verdict, retry_error = _obtain_verdict(
+                    db, analysis_id, claim, expanded, retry_discrepancies,
+                )
+                if retry_error is None:
+                    verification = compose_verification(
+                        claim=claim, candidates=expanded,
+                        deterministic_discrepancies=retry_discrepancies,
+                        llm_verdict=retry_verdict,
+                    )
+                else:
+                    # Preserve the first assessment when the additional
+                    # request fails, while exposing its model error.
+                    llm_error = retry_error
     return verification, llm_error
+
+
+def _retrieve(db: Session, repository_id: UUID, text: str, *, top_k: int) -> list:
+    """Hybrid candidates, reranked by the chat model when enabled."""
+    if not get_settings().retrieval_rerank:
+        return hybrid_ranker(
+            db=db, repository_id=repository_id, claim=text, top_k=top_k,
+            weights=HybridWeights(), embedding_client=get_embedding_client(),
+        )
+    pool = hybrid_ranker(
+        db=db, repository_id=repository_id, claim=text, top_k=max(top_k, RERANK_POOL_SIZE),
+        weights=HybridWeights(), embedding_client=get_embedding_client(),
+    )
+    return rerank(db, repository_id, text, pool, ranker=get_llm_client())[:top_k]
+
+
+def _expanded_candidates(
+    *, db: Session, repository_id: UUID, claim: Claim,
+    previous: list[RetrieveMatch], top_k: int,
+) -> list[RetrieveMatch]:
+    """One larger retrieval pass, with at most four new source candidates.
+
+    Search uses the original claim; model explanations and benchmark labels
+    never become retrieval instructions. An unchanged shortlist is not sent
+    to the model again. This pass is used for insufficient evidence, not
+    transport failures or repeated sampling until a preferred verdict.
+    """
+    try:
+        matches = _retrieve(db, repository_id, claim.text, top_k=min(max(top_k * 2, 12), 24))
+        expanded = _hybrid_to_retrieve_matches(
+            db=db, matches=matches, repository_id=repository_id, claim=claim.text,
+        )
+    except Exception as exc:  # noqa: BLE001 — optional recovery pass
+        logger.warning("Evidence expansion failed for claim=%s: %s", claim.claim_id, exc)
+        return []
+    known = {c.symbol_id for c in previous}
+    additions = [c for c in expanded if c.symbol_id not in known and (c.source or c.context_spans)]
+    if not additions:
+        return []
+    # Existing candidates are already bounded and remain in the same order.
+    return prepare_candidates([*previous, *additions[:4]], claim.text)
+
+
+def _obtain_verdict(
+    db: Session, analysis_id: UUID, claim: Claim,
+    candidates: list[RetrieveMatch], discrepancies: list[Discrepancy],
+) -> tuple[Verification | None, str | None]:
+    """Scope safety reporting and isolate a single model request failure."""
+    from claim2code_api.llm.safety_bridge import make_violation_callback
+
+    client = get_llm_client()
+    client._on_violations = make_violation_callback(db, analysis_id=analysis_id)
+    try:
+        return client.verdict_for_claim(
+            claim=claim, paper_evidence=claim.paper_evidence,
+            candidates=candidates, deterministic_discrepancies=discrepancies,
+        ), None
+    except Exception as exc:  # noqa: BLE001 — per-claim isolation
+        logger.warning("LLM verdict failed for claim=%s: %s", claim.claim_id, exc)
+        return None, f"{exc.__class__.__name__}: {exc}"
+    finally:
+        client._on_violations = None
 
 
 def _hybrid_to_retrieve_matches(
     *,
     db: Session,
     matches: list,
+    repository_id: UUID | None = None,
+    claim: str = "",
 ) -> list[RetrieveMatch]:
     """Convert Phase 5 ``HybridMatch`` objects to ``RetrieveMatch``.
 
@@ -346,9 +421,18 @@ def _hybrid_to_retrieve_matches(
     Orphan matches (whose ``CodeSymbol`` row vanished between
     retrieval and lookup) are silently skipped — they're not
     actionable evidence.
+
+    When ``repository_id`` is given, each match also carries its
+    source body read from the repo's clone (``""`` → ``None`` if the
+    clone is gone), so the verifier sees the implementation.
     """
     if not matches:
         return []
+    clone_path: Path | None = None
+    if repository_id is not None:
+        repo = db.get(Repository, repository_id)
+        if repo is not None and repo.clone_path:
+            clone_path = Path(repo.clone_path)
     symbol_ids = [m.symbol_id for m in matches]
     symbols = (
         db.query(CodeSymbol)
@@ -361,6 +445,27 @@ def _hybrid_to_retrieve_matches(
         sym = by_id.get(m.symbol_id)
         if sym is None:
             continue
+        source = (
+            _read_source_range(
+                clone_path=clone_path,
+                rel_path=sym.file_path,
+                start_line=sym.start_line,
+                end_line=sym.end_line,
+            )
+            or None
+            if clone_path is not None
+            else None
+        )
+        class_spans = _class_spans(db, sym, clone_path) if clone_path is not None else []
+        callee_spans = (
+            _callee_spans(db, sym, source, clone_path, exclude=set(by_id))
+            if clone_path is not None and source
+            else []
+        )
+        if clone_path is not None and sym.kind == CodeSymbolKind.CONFIG_SCHEMA.value:
+            callee_spans += _usage_spans(db, sym, clone_path)
+        if clone_path is not None and source and sym.kind == CodeSymbolKind.METHOD.value:
+            callee_spans += _member_spans(db, sym, source, clone_path, claim, callee_spans)
         out.append(
             RetrieveMatch(
                 symbol_id=sym.symbol_id,
@@ -375,9 +480,368 @@ def _hybrid_to_retrieve_matches(
                 signature=sym.signature or "",
                 docstring=sym.docstring,
                 similarity=m.final_score,
+                source=source,
+                class_context="\n\n".join(
+                    f"# {s.name} (lines {s.start_line}-{s.end_line})\n{s.source}" for s in class_spans
+                ) or None,
+                callee_context="\n\n".join(
+                    f"# {s.name} ({s.file_path}:{s.start_line}-{s.end_line})\n{s.source}"
+                    for s in callee_spans
+                ) or None,
+                context_spans=class_spans + callee_spans,
             )
         )
     return out
+
+
+# Methods that set a class up. A claim about initialisation or
+# scaling ("B is initialised to 0", "scaled by alpha/r") is
+# implemented here, not in the ``forward`` that retrieval tends to
+# surface.
+_SETUP_METHOD_NAMES = (
+    "__init__",
+    "reset_parameters",
+    "_reset_parameters",
+    "init_weights",
+    "_init_weights",
+)
+
+
+def _span(sym: CodeSymbol, source: str) -> SourceSpan:
+    return SourceSpan(
+        symbol_id=sym.symbol_id, file_path=sym.file_path,
+        start_line=sym.start_line, end_line=sym.end_line, name=sym.name, source=source,
+    )
+
+
+def _class_spans(db: Session, sym: CodeSymbol, clone_path: Path) -> list[SourceSpan]:
+    """Return the source of ``sym``'s sibling setup methods, if any."""
+    if sym.parent_symbol_id is None:
+        return []
+    siblings = (
+        db.query(CodeSymbol)
+        .filter(
+            CodeSymbol.parent_symbol_id == sym.parent_symbol_id,
+            CodeSymbol.name.in_(_SETUP_METHOD_NAMES),
+            CodeSymbol.symbol_id != sym.symbol_id,
+        )
+        .order_by(CodeSymbol.start_line)
+        .all()
+    )
+    parts: list[SourceSpan] = []
+    for sib in siblings:
+        body = _read_source_range(
+            clone_path=clone_path,
+            rel_path=sib.file_path,
+            start_line=sib.start_line,
+            end_line=sib.end_line,
+        )
+        if body:
+            parts.append(_span(sib, body))
+    return parts
+
+
+# A call site: an identifier followed by ``(``. Language-agnostic
+# enough for the Python/JS/Go/Rust/Java the parser indexes.
+_CALL_RE = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
+# A dispatch through a registry: ``loss_registry[config.model.type](...)``.
+_DISPATCH_RE = re.compile(r"\b([A-Za-z_]\w*)\s*\[[^\]\n]*\]\s*\(")
+_IDENT_RE = re.compile(r"\b[A-Za-z_]\w*\b")
+_STRING_RE = re.compile(r"(\"[^\"\n]*\"|'[^'\n]*')")
+_MAX_CALLEES = 4
+
+
+def _callee_spans(
+    db: Session,
+    sym: CodeSymbol,
+    source: str,
+    clone_path: Path,
+    *,
+    exclude: set[UUID],
+) -> list[SourceSpan]:
+    """Return the source of repo functions/methods that ``sym`` calls.
+
+    The detail a claim names often sits one call away from the
+    retrieved symbol (``sample_image`` -> ``generalized_steps``,
+    ``alfworld_run`` -> ``check_is_exhausted``). A name defined more
+    than once resolves to the definition nearest ``sym``'s file; a tie
+    is skipped as ambiguous. Symbols already among the candidates
+    (``exclude``) are not repeated. A call through a module-level
+    registry (``loss_registry[key](...)``) resolves to the functions
+    the registry's literal names, listed before the direct callees.
+    """
+    body = source.split("\n", 1)[1] if "\n" in source else ""
+    # Registry targets go first: a direct callee's name is at least
+    # visible in ``source``, a dispatched one is not.
+    registries = _DISPATCH_RE.findall(body)
+    calls = _registry_members(db, sym, registries, clone_path)
+    calls += _CALL_RE.findall(body)
+    names = list(dict.fromkeys(n for n in calls if n != sym.name))
+    if not names:
+        return []
+    defs = (
+        db.query(CodeSymbol)
+        .filter(
+            CodeSymbol.repository_id == sym.repository_id,
+            CodeSymbol.kind.in_(("function", "method")),
+            CodeSymbol.name.in_(names),
+            CodeSymbol.symbol_id != sym.symbol_id,
+        )
+        .all()
+    )
+    by_name: dict[str, list[CodeSymbol]] = {}
+    for d in defs:
+        by_name.setdefault(d.name, []).append(d)
+    parts: list[SourceSpan] = []
+    for name in names:
+        callee = _nearest_definition(by_name.get(name, []), sym.file_path)
+        if callee is None or callee.symbol_id in exclude:
+            continue
+        text = _read_source_range(
+            clone_path=clone_path,
+            rel_path=callee.file_path,
+            start_line=callee.start_line,
+            end_line=callee.end_line,
+        )
+        if text:
+            parts.append(_span(callee, text))
+        if len(parts) == _MAX_CALLEES:
+            break
+    # Show the dispatch table itself as well as its targets. Otherwise
+    # the model can see a helper's body but cannot establish that a
+    # selected configuration key actually calls it.
+    parts.extend(_registry_spans(db, sym, registries, clone_path))
+    return parts
+
+
+def _registry_spans(
+    db: Session, sym: CodeSymbol, registries: list[str], clone_path: Path,
+) -> list[SourceSpan]:
+    if not registries:
+        return []
+    consts = (
+        db.query(CodeSymbol)
+        .filter(
+            CodeSymbol.repository_id == sym.repository_id,
+            CodeSymbol.kind == "constant",
+            CodeSymbol.name.in_(registries),
+        )
+        .all()
+    )
+    spans: list[SourceSpan] = []
+    for name in dict.fromkeys(registries):
+        const = _nearest_definition([c for c in consts if c.name == name], sym.file_path)
+        if const is None:
+            continue
+        text = _read_source_range(
+            clone_path=clone_path, rel_path=const.file_path,
+            start_line=const.start_line, end_line=const.end_line,
+        )
+        if text:
+            spans.append(_span(const, text))
+    return spans
+
+
+def _registry_members(
+    db: Session,
+    sym: CodeSymbol,
+    registries: list[str],
+    clone_path: Path,
+) -> list[str]:
+    """Identifiers named in the literal of each dispatched-through constant."""
+    if not registries:
+        return []
+    consts = (
+        db.query(CodeSymbol)
+        .filter(
+            CodeSymbol.repository_id == sym.repository_id,
+            CodeSymbol.kind == "constant",
+            CodeSymbol.name.in_(registries),
+        )
+        .all()
+    )
+    by_name: dict[str, list[CodeSymbol]] = {}
+    for c in consts:
+        by_name.setdefault(c.name, []).append(c)
+    members: list[str] = []
+    for name in dict.fromkeys(registries):
+        const = _nearest_definition(by_name.get(name, []), sym.file_path)
+        if const is None:
+            continue
+        text = _read_source_range(
+            clone_path=clone_path,
+            rel_path=const.file_path,
+            start_line=const.start_line,
+            end_line=const.end_line,
+        )
+        literal = text.split("=", 1)[1] if text and "=" in text else ""
+        members += _IDENT_RE.findall(_STRING_RE.sub("", literal))
+    return members
+
+
+# A command-line option read back as an attribute: ``--batch-size`` is
+# ``args.batch_size``, an absl ``learning_rate`` flag ``FLAGS.learning_rate``.
+_OPTION_RE = re.compile(r"-{0,2}([A-Za-z_][\w-]*)")
+_MAX_USAGES = 3
+_USAGE_RADIUS = 2
+
+
+def _usage_spans(db: Session, sym: CodeSymbol, clone_path: Path) -> list[SourceSpan]:
+    """Lines that read the option ``sym`` defines, with a little context.
+
+    A claim about how a setting is used ("the learning rate is scaled by
+    batch size / 512") is implemented where the option is read, which
+    can sit deep in a long ``main`` that retrieval does not surface; the
+    option's definition only shows its default. Searches the defining
+    file, then the other Python files in its directory. Each window is
+    cut to the smallest function or class around the usage, so a
+    citation in it belongs to that symbol.
+    """
+    match = _OPTION_RE.fullmatch(sym.name)
+    if match is None or not sym.file_path.endswith(".py"):
+        return []
+    attr = re.compile(rf"\.{re.escape(match.group(1).replace('-', '_'))}\b")
+    folder = sym.file_path.rsplit("/", 1)[0] if "/" in sym.file_path else ""
+    siblings = sorted(
+        path for (path,) in db.query(CodeSymbol.file_path)
+        .filter(CodeSymbol.repository_id == sym.repository_id)
+        .distinct()
+        if path.endswith(".py") and path != sym.file_path
+        and (path.rsplit("/", 1)[0] if "/" in path else "") == folder
+    )
+    spans: list[SourceSpan] = []
+    for path in [sym.file_path, *siblings]:
+        text = _read_source_range(clone_path=clone_path, rel_path=path, start_line=1, end_line=10**9)
+        lines = text.splitlines() if text else []
+        for number, line in enumerate(lines, start=1):
+            if path == sym.file_path and sym.start_line <= number <= sym.end_line:
+                continue
+            if not attr.search(line) or any(s.file_path == path and s.start_line <= number <= s.end_line for s in spans):
+                continue
+            owner = (
+                db.query(CodeSymbol)
+                .filter(
+                    CodeSymbol.repository_id == sym.repository_id,
+                    CodeSymbol.file_path == path,
+                    CodeSymbol.kind.in_(("function", "method", "class")),
+                    CodeSymbol.start_line <= number,
+                    CodeSymbol.end_line >= number,
+                )
+                .order_by(CodeSymbol.end_line - CodeSymbol.start_line)
+                .first()
+            )
+            if owner is None:
+                continue
+            start = max(owner.start_line, number - _USAGE_RADIUS)
+            end = min(owner.end_line, number + _USAGE_RADIUS)
+            spans.append(SourceSpan(
+                symbol_id=owner.symbol_id, file_path=path, start_line=start, end_line=end,
+                name=owner.name, source="\n".join(lines[start - 1:end]),
+            ))
+            if len(spans) == _MAX_USAGES:
+                return spans
+        if spans:
+            return spans
+    return spans
+
+
+_SELF_ATTR_RE = re.compile(r"\bself\.([A-Za-z_]\w*)")
+_MEMBER_RADIUS = 3
+
+
+def _member_spans(
+    db: Session, sym: CodeSymbol, source: str, clone_path: Path, claim: str,
+    existing: list[SourceSpan],
+) -> list[SourceSpan]:
+    """Where the rest of a method's class uses what the method touches.
+
+    A method that only computes or stores something (``merge_AB``,
+    ``self.merged = False``, ``return self.sequence_output``) does not show
+    what the class does with it; that happens in a sibling method
+    (``train`` folding the delta into the weight, a pooler slicing the
+    first token). Shows up to ``_MAX_USAGES`` lines elsewhere in the class
+    that call this method, or read an attribute this method uses whose
+    name shares a word with the claim. Each window is cut to the method
+    around the line, so a citation in it belongs to that method.
+    """
+    terms = _tokens(claim)
+    attrs = sorted({a for a in _SELF_ATTR_RE.findall(source) if terms & _tokens(a)})
+    patterns = [rf"\bself\.{re.escape(a)}\b" for a in attrs]
+    if not sym.name.startswith("__"):
+        patterns.append(rf"\.{re.escape(sym.name)}\(")
+    if not patterns:
+        return []
+    owner_class = (
+        db.query(CodeSymbol)
+        .filter(
+            CodeSymbol.repository_id == sym.repository_id,
+            CodeSymbol.file_path == sym.file_path,
+            CodeSymbol.kind == "class",
+            CodeSymbol.start_line <= sym.start_line,
+            CodeSymbol.end_line >= sym.end_line,
+        )
+        .order_by(CodeSymbol.end_line - CodeSymbol.start_line)
+        .first()
+    )
+    if owner_class is None:
+        return []
+    text = _read_source_range(
+        clone_path=clone_path, rel_path=sym.file_path, start_line=1, end_line=owner_class.end_line,
+    )
+    lines = text.splitlines() if text else []
+    used = re.compile("|".join(patterns))
+    spans: list[SourceSpan] = []
+    for number in range(owner_class.start_line, min(owner_class.end_line, len(lines)) + 1):
+        if sym.start_line <= number <= sym.end_line or not used.search(lines[number - 1]):
+            continue
+        if any(
+            s.file_path == sym.file_path and s.start_line <= number <= s.end_line
+            for s in [*existing, *spans]
+        ):
+            continue
+        owner = (
+            db.query(CodeSymbol)
+            .filter(
+                CodeSymbol.repository_id == sym.repository_id,
+                CodeSymbol.file_path == sym.file_path,
+                CodeSymbol.kind.in_(("function", "method")),
+                CodeSymbol.start_line <= number,
+                CodeSymbol.end_line >= number,
+            )
+            .order_by(CodeSymbol.end_line - CodeSymbol.start_line)
+            .first()
+        )
+        if owner is None:
+            continue
+        start = max(owner.start_line, number - _MEMBER_RADIUS)
+        end = min(owner.end_line, number + _MEMBER_RADIUS)
+        spans.append(SourceSpan(
+            symbol_id=owner.symbol_id, file_path=sym.file_path, start_line=start, end_line=end,
+            name=owner.name, source="\n".join(lines[start - 1:end]),
+        ))
+        if len(spans) == _MAX_USAGES:
+            break
+    return spans
+
+
+def _nearest_definition(defs: list[CodeSymbol], file_path: str) -> CodeSymbol | None:
+    """Pick the definition sharing the longest path prefix with ``file_path``."""
+    if not defs:
+        return None
+    target = file_path.split("/")
+
+    def shared(d: CodeSymbol) -> int:
+        n = 0
+        for a, b in zip(d.file_path.split("/"), target, strict=False):
+            if a != b:
+                break
+            n += 1
+        return n
+
+    ranked = sorted(defs, key=shared, reverse=True)
+    if len(ranked) > 1 and shared(ranked[0]) == shared(ranked[1]):
+        return None
+    return ranked[0]
 
 
 def _error_verification(claim: Claim, exc: Exception) -> Verification:

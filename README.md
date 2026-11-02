@@ -7,20 +7,125 @@
 > an explicit `VERIFIED / PARTIALLY_VERIFIED / CONTRADICTED / UNVERIFIED`
 > verdict and detected discrepancies.
 
-[![status](https://img.shields.io/badge/status-Phase%202%20(paper%20intelligence)-blue)]()
+[![status](https://img.shields.io/badge/status-Phase%2010%20(evaluation)-blue)]()
 [![stack](https://img.shields.io/badge/stack-Python%20%7C%20React%20%7C%20Postgres-blue)]()
 
 ## What's in v1
 
 - 📄 **Paper Intelligence** — PDF upload → structured claims with paper-evidence spans
 - 🧠 **Repository Intelligence** — GitHub clone → AST symbols → config files
-- 🔎 **Hybrid Claim-to-Code Retrieval** — semantic + lexical + structural, weighted ensemble
+- 🔎 **Hybrid Claim-to-Code Retrieval** — semantic + lexical + structural, weighted ensemble, then an LLM rerank of the top 45 candidates
 - ✅ **Verification** — every claim gets a verdict + paper evidence + code evidence
 - ⚠️ **Discrepancy Detection** — hyperparameter / objective / dataset / metric mismatches
 - 📚 **Related Work** — selected claim → 5 structured comparable papers
-- 🛡️ **Responsible-AI Guardrails** — secret redaction, prompt-injection defense, no code execution
+- 🛡️ **Input checks** — pattern-based secret redaction and injection detection, with measured coverage gaps; ingested code is never executed
 - 📊 **Observability** — OpenTelemetry traces + per-step latency/token/retrieval metrics
-- 🧪 **Evaluation Harness** — 8–12 paper/repo pairs, Recall@5 + verification accuracy + grounding rate
+- 🧪 **Evaluation Harness** — hand-annotated paper/repo pairs; retrieval Recall@1/5 + MRR, verification accuracy + discrepancy precision/recall + grounding rate, safety redaction/detection rates ([measured results](#measured-results))
+
+## Try the portfolio demo
+
+The **View sample analysis** entry opens a self-contained, read-only example.
+It needs no API server, database, model, or API key. Start the frontend and open
+it with `?demo=1`, or use the sample button on the landing page:
+
+```bash
+cd apps/web
+npm ci --registry=https://registry.npmjs.org --replace-registry-host=always
+npm run dev
+# npm run build produces dist/ for a static website deployment.
+```
+
+The sample uses recorded development results. Its curated claim text is not
+presented as an independently verified quotation from a PDF. For a personal
+website, publish the static demo with a short explanation of the architecture,
+retrieval comparison, and known failure cases. It does not expose model
+configuration or accept uploads.
+
+## Measured results
+
+Benchmark measured locally on 2026-11-01 at commit `1f8fce3` with
+`qwen3.8-27b-mlx` (LM Studio) and `nomic-embed-text-v1.5` embeddings, by
+[`evaluation/run_local.py --prepare`](evaluation/README.md#run-the-resume-target-benchmark-on-a-local-model).
+The suite has 15 paper/repository pairs, 12 of them PyTorch. Headline numbers
+use the original **79-claim regression set** (8 pairs: Attention Is All You
+Need, BERT, DDIM, DDPM, DPO, LoRA, MAE, Reflexion), frozen at `77e2e97`; the
+35 claims on the 7 newer pairs (CLIP, DeiT, DETR, DINO, MoCo, SAM, Whisper)
+are reported separately and cannot change it. The run's target check,
+report and per-claim results are checked in under
+[`evaluation/benchmarks/resume-targets-1f8fce3/`](evaluation/benchmarks/resume-targets-1f8fce3/targets.md),
+with provenance in each results file.
+
+| Area | Metric | Claim2Code | Baseline |
+|---|---|---|---|
+| Retrieval (top 5) | Hit@5, macro avg (annotated symbol in the top 5) | **97.2%** | 72.7% hybrid without rerank · 64.5% embedding-only |
+| | Recall@5, per symbol, macro avg | **85.8%** | 60.6% hybrid without rerank · 54.8% embedding-only |
+| | MRR, macro avg | **0.837** | 0.456 hybrid without rerank · 0.462 embedding-only |
+| Verification | Status accuracy | **91.1%** (72/79) | 88.6% always-VERIFIED baseline |
+| | Macro F1 over gold labels (VERIFIED, PARTIALLY_VERIFIED) | 0.915 | 0.470 always-VERIFIED |
+| | Discrepancy precision / recall (claim level) | 100% / 77.8% | — |
+| | Grounding rate (cited code exists in the cited file) | **100%** of 239 citations | — |
+| | Line accuracy (cited code at the cited lines) | 100% | — |
+| Newer pairs (35 claims) | Hit@5 · status accuracy | 97.1% · 100% | — |
+| Safety | Secrets protected, covered / held-out forms | 10/10 · 2/8 | — |
+| | Injections detected, covered / held-out forms | 6/6 · 0/6 | — |
+| | Clean text flagged | 3/12 | — |
+
+Hit@5 is the definition behind the earlier reported 74% (hybrid retrieval at
+`93cd752`); re-measured on the same claims it is 72.7%. The gain comes from the
+LLM rerank stage: hybrid retrieval proposes 45 candidates and the chat model
+picks the most direct implementations from their source heads
+(`retrieval/reranker.py`). Rerank reaches the pool's ceiling: 97.2% of claims
+have an annotated symbol in hybrid's top 45.
+
+The gold set contains 70 `VERIFIED` and 9 `PARTIALLY_VERIFIED` claims, with no
+`CONTRADICTED` or `UNVERIFIED` examples, so the always-VERIFIED baseline
+already scores 88.6%; macro F1 shows that the partial cases are found. It
+does not establish four-way classification quality. Evaluation supplies
+curated claims, using those texts as paper quotes; it does not measure
+PDF-to-claim extraction or paper-citation correctness. Code grounding measures
+quote existence, not verdict correctness. Grounding and line accuracy are 100%
+by construction: the runtime check keeps only quotes found in source shown to
+the model and moves each to its actual lines.
+
+History on the same 79 claims: 81.0% (99.5% grounding, 92.1% line accuracy)
+before the citation check; 70.9% with a first, over-strict version of it;
+79.7% at `93cd752`; 82.3% with rerank; 87.3% at `d38c62d` after treating
+differing defaults and initialisations as partial support rather than
+contradiction (`verification/discrepancies.py`, chosen on development
+claims from the newer pairs, `evaluation/dev_annotations/`); 91.1% at
+`1f8fce3`. Between those two, three runs at `d38c62d`, `62cfa22` and
+`6f332b9` gave 87.3%, 86.1% and 84.8%: the local model's verdicts vary
+between runs, mostly through discrepancies that only said the code was "not
+visible", "not provided" or "truncated". The changes since `d38c62d`:
+
+- source windows finish a statement they cut (`verification/context.py`);
+- discrepancies that only report unseen code are dropped, as rule 7 of the
+  verify prompt already requires (`verification/verifier.py`);
+- command-line options carry the lines that read them, and methods carry
+  the lines elsewhere in their class that call them or read the attributes
+  they use (`verification/workflow.py`).
+
+Each was checked on the 35 development claims (35/35, 35/35 and 34/35; the
+one miss also occurred before any of them). The last two were designed
+after reading the regression-set failures, so the 79 claims are no longer
+fully held out for them; on all stored runs the unseen-code pattern matches
+only discrepancies on claims annotated VERIFIED. 91.1% is one run.
+
+Caveats: only 9 of the 79 claims carry an annotated discrepancy, so the
+discrepancy rates rest on few cases. The annotations were written during
+development, not by an independent annotator. Five were corrected after a first
+measured run (2026-10-27, each with a note in its annotation): lora_c3/c5/c6
+named the wrong symbol or misstated the code, and ddim_c1/mae_c5 were labelled
+PARTIALLY_VERIFIED with no paper/code mismatch. Scored against the corrected
+labels, the earlier pipeline reached 63.6% accuracy on the first 5 pairs. The
+Attention, BERT and DDPM pairs were annotated afterwards against
+harvardnlp/annotated-transformer, google-research/bert and
+hojonathanho/diffusion; BERT's pre-training hyperparameters are absl flags,
+which the parser now indexes as config symbols. Of the 7 remaining misses, 5 are UNVERIFIED verdicts on claims annotated VERIFIED (BERT's activation is set in a JSON config outside the repository; a DDIM claim is a qualitative result; LoRA's `examples/NLU` is a vendored transformers checkout), one partial claim is UNVERIFIED, and one is VERIFIED where a mismatch was expected. The safety `held_out` cases (GitHub
+fine-grained / Slack / Hugging Face tokens, paraphrased injections) are coverage
+gaps of the regex gate, which matches only the forms listed in Phase 8.
+Injection detection records a match; it is not a guarantee that the input was
+blocked. Use the static demo for public portfolio access.
 
 ## Why
 
@@ -54,8 +159,8 @@ cd claim2code
 
 # 2. configure
 cp .env.example .env
-# Edit .env — set POSTGRES_PASSWORD and OPENAI_API_KEY (the LLM is
-# required by Phase 2's claim extractor).
+# Edit .env for the database and a model endpoint. Hosted providers use
+# their own API keys; a local OpenAI-compatible server needs no cloud key.
 
 # 3. start stack
 make dev          # brings up postgres+pgvector, api, web
@@ -99,7 +204,7 @@ curl -sS http://localhost:8000/analyses/<analysis_id>/claims | jq '.claims | len
 |---|---|---|---|
 | **Python 3.11+** | YES | `brew install python@3.11` | `sudo apt install python3.11 python3.11-venv` |
 | **PostgreSQL 16 + pgvector** | YES (for paper pipeline, repo indexing, retrieval) | `brew install postgresql@16 pgvector` | `sudo apt install postgresql-16 postgresql-16-pgvector` |
-| **OpenAI API key** | YES (for `gpt-4o` + `text-embedding-3-small`) | https://platform.openai.com/api-keys | same |
+| **Model endpoint** | YES for live analysis; local LM Studio/Ollama or a hosted provider | Local endpoint, or provider credentials | same |
 | **Node 20+** | YES (only if you want the React frontend) | `brew install node` | `nvm install 20` |
 | **Semantic Scholar API key** | optional (raises rate-limit 1/s → 100/5min) | https://www.semanticscholar.org/product/api | same |
 | **GitHub token** | optional (raises REST rate limit on popular repos) | https://github.com/settings/tokens | same |
@@ -147,6 +252,13 @@ OPENAI_MODEL_CHAT=gpt-4o
 OPENAI_MODEL_EMBED=text-embedding-3-small
 OPENAI_EMBED_DIM=1536
 
+# ---- Other chat providers (optional; pick one in the web UI) ----
+ANTHROPIC_API_KEY=
+OPENAI_PLATFORM_API_KEY=
+GEMINI_API_KEY=
+DEEPSEEK_API_KEY=
+OPENROUTER_API_KEY=
+
 # ---- Optional ----
 SEMANTIC_SCHOLAR_API_KEY=                              # empty = anonymous mode
 GITHUB_TOKEN=                                          # empty = public rate limit
@@ -174,6 +286,57 @@ WORKFLOW_TIMEOUT_REPO=300
 WORKFLOW_TIMEOUT_TOTAL=900
 EOF
 ```
+
+**Choosing the chat model.** The `OPENAI_*` block is the default chat
+model and the embedding model. The **Chat model** panel at the top of the
+web UI (or `GET/POST /llm/providers`, `/llm/provider`, `/llm/provider/test`)
+switches the chat model used for claim extraction, verification and
+related work between LM Studio, Ollama, Anthropic (Claude, through the
+Anthropic SDK with structured outputs), OpenAI, Google Gemini, DeepSeek,
+OpenRouter, or any OpenAI-compatible server. "Test connection" checks a
+choice without switching to it. The choice is saved to
+`.claim2code/llm_provider.json` (git-ignored); an API key typed in the UI
+stays in the API's memory only, so put keys you want kept in `.env`.
+Embeddings are not switchable there: stored vectors come from one model,
+so changing `OPENAI_MODEL_EMBED` means re-indexing. DeepSeek only offers
+JSON mode, so its answers are checked against the schema afterwards
+rather than constrained by it.
+
+Model-management writes are disabled by default. For a private workstation,
+set `LLM_MANAGEMENT_ALLOW_LOCAL=true` and connect from the same machine. For
+administrative access, set `LLM_MANAGEMENT_TOKEN` securely and enter it in the
+model panel; the token stays in browser memory, not browser storage. Hosted
+provider addresses cannot be overridden to carry saved keys elsewhere. A custom
+endpoint uses only its explicitly supplied key.
+Behind a reverse proxy, use the administrator token and leave the loopback
+opt-in disabled; the proxy itself may appear as a loopback peer.
+
+For a read-only API deployment, set `API_READ_ONLY=true`; mutating requests
+are rejected before model or database work. The static portfolio demo needs no
+API at all. A public service accepting uploads additionally needs deployment
+authentication, request quotas and resource budgets; it is not provided by the
+static demo configuration.
+
+If your Docker builder uses an HTTPS-inspecting proxy, supply its trusted CA
+bundle as a build-only secret while retaining certificate verification:
+
+```bash
+docker build --secret id=pip_ca,src=/path/to/trusted-ca-bundle.crt \
+  -f deployments/Dockerfile.api -t claim2code-api .
+```
+
+The CA bundle is optional and is not retained in the image. Standard builds
+need no extra trust configuration.
+
+**Local LM Studio.** Load a chat model and an embedding model, enable the
+OpenAI-compatible server, and set `OPENAI_BASE_URL`, `OPENAI_MODEL_CHAT`,
+`OPENAI_MODEL_EMBED`, and `OPENAI_EMBED_DIM` to the actual model identifiers and
+embedding dimensions. Use the local server's supported authentication setting.
+For an unauthenticated local endpoint, its SDK configuration value is not a
+cloud credential. Changing embedding model or dimensions requires a fresh
+database/index, not mixing old vectors with new ones. If the API runs in a
+container, its `localhost` is the container; configure access to the host model
+server explicitly.
 
 Every name in the template maps to a field declared at
 `apps/api/claim2code_api/app/config.py:22-142`. If you add a name
@@ -239,6 +402,18 @@ Open:
 - API docs:        http://localhost:8000/docs
 - Web UI:          http://localhost:5173
 
+In the web UI: upload a PDF (or paste the `analysis_id` of an earlier
+upload under "Open an earlier analysis"), clone the paper's repository,
+then use the **Verification** panel to verify one claim or all of them.
+Verdicts render as each claim finishes (a few minutes per claim on a local
+model) and are saved, so reopening the analysis shows them again. The open
+analysis is kept in the URL (`http://localhost:5173/?analysis=<id>`), so a
+refresh or a bookmarked link returns to it. "Show details" on a verdict
+lists the explanation and discrepancies, the cited paper passage on the
+rendered PDF page with the quote highlighted (plus a link that opens the
+PDF at that page), and the cited code as read from the cloned repository,
+with line numbers and a GitHub link pinned to the cloned commit.
+
 ### 7. Run the test suite
 
 `apps/api/pyproject.toml` line 85 sets
@@ -266,26 +441,29 @@ cd apps/web && pnpm test           # vitest + @testing-library/react, no backend
 
 ### 8. Run the evaluators
 
-The `evaluation/` directory ships the retrieval evaluator today; the
-others land with Phase 10.
+Each evaluator writes `evaluation/results/<name>.json`; `make eval-report`
+folds them into `evaluation/results.json` + `evaluation/report.md`.
+Repositories are matched to annotation pairs by URL, so index a pair's repo
+first (pairs without an indexed repo are skipped).
 
-| Script | Make target | Status |
-|---|---|---|
-| `evaluation/evaluate_retrieval.py` | `make eval-retrieval` | ✅ shipped (Phase 5) — Recall@1/5 + MRR vs 3 hand-annotated paper/repo pairs |
-| `evaluation/evaluate_verification.py` | `make eval-verification` | TODO (Phase 10) |
-| `evaluation/evaluate_safety.py` | `make eval-safety` (currently aliases `pytest -m safety`) | TODO (Phase 10) |
-| `evaluation/evaluate_observability.py` | (part of `eval-all`) | TODO (Phase 10) |
-| `evaluation/evaluate_all.py` | `make eval-all` | TODO (Phase 10) — orchestrator + renders `results.json` + `report.md` |
+| Script | Make target | Needs | Measures |
+|---|---|---|---|
+| `evaluation/evaluate_retrieval.py` | `make eval-retrieval` | DB + embeddings | Recall@1/5 + MRR for embedding-only, lexical-only, hybrid and hybrid + LLM rerank |
+| `evaluation/evaluate_verification.py` | `make eval-verification` | DB + embeddings + chat model | status accuracy, support rate, discrepancy P/R, grounding, line accuracy |
+| `evaluation/evaluate_safety.py` | `make eval-safety` | nothing | secret protection, injection detection, false positives on `datasets/safety_corpus.json` |
+| `evaluation/report.py` | `make eval-report` | the results above | `results.json` + `report.md` |
+| `evaluation/evaluate_all.py` | `make eval-all` | all of the above | runs every evaluator, then the report |
 
 ```bash
-# Phase 5 retrieval evaluator — works end-to-end today
-make eval-retrieval
-# Reads evaluation/annotations/*.json, connects to claim2code_dev + OpenAI,
-# writes evaluation/results.json + evaluation/report.md.
-
-# Phase 10 full suite — placeholder until Phase 10 lands
-make eval-all
+make eval-safety                       # seconds, no services needed
+make eval-retrieval                    # ~1 min
+make eval-verification                 # one LLM call per claim (~2-3 h for 79 claims locally)
+make eval-verification ARGS=--resume   # continue an interrupted run
+make eval-report                       # render evaluation/report.md
 ```
+
+`python evaluation/evaluate_verification.py --regrade` re-scores the stored
+citations of the last run without calling the LLM.
 
 ### 9. End-to-end demo with curl
 
@@ -410,8 +588,8 @@ claim2code/
 | 7 | Related Work | scholarly API + 5 structured comparable papers | Selected claim → 6-field (problem/method/dataset/metric/difference/agreement) comparison per paper; Semantic Scholar primary + OpenAlex fallback. `POST /analyses/{id}/related-work` + `GET`; per-paper LLM isolation (failure → `comparison=None`, paper still ships with metadata + score). |
 | 8 | Responsible AI | trust boundary + secret redaction + no-exec | All adversarial fixtures blocked. `SafetyGate` wraps every LLM call at the SDK seam (`chat.completions.create`); `SecretRedactor` replaces credential spans (OpenAI / Anthropic / AWS / GCP / GitHub / PEM / Bearer / `.env`) with `[REDACTED:<label>]`; `PromptInjectionDetector` returns hits without mutating text. Violations are appended to `AnalysisState.errors` with `{stage, kind, pattern, span_count, ts}` — no content persisted. 8 credential patterns + 5 injection patterns; 57 adversarial tests (`pytest -m safety`); new CI job `backend-safety` gates Phase 8. |
 | 9 | Observability | OTel spans + per-step metrics + trace tree | One analysis → one trace tree. Each of the 3 workflows (`paper_workflow.run`, `verification_workflow.run`, `related_work_workflow.run`) opens a root span; per-claim / per-paper / per-LLM-call / per-retriever-leg open child spans (`verification.claim_verify`, `literature.paper_compare`, `llm.{extract_claims,verdict,compare}`, `retrieval.{semantic,lexical,structural}`). `safety.gate_wrap` auto-parents under each LLM span via OTel contextvars. Metrics: `llm_tokens_total` (counter, model+kind), `llm_request_duration_seconds` (histogram), `retriever_request_duration_seconds` (histogram, leg label), `safety_violations_total` (counter, pattern label). Console exporter default + OTLP-HTTP optional via `OTEL_EXPORTER_OTLP_ENDPOINT`; FastAPIInstrumentor wraps every HTTP request as a server span. 29 tests (`pytest -m observability`); new CI job `backend-observability` gates Phase 9. |
-| 10 | Evaluation | 8–12 papers, 40–60 claims, all metrics | `evaluation/results.json` + Markdown report |
+| 10 | Evaluation | 8–12 papers, 40–60 claims, all metrics | `evaluation/results.json` + Markdown report. Shipped: retrieval, verification and safety evaluators + report (8 pairs / 79 claims measured, see [Measured results](#measured-results)). |
 
 ## License
 
-TBD.
+MIT — see [LICENSE](LICENSE).

@@ -230,7 +230,7 @@ def test_verification_json_round_trip() -> None:
 def test_run_request_defaults() -> None:
     r = VerificationRunRequest()
     assert r.claim_ids is None
-    assert r.top_k == 5
+    assert r.top_k == 8
 
 
 def test_run_request_top_k_bounds() -> None:

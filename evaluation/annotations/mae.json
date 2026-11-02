@@ -1,0 +1,134 @@
+{
+  "pair_id": "mae",
+  "paper": {
+    "title": "Masked Autoencoders Are Scalable Vision Learners",
+    "authors": [
+      "He",
+      "Chen",
+      "Xie",
+      "Li",
+      "Dollár",
+      "Girshick"
+    ],
+    "year": 2022,
+    "venue": "CVPR",
+    "arxiv_id": "2111.06377",
+    "pdf_url": "https://arxiv.org/pdf/2111.06377",
+    "pdf_verified": false
+  },
+  "repo": {
+    "url": "https://github.com/facebookresearch/mae",
+    "commit": "efb2a8062c206524e35e47d04501ed4f544c0ae8",
+    "description": "Official PyTorch MAE pre-training and fine-tuning.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "models_mae.py",
+        "start_line": 14,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "review_scope": "Repository revision, PyTorch import, and all annotated symbol locations checked against pinned source; existing claim text and labels preserved.",
+    "paper_evidence_verified": false,
+    "paper_evidence_note": "Original PDF bytes have not been verified for this metadata review. Claim text is curated; existing section/page/character spans must not be treated as verified PDF quotations.",
+    "legacy_claims_sha256": "93c1777721eb9b1910be83934c28421f6449d8571197b05f3df3496616daa676"
+  },
+  "claims": [
+    {
+      "claim_id": "mae_c1",
+      "text": "MAE uses an asymmetric encoder-decoder where the encoder operates only on visible patches without mask tokens, and a lightweight decoder reconstructs from latent representation plus mask tokens.",
+      "evidence_span": {"section": "3", "page": 3, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "models_mae.py", "name": "forward_encoder", "kind": "method"},
+        {"file_path": "models_mae.py", "name": "forward_decoder", "kind": "method"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "mae_c2",
+      "text": "Masking a high proportion of the input image, e.g., 75%, yields a nontrivial and meaningful self-supervisory task.",
+      "evidence_span": {"section": "1", "page": 1, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "main_pretrain.py", "name": "--mask_ratio", "kind": "config_schema"},
+        {"file_path": "models_mae.py", "name": "forward", "kind": "method"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "mae_c3",
+      "text": "The MAE decoder has 8 blocks and a width of 512-d.",
+      "evidence_span": {"section": "3", "page": 4, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "models_mae.py", "name": "mae_vit_large_patch16_dec512d8b", "kind": "function"},
+        {"file_path": "models_mae.py", "name": "mae_vit_base_patch16_dec512d8b", "kind": "function"},
+        {"file_path": "models_mae.py", "name": "__init__", "kind": "method"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "mae_c4",
+      "text": "The MAE reconstruction target is pixel values for each masked patch, with MSE loss computed only on masked patches.",
+      "evidence_span": {"section": "3", "page": 4, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "models_mae.py", "name": "forward_loss", "kind": "method"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "mae_c5",
+      "text": "Using normalized pixel values (per-patch mean/std normalization) as reconstruction target improves representation quality.",
+      "evidence_span": {"section": "3", "page": 4, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "models_mae.py", "name": "forward_loss", "kind": "method"},
+        {"file_path": "main_pretrain.py", "name": "--norm_pix_loss", "kind": "config_schema"}
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "Normalisation is implemented; the quality gain is an empirical result. Relabelled 2026-10-27 from PARTIALLY_VERIFIED: no paper/code mismatch, and PARTIALLY_VERIFIED requires one (phase-6-design.md §2.5)."
+    },
+    {
+      "claim_id": "mae_c6",
+      "text": "The MAE implementation uses random shuffling of tokens and removing the last portion based on masking ratio, requiring no specialized sparse operations.",
+      "evidence_span": {"section": "3", "page": 4, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "models_mae.py", "name": "random_masking", "kind": "method"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "mae_c7",
+      "text": "MAE pre-training uses AdamW optimizer with base learning rate 1.5e-4, weight decay 0.05, batch size 4096, cosine decay schedule, and 40 warmup epochs.",
+      "evidence_span": {"section": "A.1", "page": 12, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "main_pretrain.py", "name": "--blr", "kind": "config_schema"},
+        {"file_path": "main_pretrain.py", "name": "main", "kind": "function"},
+        {"file_path": "main_pretrain.py", "name": "--weight_decay", "kind": "config_schema"},
+        {"file_path": "main_pretrain.py", "name": "--warmup_epochs", "kind": "config_schema"},
+        {"file_path": "util/lr_sched.py", "name": "adjust_learning_rate", "kind": "function"}
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "--blr defaults to 1e-3, not 1.5e-4 (README launch command passes 1.5e-4). Per-GPU batch 64 is not a mismatch."
+    },
+    {
+      "claim_id": "mae_c8",
+      "text": "The learning rate is scaled linearly with the batch size: lr = base_lr x batchsize / 256.",
+      "evidence_span": {"section": "A.1", "page": 12, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "main_pretrain.py", "name": "main", "kind": "function"},
+        {"file_path": "main_pretrain.py", "name": "--blr", "kind": "config_schema"}
+      ],
+      "expected_verification": "VERIFIED"
+    },
+    {
+      "claim_id": "mae_c9",
+      "text": "The learning rate follows a half-cycle cosine decay after a linear warmup.",
+      "evidence_span": {"section": "A.1", "page": 12, "char_start": 0, "char_end": 100},
+      "relevant_symbols": [
+        {"file_path": "util/lr_sched.py", "name": "adjust_learning_rate", "kind": "function"}
+      ],
+      "expected_verification": "VERIFIED"
+    }
+  ]
+}

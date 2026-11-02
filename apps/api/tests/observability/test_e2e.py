@@ -18,7 +18,7 @@ as the unit tests, so they're self-contained and CI-safe.
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from openai import APITimeoutError
@@ -56,17 +56,11 @@ def _client_with_response(content: str, *, total_tokens: int = 500) -> MagicMock
 
 
 def _build_client(fake_openai: MagicMock) -> LLMClient:
-    """Construct an LLMClient with a stubbed OpenAI SDK + SafetyGate."""
-    client = LLMClient.__new__(LLMClient)
+    """Exercise client initialization with only the provider mocked."""
     import claim2code_api.app.config as cfg
 
-    client._settings = cfg.get_settings()
-    client._client = fake_openai
-    from claim2code_api.safety import SafetyGate
-
-    client._gate = SafetyGate()
-    client._on_violations = None
-    return client
+    with patch("claim2code_api.llm.client.build_backend", return_value=fake_openai):
+        return LLMClient(cfg.get_settings())
 
 
 def _sample_paper() -> Paper:

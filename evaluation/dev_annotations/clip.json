@@ -1,0 +1,78 @@
+{
+  "pair_id": "clip",
+  "paper": {
+    "title": "Learning Transferable Visual Models From Natural Language Supervision",
+    "authors": [
+      "Radford",
+      "Kim",
+      "Hallacy",
+      "Ramesh",
+      "Goh",
+      "Agarwal",
+      "Sastry",
+      "Askell",
+      "Mishkin",
+      "Clark",
+      "Krueger",
+      "Sutskever"
+    ],
+    "year": 2021,
+    "venue": "ICML",
+    "arxiv_id": "2103.00020",
+    "pdf_url": "https://proceedings.mlr.press/v139/radford21a/radford21a.pdf",
+    "sha256": null
+  },
+  "repo": {
+    "url": "https://github.com/openai/CLIP",
+    "commit": "d05afc436d78f1c48dc0dbf8e5980a9d471f35f6",
+    "description": "Official PyTorch CLIP implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "clip/model.py",
+        "start_line": 5,
+        "end_line": 5,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "development",
+    "review_scope": "Claims written 2026-10-29 for tuning verdict calibration; labels checked against the pinned repository source. Not part of the regression or coverage sets.",
+    "paper_evidence_verified": false
+  },
+  "claims": [
+    {
+      "claim_id": "clip_dev1",
+      "text": "CLIP initializes its learnable temperature to 0.07, stored as a log-parameterized logit scale.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 94
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "clip/model.py",
+          "name": "__init__",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "logit_scale = nn.Parameter(ones * np.log(1 / 0.07))."
+    },
+    {
+      "claim_id": "clip_dev2",
+      "text": "CLIP is trained with a minibatch size of 32,768 for 32 epochs.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 62
+      },
+      "relevant_symbols": [],
+      "expected_verification": "UNVERIFIED",
+      "notes": "The repository contains inference code only; no training loop or batch-size setting exists."
+    }
+  ]
+}

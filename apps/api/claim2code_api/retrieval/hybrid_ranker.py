@@ -1,82 +1,32 @@
-"""Hybrid retrieval — Reciprocal Rank Fusion over (semantic, lexical, structural).
+"""Fuse semantic, lexical and identifier retrieval with repository structure.
 
-Phase 5 orchestrator. Given a paper claim, this is the **default**
-read path. The endpoint (``POST /repositories/{id}/retrieve``)
-dispatches to :func:`hybrid_ranker` when ``mode="hybrid"`` (the
-default).
+Each leg contributes a bounded ranked candidate set. Semantic similarity
+finds paraphrases; PostgreSQL full-text search finds prose in docstrings
+and signatures; identifier search splits snake_case, CamelCase and acronym
+names so undocumented implementations also enter the pool. Reciprocal
+Rank Fusion uses default weights 0.40 / 0.40 / 0.20 and k=60, followed by
+import/path relevance multipliers.
 
-Algorithm
----------
-
-Three legs each return their own top-``top_k * 3`` candidates
-(more than ``top_k`` so each leg has room to surface its
-long-tail picks):
-
-  1. **Semantic** — :func:`retrieve_semantic` (Phase 4 pgvector
-     cosine).
-  2. **Lexical** — :func:`lexical_search` (Postgres tsvector +
-     ts_rank_cd).
-  3. **Structural** — :func:`structural_boost` (a multiplier,
-     not a ranker; applied after fusion — see below).
-
-The union of (semantic, lexical) candidate ``symbol_id``s
-forms the candidate pool. For each candidate we compute the
-Reciprocal Rank Fusion score:
-
-    rrf(d) = Σ_i  w_i / (k + rank_i(d))
-
-  - ``k = 60`` (Cormack et al. 2009 default; the standard
-    ElasticSearch / OpenSearch RRF constant).
-  - ``w_i ∈ {0.55, 0.25, 0.20}`` for ``{semantic, lexical,
-    structural}``. The weights default to the pre-declared
-    triple from ``evaluation/README.md:30`` but can be
-    overridden via the ``weights`` parameter (Phase 5 eval uses
-    this to study per-leg contribution).
-  - ``rank_i(d)`` is the 1-indexed rank of ``d`` in leg ``i``'s
-    result. Symbols **not** in leg ``i``'s result contribute
-    ``0`` (we omit them from the sum).
-
-Then:
-
-  - Apply the structural multiplier (``>= 1.0``) to ``rrf(d)``.
-  - Normalise to ``[0, 1]`` by multiplying by ``(k + 1)`` — the
-    maximum theoretical RRF with all three legs ranking ``d`` at
-    position 1 is ``Σ w_i / (k + 1) = 1 / (k + 1)`` (weights
-    sum to 1); we multiply so the surface value lands in
-    ``[0, 1]`` for the UI.
-
-Why RRF over weighted-sum
--------------------------
-
-Semantic returns ``0..1``, lexical returns unbounded ts_rank_cd,
-structural returns ``1.0..2.2``. Weighted-sum requires score
-normalisation before fusion, which is brittle (each leg would
-need its own normaliser, calibrated against the same corpus).
-RRF operates on **ranks** so the legs' score scales don't
-matter. Standard multi-leg fusion pattern in Elasticsearch,
-OpenSearch, Vespa, Weaviate.
-
-Why structural is multiplicative, not a leg
---------------------------------------------
-
-The structural scorer returns **multipliers**, not ranks —
-it's not a retrieval leg, it's a re-ranker. We apply it after
-RRF so the rank ordering from the ranker-fusion survives; only
-scores within the top-k are nudged. (Multiplicative re-ranking
-is the Elasticsearch ``function_score`` / Vespa pattern.)
+Declared vendored dependencies are searched both with and without their
+paths. First-party code can enter even when a copied library fills the
+unfiltered pool; copied code remains eligible because authors may adapt it.
+The final cut retains each active leg's best implementation when space
+allows. All signals come from the query and repository, never annotations.
 """
 from __future__ import annotations
 
 import logging
+import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from uuid import UUID
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from claim2code_api.db.models import CodeSymbol
+from claim2code_api.db.models import CodeSymbol, RepositoryDependency
 from claim2code_api.indexing.embedding_client import EmbeddingClient
-from claim2code_api.indexing.lexical import lexical_search
+from claim2code_api.indexing.lexical import identifier_search, lexical_search
 from claim2code_api.indexing.retriever import retrieve_semantic
 from claim2code_api.indexing.structural import structural_boost
 from claim2code_api.observability import get_tracer
@@ -89,10 +39,21 @@ logger = logging.getLogger(__name__)
 # higher k → RRF approaches simple weighted sum.
 _RRF_K = 60
 
+# Score multiplier for symbols under a directory named after one of
+# the repo's own dependencies (``examples/NLU/src/transformers`` in
+# microsoft/LoRA): a vendored copy of a library, whose thousands of
+# symbols otherwise drown the paper's code. Down-weighted rather than
+# dropped, since authors do patch vendored files. When the vendored
+# package sits in a sub-project with its own build manifest
+# (``examples/NLU/setup.py``), the whole sub-project — the library's
+# tests, examples and tooling too — is the vendored copy.
+_VENDORED_FACTOR = 0.5
+_MANIFESTS = ("setup.py", "setup.cfg", "pyproject.toml")
+
 
 @dataclass(frozen=True)
 class HybridWeights:
-    """Per-leg RRF weights. Defaults match ``evaluation/README.md:30``.
+    """Per-leg RRF weights (see the module docstring for the defaults).
 
     Sum is not required to be 1 — the normaliser uses the
     *theoretical max* (all legs rank 1) which only equals 1
@@ -102,8 +63,8 @@ class HybridWeights:
     ``[0, 1]``. Tests assert the default case.
     """
 
-    semantic: float = 0.55
-    lexical: float = 0.25
+    semantic: float = 0.40
+    lexical: float = 0.40
     structural: float = 0.20
 
     def as_dict(self) -> dict[str, float]:
@@ -136,6 +97,8 @@ class HybridMatch:
     score_lexical: float | None = None
     rank_structural: int | None = None
     struct_boost: float = 1.0
+    # Set by retrieval/reranker.py when the chat model picked this match.
+    rank_rerank: int | None = None
 
 
 def hybrid_ranker(
@@ -147,7 +110,7 @@ def hybrid_ranker(
     weights: HybridWeights | None = None,
     embedding_client: EmbeddingClient | None = None,
 ) -> list[HybridMatch]:
-    """Return top-``top_k`` symbols fused from semantic + lexical + structural.
+    """Return top-``top_k`` semantic / lexical / identifier-fused symbols.
 
     :param db: a SQLAlchemy session (caller owns the lifecycle).
     :param repository_id: scope the search to this repository.
@@ -189,19 +152,30 @@ def hybrid_ranker(
             "retrieval.weights": str(weights.as_dict()),
         },
     ) as root_span:
+        # A vendored library can fill both legs' top ``leg_top_k`` on
+        # its own (microsoft/LoRA: ~23k transformers symbols against
+        # ~40 of loralib), so each leg also runs over the repo's own
+        # code, and a symbol keeps the better of its two ranks.
+        vendored = _vendored_pattern(db, repository_id)
+        exclusions = [None] if vendored is None else [None, vendored]
+
         # ---- Leg 1: semantic ----
         leg_start = time.monotonic()
         with tracer.start_as_current_span(
             "retrieval.semantic",
             attributes={"retrieval.leg": "semantic"},
         ):
-            sem_results = retrieve_semantic(
-                db,
-                repository_id,
-                claim,
-                top_k=leg_top_k,
-                embedding_client=embedding_client,
-            )
+            sem_passes = [
+                retrieve_semantic(
+                    db,
+                    repository_id,
+                    claim,
+                    top_k=leg_top_k,
+                    embedding_client=embedding_client,
+                    exclude_path_pattern=exclude,
+                )
+                for exclude in exclusions
+            ]
         retriever_duration.record(
             time.monotonic() - leg_start, {"leg": "semantic"},
         )
@@ -212,30 +186,44 @@ def hybrid_ranker(
             "retrieval.lexical",
             attributes={"retrieval.leg": "lexical"},
         ):
-            lex_results = lexical_search(
-                db,
-                repository_id,
-                claim,
-                top_k=leg_top_k,
-            )
+            lex_passes = [
+                lexical_search(
+                    db,
+                    repository_id,
+                    claim,
+                    top_k=leg_top_k,
+                    exclude_path_pattern=exclude,
+                )
+                for exclude in exclusions
+            ]
         retriever_duration.record(
             time.monotonic() - leg_start, {"leg": "lexical"},
         )
 
+        # Undocumented snake_case / CamelCase implementations may miss
+        # both the embedding and raw-name tsvector legs. A bounded
+        # identifier/path pass expands the pool independently of those
+        # rankings, over both the full repo and first-party code.
+        identifier_passes = [
+            identifier_search(
+                db, repository_id, claim, top_k=leg_top_k,
+                exclude_path_pattern=exclude,
+            )
+            for exclude in exclusions
+        ] if weights.structural > 0 else []
+
         # ---- Build rank + score maps per leg ----
         # Ranks are 1-indexed; not-in-leg → omit from sum.
-        sem_ranks: dict[UUID, tuple[int, float]] = {
-            sym.symbol_id: (i + 1, float(sim))
-            for i, (sym, sim) in enumerate(sem_results)
-        }
-        lex_ranks: dict[UUID, tuple[int, float]] = {
-            sid: (i + 1, float(score))
-            for i, (sid, score) in enumerate(lex_results)
-        }
+        sem_ranks = _best_ranks(
+            [[(sym.symbol_id, float(sim)) for sym, sim in results] for results in sem_passes]
+        )
+        lex_ranks = _best_ranks(
+            [[(sid, float(score)) for sid, score in results] for results in lex_passes]
+        )
+        identifier_ranks = _best_ranks(identifier_passes)
 
-        # Union of (sem,lex) candidates is the pool — structural
-        # isn't a ranker, so it doesn't expand the candidate set.
-        candidate_ids = list({*sem_ranks.keys(), *lex_ranks.keys()})
+        # Identifier matching independently expands the semantic / lexical pool.
+        candidate_ids = list({*sem_ranks.keys(), *lex_ranks.keys(), *identifier_ranks.keys()})
         if not candidate_ids:
             root_span.set_attribute("retrieval.result_count", 0)
             return []
@@ -260,7 +248,9 @@ def hybrid_ranker(
             if sid in lex_ranks:
                 rank, _ = lex_ranks[sid]
                 raw_rrf[sid] += weights.lexical / (_RRF_K + rank)
-            # Structural is a multiplier, not a ranker; no RRF contribution.
+            if sid in identifier_ranks:
+                rank, _ = identifier_ranks[sid]
+                raw_rrf[sid] += weights.structural / (_RRF_K + rank)
 
         # ---- Apply structural boost (multiplicative) ----
         weight_sum = weights.semantic + weights.lexical + weights.structural
@@ -288,34 +278,157 @@ def hybrid_ranker(
                     score_semantic=sem_ranks[sid][1] if sid in sem_ranks else None,
                     rank_lexical=lex_ranks[sid][0] if sid in lex_ranks else None,
                     score_lexical=lex_ranks[sid][1] if sid in lex_ranks else None,
-                    rank_structural=None,  # structural isn't a ranker in v1
+                    rank_structural=identifier_ranks[sid][0] if sid in identifier_ranks else None,
                     struct_boost=boost,
                 )
             )
 
-        # Sort by final_score desc, then by symbol_id (stable tie-break).
-        matches.sort(key=lambda m: (-m.final_score, str(m.symbol_id)))
-
-        # Bulk-fetch CodeSymbol rows for the top_k survivors so the
-        # caller can render name / file_path / signature without a
-        # second query.
-        top = matches[:top_k]
-        if not top:
-            root_span.set_attribute("retrieval.result_count", 0)
-            return []
-
-        top_ids = [m.symbol_id for m in top]
+        # Bulk-fetch the candidate rows so imports and orphaned hits can
+        # be dropped before the final top_k cut.
         symbols = (
             db.query(CodeSymbol)
-            .filter(CodeSymbol.symbol_id.in_(top_ids))
+            .filter(CodeSymbol.symbol_id.in_([m.symbol_id for m in matches]))
             .all()
         )
         by_id = {s.symbol_id: s for s in symbols}
 
-        # Filter out any matches whose symbol row vanished (orphan).
-        survivors = [m for m in top if m.symbol_id in by_id]
+        if vendored is not None:
+            matches = [
+                replace(m, final_score=m.final_score * _VENDORED_FACTOR)
+                if m.symbol_id in by_id
+                and re.search(vendored, getattr(by_id[m.symbol_id], "file_path", ""), re.IGNORECASE)
+                else m
+                for m in matches
+            ]
+
+        # Sort by final_score desc, then by symbol_id (stable tie-break).
+        matches.sort(key=lambda m: (-m.final_score, str(m.symbol_id)))
+
+        # Filter out imports and any matches whose symbol row
+        # vanished (orphan).
+        eligible = [
+            m
+            for m in matches
+            if m.symbol_id in by_id and getattr(by_id[m.symbol_id], "kind", None) != "import"
+        ]
+        survivors = _reserve_leg_tops(eligible, top_k)
         root_span.set_attribute("retrieval.result_count", len(survivors))
         return survivors
+
+
+def _reserve_leg_tops(eligible: list[HybridMatch], top_k: int) -> list[HybridMatch]:
+    """Cut ``eligible`` (score-sorted) to ``top_k``, keeping each leg's best.
+
+    RRF favours symbols both legs found: in a small repo, where most
+    symbols appear in both legs, a leg's rank-1 hit seen by that leg
+    alone (``config/config.yaml`` for a claim listing the training
+    hyperparameters) scores below a dozen mid-ranked ones. Each leg's
+    top eligible symbol therefore displaces the lowest unreserved one.
+    """
+    top = eligible[:top_k]
+    if len(eligible) <= top_k:
+        return top
+    reserved: list[HybridMatch] = []
+    for leg_rank in ("rank_semantic", "rank_lexical", "rank_structural"):
+        ranked = [m for m in eligible if getattr(m, leg_rank) is not None]
+        if ranked:
+            best = min(ranked, key=lambda m: getattr(m, leg_rank))
+            if best not in reserved:
+                reserved.append(best)
+    for best in reserved:
+        if best in top:
+            continue
+        drop = next((m for m in reversed(top) if m not in reserved), None)
+        if drop is None:
+            break
+        top.remove(drop)
+        top.append(best)
+    top.sort(key=lambda m: (-m.final_score, str(m.symbol_id)))
+    return top
+
+
+def _best_ranks(passes: list[list[tuple[UUID, float]]]) -> dict[UUID, tuple[int, float]]:
+    """Merge one leg's ranked passes: each symbol keeps its best (rank, score)."""
+    out: dict[UUID, tuple[int, float]] = {}
+    for results in passes:
+        for i, (sid, score) in enumerate(results):
+            if sid not in out or i + 1 < out[sid][0]:
+                out[sid] = (i + 1, score)
+    return out
+
+
+def _vendored_pattern(db: Session, repository_id: UUID) -> str | None:
+    """Regex matching the ``file_path`` of vendored code, or ``None``.
+
+    Vendored code is any directory named after a declared dependency,
+    plus — when that package sits in a sub-project with its own build
+    manifest (``examples/NLU/setup.py`` next to
+    ``examples/NLU/src/transformers``) — the whole sub-project. The
+    pattern is valid both for Python ``re`` and Postgres ``~*``.
+    """
+    names = sorted(_vendored_dir_names(db, repository_id))
+    if not names:
+        return None
+    alternatives = [r"(^|/)(" + "|".join(_package_regex(n) for n in names) + r")/"]
+    roots = _vendored_roots(db, repository_id, names)
+    if roots:
+        alternatives.append("^(" + "|".join(re.escape(r) for r in sorted(roots)) + ")/")
+    return "|".join(alternatives)
+
+
+def _package_regex(normalised: str) -> str:
+    """``py_yaml`` → ``py[-_.]yaml``: any PEP 503 spelling of the name."""
+    return "[-_.]".join(re.escape(part) for part in normalised.split("_"))
+
+
+def _vendored_dir_names(db: Session, repository_id: UUID) -> set[str]:
+    """Normalised names of the repo's declared dependencies."""
+    rows = (
+        db.query(RepositoryDependency.name)
+        .filter(RepositoryDependency.repository_id == repository_id)
+        .all()
+    )
+    return {_normalise_package(row[0]) for row in rows if row[0]}
+
+
+def _vendored_roots(db: Session, repository_id: UUID, dependency_names: list[str]) -> set[str]:
+    """Sub-project directories that are a vendored copy of a dependency.
+
+    A directory below the repo root holding a build manifest and a
+    package (``<dir>/<dep>/`` or ``<dir>/src/<dep>/``) named after a
+    declared dependency.
+    """
+    rows = (
+        db.query(CodeSymbol.file_path)
+        .filter(
+            CodeSymbol.repository_id == repository_id,
+            or_(*[CodeSymbol.file_path.like(f"%/{name}") for name in _MANIFESTS]),
+        )
+        .distinct()
+        .all()
+    )
+    package = "(" + "|".join(_package_regex(n) for n in dependency_names) + ")"
+    roots: set[str] = set()
+    for (path,) in rows:
+        root = path.rsplit("/", 1)[0]
+        if root in roots:
+            continue
+        has_package = (
+            db.query(CodeSymbol.symbol_id)
+            .filter(
+                CodeSymbol.repository_id == repository_id,
+                CodeSymbol.file_path.op("~*")(f"^{re.escape(root)}/(src/)?{package}/"),
+            )
+            .first()
+        )
+        if has_package is not None:
+            roots.add(root)
+    return roots
+
+
+def _normalise_package(name: str) -> str:
+    """PEP 503-style: ``Py-YAML`` and ``py_yaml`` compare equal."""
+    return re.sub(r"[-_.]+", "_", name).lower()
 
 
 __all__ = ["hybrid_ranker", "HybridMatch", "HybridWeights"]

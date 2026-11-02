@@ -11,8 +11,9 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from claim2code_api.indexing.lexical import lexical_search
 from sqlalchemy.orm import Session
+
+from claim2code_api.indexing.lexical import lexical_search
 
 NAME = "lexical_only"
 

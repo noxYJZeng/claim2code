@@ -1,0 +1,218 @@
+{
+  "pair_id": "detr",
+  "paper": {
+    "title": "End-to-End Object Detection with Transformers",
+    "authors": [
+      "Carion",
+      "Massa",
+      "Synnaeve",
+      "Usunier",
+      "Kirillov",
+      "Zagoruyko"
+    ],
+    "year": 2020,
+    "venue": "ECCV",
+    "arxiv_id": "2005.12872",
+    "url": "https://arxiv.org/abs/2005.12872",
+    "pdf_url": "https://www.ecva.net/papers/eccv_2020/papers_ECCV/papers/123460205.pdf"
+  },
+  "repo": {
+    "url": "https://github.com/facebookresearch/detr",
+    "commit": "29901c51d7fe8712168b8d0d64351170bc0f83e0",
+    "description": "Official PyTorch DETR object-detection implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "start_line": 5,
+        "end_line": 5,
+        "quote": "import torch",
+        "file_path": "models/detr.py"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "created_at": "2026-10-29",
+    "selection": "Additional PyTorch architecture coverage selected before any model predictions on these claims.",
+    "label_method": "Architecture paraphrases checked against the pinned official repository source, without executing repository code or consulting model predictions.",
+    "paper_evidence_status": "unverified_pdf; curated paraphrases only",
+    "paper_download_status": "HTTP 403 from the official PDF endpoint in this environment; SHA-256 intentionally absent.",
+    "independent_annotation": false,
+    "measurement_status": "not_run"
+  },
+  "claims": [
+    {
+      "claim_id": "detr_c1",
+      "text": "DETR represents detections using a fixed set of learned object queries, predicting a class including a no-object category and a normalized bounding box for each query.",
+      "evidence_span": {
+        "section": "Object detection set prediction",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "models/detr.py",
+          "name": "DETR",
+          "kind": "class"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "DETR constructs nn.Embedding(num_queries, hidden_dim), a num_classes+1 classification head, and a bounding-box MLP whose sigmoid outputs are normalized to [0,1]. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "models/detr.py",
+          "start_line": 37,
+          "end_line": 41,
+          "quote": "        self.class_embed = nn.Linear(hidden_dim, num_classes + 1)\n        self.bbox_embed = MLP(hidden_dim, hidden_dim, 4, 3)\n        self.query_embed = nn.Embedding(num_queries, hidden_dim)\n        self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim, kernel_size=1)\n        self.backbone = backbone"
+        },
+        {
+          "file_path": "models/detr.py",
+          "start_line": 67,
+          "end_line": 71,
+          "quote": "        outputs_class = self.class_embed(hs)\n        outputs_coord = self.bbox_embed(hs).sigmoid()\n        out = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1]}\n        if self.aux_loss:\n            out['aux_outputs'] = self._set_aux_loss(outputs_class, outputs_coord)"
+        }
+      ]
+    },
+    {
+      "claim_id": "detr_c2",
+      "text": "DETR computes a one-to-one bipartite assignment between predicted objects and targets using the Hungarian algorithm with classification, L1 box distance, and generalized IoU matching costs.",
+      "evidence_span": {
+        "section": "Bipartite matching loss",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "models/matcher.py",
+          "name": "HungarianMatcher",
+          "kind": "class"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "HungarianMatcher combines all three costs in C and calls scipy.optimize.linear_sum_assignment separately for each image. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "models/matcher.py",
+          "start_line": 68,
+          "end_line": 77,
+          "quote": "        cost_class = -out_prob[:, tgt_ids]\n\n        # Compute the L1 cost between boxes\n        cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)\n\n        # Compute the giou cost betwen boxes\n        cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(out_bbox), box_cxcywh_to_xyxy(tgt_bbox))\n\n        # Final cost matrix\n        C = self.cost_bbox * cost_bbox + self.cost_class * cost_class + self.cost_giou * cost_giou"
+        },
+        {
+          "file_path": "models/matcher.py",
+          "start_line": 80,
+          "end_line": 83,
+          "quote": "        sizes = [len(v[\"boxes\"]) for v in targets]\n        indices = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]\n        return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]\n"
+        }
+      ]
+    },
+    {
+      "claim_id": "detr_c3",
+      "text": "The DETR bounding-box training loss combines an L1 coordinate loss with a generalized IoU loss on matched predictions.",
+      "evidence_span": {
+        "section": "Bounding-box loss",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "models/detr.py",
+          "name": "loss_boxes",
+          "kind": "method",
+          "parent_name": "SetCriterion"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "SetCriterion.loss_boxes indexes matched prediction/target pairs, computes F.l1_loss and 1-generalized_box_iou, and normalizes their sums by the number of boxes. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "models/detr.py",
+          "start_line": 153,
+          "end_line": 164,
+          "quote": "        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction='none')\n\n        losses = {}\n        losses['loss_bbox'] = loss_bbox.sum() / num_boxes\n\n        loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(\n            box_ops.box_cxcywh_to_xyxy(src_boxes),\n            box_ops.box_cxcywh_to_xyxy(target_boxes)))\n        losses['loss_giou'] = loss_giou.sum() / num_boxes\n        return losses\n\n    def loss_masks(self, outputs, targets, indices, num_boxes):"
+        }
+      ]
+    },
+    {
+      "claim_id": "detr_c4",
+      "text": "DETR trains the no-object category with a reduced classification weight of 0.1 relative to object categories.",
+      "evidence_span": {
+        "section": "Classification loss",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "models/detr.py",
+          "name": "SetCriterion",
+          "kind": "class"
+        },
+        {
+          "file_path": "main.py",
+          "name": "--eos_coef",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "The official command-line default is eos_coef=0.1; SetCriterion assigns this weight to the final no-object class and passes empty_weight into cross_entropy. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "models/detr.py",
+          "start_line": 104,
+          "end_line": 107,
+          "quote": "        empty_weight = torch.ones(self.num_classes + 1)\n        empty_weight[-1] = self.eos_coef\n        self.register_buffer('empty_weight', empty_weight)\n"
+        },
+        {
+          "file_path": "models/detr.py",
+          "start_line": 120,
+          "end_line": 123,
+          "quote": "\n        loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)\n        losses = {'loss_ce': loss_ce}\n"
+        },
+        {
+          "file_path": "main.py",
+          "start_line": 78,
+          "end_line": 80,
+          "quote": "    parser.add_argument('--eos_coef', default=0.1, type=float,\n                        help=\"Relative classification weight of the no-object class\")\n"
+        }
+      ]
+    },
+    {
+      "claim_id": "detr_c5",
+      "text": "DETR uses auxiliary losses at intermediate Transformer decoder layers, recomputing the bipartite assignment for each intermediate prediction.",
+      "evidence_span": {
+        "section": "Auxiliary decoder losses",
+        "source": "curated architecture paraphrase",
+        "pdf_verified": false
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "models/detr.py",
+          "name": "_set_aux_loss",
+          "kind": "method",
+          "parent_name": "DETR"
+        },
+        {
+          "file_path": "models/detr.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "SetCriterion"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "DETR._set_aux_loss emits predictions for decoder layers except the final layer. SetCriterion.forward recomputes self.matcher for each auxiliary output before calculating its losses. This is a source-reviewed development annotation, not a verbatim PDF quotation. The original PDF could not be downloaded in this environment; no PDF page or character offsets have been invented.",
+      "source_evidence": [
+        {
+          "file_path": "models/detr.py",
+          "start_line": 79,
+          "end_line": 81,
+          "quote": "        return [{'pred_logits': a, 'pred_boxes': b}\n                for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]\n"
+        },
+        {
+          "file_path": "models/detr.py",
+          "start_line": 241,
+          "end_line": 246,
+          "quote": "            for i, aux_outputs in enumerate(outputs['aux_outputs']):\n                indices = self.matcher(aux_outputs, targets)\n                for loss in self.losses:\n                    if loss == 'masks':\n                        # Intermediate masks losses are too costly to compute, we ignore them.\n                        continue"
+        }
+      ]
+    }
+  ]
+}

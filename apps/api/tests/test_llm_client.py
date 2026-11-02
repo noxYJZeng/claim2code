@@ -123,6 +123,7 @@ def _build_client(fake_openai: MagicMock, monkeypatch: pytest.MonkeyPatch) -> LL
 
     client._settings = cfg.get_settings()
     client._client = fake_openai
+    client._model = client._settings.openai_model_chat
     # Phase 8: also stub the safety gate + callback so existing tests
     # continue to work after the SDK-seam wiring. Production code
     # sets these in LLMClient.__init__; test_llm_client bypasses init.
@@ -160,6 +161,49 @@ def test_extract_claims_parses_valid_response(sample_paper: Paper) -> None:
     assert rf["json_schema"]["schema"]["properties"]["claims"]["maxItems"] == 20
 
 
+def test_extract_claims_renumbers_claim_ids(sample_paper: Paper) -> None:
+    payload = json.loads(_make_valid_claims_json())
+    payload["claims"][0]["claim_id"] = "}]}"
+    payload["claims"][1]["claim_id"] = "c001"
+    client = _build_client(_client_with_response(json.dumps(payload)), pytest.MonkeyPatch())
+    assert [c.claim_id for c in client.extract_claims(sample_paper)] == ["C1", "C2"]
+
+
+def _wrapped_claims_json() -> str:
+    """A schema-valid response whose one claim holds the real answer."""
+    payload = json.loads(_make_valid_claims_json())
+    payload["claims"] = payload["claims"][:1]
+    payload["claims"][0]["text"] = (
+        'Here are the claims:```json\n[\n  {\n    "claim": "LoRA freezes W0."\n  }\n]\n```'
+    )
+    return json.dumps(payload)
+
+
+def test_extract_claims_retries_wrapped_output(sample_paper: Paper) -> None:
+    fake = _client_with_response(None)
+    fake.chat.completions.create.side_effect = [
+        _make_response(_wrapped_claims_json()),
+        _make_response(_make_valid_claims_json()),
+    ]
+    client = _build_client(fake, pytest.MonkeyPatch())
+    claims = client.extract_claims(sample_paper)
+    assert fake.chat.completions.create.call_count == 2
+    assert claims[0].text == "The model uses β=0.1."
+
+
+def test_extract_claims_raises_when_retry_still_wrapped(sample_paper: Paper) -> None:
+    fake = _client_with_response(_wrapped_claims_json())
+    client = _build_client(fake, pytest.MonkeyPatch())
+    with pytest.raises(ClaimExtractionError, match="two attempts"):
+        client.extract_claims(sample_paper)
+
+
+def test_wrapped_output_detector_leaves_real_claims_alone() -> None:
+    assert not llm_client_mod._is_wrapped_output("LoRA scales ΔWx by α/r, with r ∈ {1, 2, 4, 8}.")
+    assert not llm_client_mod._is_wrapped_output('The config sets "beta": 0.1 for DPO.')
+    assert llm_client_mod._is_wrapped_output('[{"claim": "x"}]')
+
+
 def test_extract_claims_sends_system_and_user_messages(sample_paper: Paper) -> None:
     fake = _client_with_response(_make_valid_claims_json())
     client = _build_client(fake, pytest.MonkeyPatch())
@@ -176,6 +220,24 @@ def test_extract_claims_sends_system_and_user_messages(sample_paper: Paper) -> N
 # ============================================================
 # extract_claims — error mapping
 # ============================================================
+
+
+def test_user_payload_skips_references_section() -> None:
+    paper = Paper(
+        filename="x.pdf",
+        sha256="0" * 64,
+        n_pages=2,
+        n_chars=200,
+        sections=[
+            PaperSection(title="Method", page=1, char_start=0, char_end=100, text="we use beta"),
+            PaperSection(title="References", page=2, char_start=100, char_end=200, text="[1] Foo"),
+            PaperSection(title="A Appendix", page=2, char_start=200, char_end=300, text="lr 1e-6"),
+        ],
+    )
+    payload = llm_client_mod._build_user_payload(paper)
+    assert "we use beta" in payload
+    assert "lr 1e-6" in payload
+    assert "[1] Foo" not in payload
 
 
 def test_extract_claims_raises_on_timeout(sample_paper: Paper) -> None:
@@ -253,16 +315,16 @@ def test_extract_claims_raises_on_empty_claim_list(sample_paper: Paper) -> None:
 
 def test_check_ready_returns_ok_on_success() -> None:
     fake = MagicMock()
-    fake.chat.completions.create.return_value = MagicMock()
     client = _build_client(fake, pytest.MonkeyPatch())
     ok, err = client.check_ready()
+    fake.ping.assert_called_once_with(client._model)
     assert ok is True
     assert err is None
 
 
 def test_check_ready_returns_error_on_failure() -> None:
     fake = MagicMock()
-    fake.chat.completions.create.side_effect = APITimeoutError(
+    fake.ping.side_effect = APITimeoutError(
         request=MagicMock()
     )
     client = _build_client(fake, pytest.MonkeyPatch())
@@ -279,16 +341,12 @@ def test_check_ready_returns_error_on_failure() -> None:
 
 def test_get_llm_client_is_lazy(monkeypatch: pytest.MonkeyPatch) -> None:
     """The module-level client is not built until first call."""
-    # Stub the OpenAI SDK so the real httpx proxy resolution doesn't run
-    # (CI env may publish socks:// proxies that httpx 0.28 rejects).
-    monkeypatch.setattr("claim2code_api.llm.client.OpenAI", MagicMock())
-
     llm_client_mod.reset_llm_for_tests()
     # Patch LLMClient.__init__ to count calls without constructing the
-    # real OpenAI SDK (the patched constructor above is a no-op MagicMock).
+    # real SDK.
     calls: list[Any] = []
 
-    def counting_init(self: Any, settings: Any) -> None:
+    def counting_init(self: Any, settings: Any, provider: Any = None) -> None:
         calls.append(settings)
         self._settings = settings
         self._client = MagicMock()
@@ -307,10 +365,8 @@ def test_get_llm_client_is_lazy(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_reset_llm_for_tests_rebuilds(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Patch __init__ so the real OpenAI SDK isn't constructed.
-    monkeypatch.setattr("claim2code_api.llm.client.OpenAI", MagicMock())
-
-    def fake_init(self: Any, settings: Any) -> None:
+    # Patch __init__ so the real SDK isn't constructed.
+    def fake_init(self: Any, settings: Any, provider: Any = None) -> None:
         self._settings = settings
         self._client = MagicMock()
         # Phase 8: safety gate + callback stubs.

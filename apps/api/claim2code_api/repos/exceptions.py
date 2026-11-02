@@ -11,6 +11,8 @@ The split mirrors :mod:`claim2code_api.papers.exceptions`:
     at a host we don't support in v1).
   - :class:`RepoCloneError` → 500 (network, auth, or git-side failure
     during ``git clone``).
+  - :class:`RepoAlreadyExistsError` → 409 (a non-``error`` row for
+    the same ``owner/name`` is already indexed or in progress).
   - :class:`RepoTooLargeError` → 413 (HEAD pre-flight Content-Length
     exceeds ``Settings.max_repo_mb_megs``).
   - :class:`ParseError` → 500 (a tree-sitter or ``ast`` failure that
@@ -32,6 +34,24 @@ class RepoInvalidUrlError(RepoError):
 
 class RepoCloneError(RepoError):
     """``git clone`` returned non-zero or its output was unusable."""
+
+
+class RepoAlreadyExistsError(RepoError):
+    """A repository row for this ``owner/name`` exists and is not ``error``.
+
+    Maps to 409; the caller deletes it (``DELETE /repositories/{id}``)
+    to re-ingest. Rows left in ``error`` by a failed ingest are
+    replaced automatically instead.
+    """
+
+    def __init__(self, repository_id: object, index_status: str) -> None:
+        super().__init__(
+            f"repository already exists (repository_id={repository_id}, "
+            f"index_status={index_status}); DELETE /repositories/{repository_id} "
+            "to re-ingest"
+        )
+        self.repository_id = repository_id
+        self.index_status = index_status
 
 
 class RepoTooLargeError(RepoError):

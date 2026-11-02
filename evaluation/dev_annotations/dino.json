@@ -1,0 +1,224 @@
+{
+  "pair_id": "dino",
+  "paper": {
+    "title": "Emerging Properties in Self-Supervised Vision Transformers",
+    "authors": [
+      "Caron",
+      "Touvron",
+      "Misra",
+      "J\u00e9gou",
+      "Mairal",
+      "Bojanowski",
+      "Joulin"
+    ],
+    "year": 2021,
+    "venue": "ICCV",
+    "arxiv_id": "2104.14294",
+    "pdf_url": "https://openaccess.thecvf.com/content/ICCV2021/papers/Caron_Emerging_Properties_in_Self-Supervised_Vision_Transformers_ICCV_2021_paper.pdf",
+    "sha256": null
+  },
+  "repo": {
+    "url": "https://github.com/facebookresearch/dino",
+    "commit": "7c446df5b9f45747937fb0d72314eb9f7b66930a",
+    "description": "Official PyTorch DINO implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "main_dino.py",
+        "start_line": 25,
+        "end_line": 25,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "development",
+    "review_scope": "Claims written 2026-10-29 for tuning verdict calibration; labels checked against the pinned repository source. Not part of the regression or coverage sets.",
+    "paper_evidence_verified": false
+  },
+  "claims": [
+    {
+      "claim_id": "dino_dev1",
+      "text": "The DINO teacher temperature is linearly warmed up from 0.04 to 0.07 during the first 30 epochs.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 96
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "DINOLoss",
+          "kind": "class"
+        },
+        {
+          "file_path": "main_dino.py",
+          "name": "--teacher_temp",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_dino.py",
+          "name": "--warmup_teacher_temp_epochs",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "DINOLoss builds a linear warmup schedule, but defaults are warmup_teacher_temp=0.04, teacher_temp=0.04, warmup epochs 0."
+    },
+    {
+      "claim_id": "dino_dev2",
+      "text": "The DINO student softmax uses temperature 0.1, and the teacher center is updated with momentum 0.9.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 99
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "__init__",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "DINOLoss.__init__ defaults student_temp=0.1, center_momentum=0.9."
+    },
+    {
+      "claim_id": "dino_dev3",
+      "text": "The DINO teacher EMA momentum follows a cosine schedule from 0.996 to 1 during training.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 88
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "train_dino",
+          "kind": "function"
+        },
+        {
+          "file_path": "main_dino.py",
+          "name": "--momentum_teacher",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "cosine_scheduler(args.momentum_teacher, 1, ...) with default 0.996."
+    },
+    {
+      "claim_id": "dino_dev4",
+      "text": "DINO trains for 300 epochs using ten local crops per image.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 59
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "--epochs",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_dino.py",
+          "name": "--local_crops_number",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "Both are configurable, but defaults are epochs=100 and local_crops_number=8."
+    },
+    {
+      "claim_id": "dino_dev5",
+      "text": "DINO applies a cosine weight decay schedule from 0.04 to 0.4.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 61
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "--weight_decay",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_dino.py",
+          "name": "--weight_decay_end",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_dino.py",
+          "name": "train_dino",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "weight_decay=0.04, weight_decay_end=0.4 with a cosine scheduler."
+    },
+    {
+      "claim_id": "dino_dev6",
+      "text": "DINO keeps the last layer of the projection head frozen during the first epoch of training.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 91
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "train_one_epoch",
+          "kind": "function"
+        },
+        {
+          "file_path": "utils.py",
+          "name": "cancel_gradients_last_layer",
+          "kind": "function"
+        },
+        {
+          "file_path": "main_dino.py",
+          "name": "--freeze_last_layer",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "cancel_gradients_last_layer(epoch, student, args.freeze_last_layer) with default 1."
+    },
+    {
+      "claim_id": "dino_dev7",
+      "text": "DINO clips the student's gradients to a maximum norm of 3.0.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 60
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_dino.py",
+          "name": "train_one_epoch",
+          "kind": "function"
+        },
+        {
+          "file_path": "utils.py",
+          "name": "clip_gradients",
+          "kind": "function"
+        },
+        {
+          "file_path": "main_dino.py",
+          "name": "--clip_grad",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "utils.clip_gradients(student, args.clip_grad) with default 3.0."
+    }
+  ]
+}

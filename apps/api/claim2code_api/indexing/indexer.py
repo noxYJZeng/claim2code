@@ -215,8 +215,14 @@ def _read_source_range(
     error, range out of bounds). The retriever can still rank
     the symbol by its signature + docstring + name in that case.
     """
-    full = clone_path / rel_path
+    from claim2code_api.repos.storage import resolve_repo_file
+
+    full = resolve_repo_file(clone_path, rel_path)
+    if full is None:
+        return ""
     try:
+        if full.stat().st_size > get_settings().max_file_kb * 1024:
+            return ""
         text = full.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return ""

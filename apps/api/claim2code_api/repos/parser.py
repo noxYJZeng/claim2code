@@ -35,6 +35,8 @@ Design notes:
 from __future__ import annotations
 
 import ast as _ast
+import re
+import shlex
 from pathlib import Path
 
 from tree_sitter import Language, Node, Parser
@@ -71,6 +73,10 @@ _EXTENSION_MAP: dict[str, tuple[CodeLanguage, str, str]] = {
     ".go": (CodeLanguage.GO, "tree_sitter_go", "language"),
     ".rs": (CodeLanguage.RUST, "tree_sitter_rust", "language"),
 }
+
+# Shell launch scripts carry no grammar: :func:`_parse_shell` reads
+# their ``--flag value`` arguments without tree-sitter.
+_SHELL_EXTENSIONS: set[str] = {".sh", ".bash"}
 
 _LANGUAGE_CACHE: dict[CodeLanguage, Language] = {}
 
@@ -109,6 +115,8 @@ def detect_language(path: Path) -> CodeLanguage:
     the v1 supported-languages set.
     """
     ext = path.suffix.lower()
+    if ext in _SHELL_EXTENSIONS:
+        return CodeLanguage.SHELL
     if ext not in _EXTENSION_MAP:
         raise UnsupportedLanguageError(f"unsupported file extension {ext!r} for {path.name!r}")
     return _EXTENSION_MAP[ext][0]
@@ -141,6 +149,9 @@ def parse_file(path: Path) -> list[CodeSymbol]:
     except OSError as exc:
         raise ParseError(f"could not read {path}: {exc}") from exc
 
+    if code_lang == CodeLanguage.SHELL:
+        return _parse_shell(path, source_bytes)
+
     parser = Parser(_get_language(code_lang))
     tree = parser.parse(source_bytes)
 
@@ -158,6 +169,128 @@ def parse_file(path: Path) -> list[CodeSymbol]:
         return _parse_rust(path, source_bytes, tree)
     # Unreachable; detect_language enforces the union.
     raise UnsupportedLanguageError(str(code_lang))
+
+
+# ============================================================
+# Shell launch-script parser
+# ============================================================
+
+
+def _parse_shell(path: Path, source: bytes) -> list[CodeSymbol]:
+    """Extract one ``CONFIG_SCHEMA`` symbol per command that passes flags.
+
+    Research repos set the paper's hyperparameters in launch scripts
+    (``python run_glue.py --lora_r 8 --lora_alpha 16 ...``), not in the
+    Python defaults, so a claim about them can only be checked here.
+    Backslash continuations are joined into one logical command whose
+    line span covers all of them. The symbol's name is the entry point
+    (the first ``*.py`` argument, else the ``-m`` module, else the
+    program) and its signature the ``--flag [value]`` arguments.
+
+    The docstring spells the script's stem and ``--model_name_or_path``
+    out as words: the lexical index reads ``deberta_v2_xxlarge_cola.sh``
+    or ``microsoft/deberta-v2-xxlarge`` as one opaque token, so a claim
+    about "DeBERTa XXL on CoLA" would otherwise never match it.
+    """
+    text = source.decode("utf-8", errors="replace")
+    stem_words = _shell_words(path.stem)
+    symbols: list[CodeSymbol] = []
+    for start_line, end_line, command in _shell_logical_lines(text):
+        try:
+            tokens = shlex.split(command, comments=True)
+        except ValueError:
+            # Unbalanced quotes: fall back to whitespace splitting.
+            tokens = command.split()
+        flags = _shell_flag_args(tokens)
+        if not flags:
+            continue
+        model = _shell_flag_value(tokens, "--model_name_or_path")
+        doc = f"Launch script {stem_words}"
+        if model:
+            doc += f"; model {_shell_words(model)}"
+        symbols.append(
+            CodeSymbol(
+                kind=CodeSymbolKind.CONFIG_SCHEMA,
+                language=CodeLanguage.SHELL,
+                file_path=str(path),
+                start_line=start_line,
+                start_col=0,
+                end_line=end_line,
+                end_col=0,
+                name=_shell_entry_point(tokens),
+                signature=" ".join(flags),
+                docstring=doc,
+            )
+        )
+    return symbols
+
+
+def _shell_logical_lines(text: str) -> list[tuple[int, int, str]]:
+    """Join backslash-continued lines; return ``(start, end, command)``."""
+    out: list[tuple[int, int, str]] = []
+    pending: list[str] = []
+    start = 0
+    for lineno, raw in enumerate(text.splitlines(), start=1):
+        if not pending:
+            start = lineno
+        line = raw.rstrip()
+        if line.endswith("\\"):
+            pending.append(line[:-1])
+            continue
+        pending.append(line)
+        command = " ".join(pending).strip()
+        pending = []
+        if command and not command.startswith("#"):
+            out.append((start, lineno, command))
+    if pending:
+        out.append((start, start + len(pending) - 1, " ".join(pending).strip()))
+    return out
+
+
+def _shell_flag_args(tokens: list[str]) -> list[str]:
+    """Return the ``--flag [value]`` pairs of a command, one string each."""
+    flags: list[str] = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok.startswith("--") and len(tok) > 2:
+            nxt = tokens[i + 1] if i + 1 < len(tokens) else None
+            takes_value = nxt is not None and (
+                not nxt.startswith("-") or nxt.lstrip("-").replace(".", "", 1).isdigit()
+            )
+            if "=" not in tok and takes_value:
+                flags.append(f"{tok} {nxt}")
+                i += 2
+                continue
+            flags.append(tok)
+        i += 1
+    return flags
+
+
+def _shell_flag_value(tokens: list[str], flag: str) -> str | None:
+    """Return the value passed to ``flag`` (``--f v`` or ``--f=v``)."""
+    for i, tok in enumerate(tokens):
+        if tok == flag and i + 1 < len(tokens):
+            return tokens[i + 1]
+        if tok.startswith(flag + "="):
+            return tok[len(flag) + 1 :]
+    return None
+
+
+def _shell_words(text: str) -> str:
+    """``microsoft/deberta-v2-xxlarge`` → ``microsoft deberta v2 xxlarge``."""
+    return " ".join(w for w in re.split(r"[^A-Za-z0-9]+", text) if w)
+
+
+def _shell_entry_point(tokens: list[str]) -> str:
+    """Name a command by the script it runs (``run_glue.py``, ``-m pkg``)."""
+    for tok in tokens:
+        if tok.endswith(".py"):
+            return tok
+    for i, tok in enumerate(tokens[:-1]):
+        if tok == "-m":
+            return tokens[i + 1]
+    return tokens[0] if tokens else "<command>"
 
 
 # ============================================================
@@ -366,9 +499,10 @@ def _python_argparse_dataclass(tree: _ast.AST, path: Path, out: list[CodeSymbol]
     Walks the module-level AST. For each ``ast.ClassDef`` with one or
     more ``@dataclasses.dataclass`` (or ``@dataclass``) decorators,
     emits one :class:`CodeSymbol` of kind ``CONFIG_SCHEMA``. For each
-    ``ast.Call`` whose function ends in ``add_argument``, emits one
-    :class:`CodeSymbol` of kind ``CONFIG_SCHEMA`` with the argument
-    name and any default.
+    ``ast.Call`` whose function ends in ``add_argument`` — or is an
+    absl flag definition, ``flags.DEFINE_integer("train_batch_size",
+    32, ...)`` — emits one :class:`CodeSymbol` of kind
+    ``CONFIG_SCHEMA`` with the argument name and any default.
     """
     for node in _ast.walk(tree):
         if isinstance(node, _ast.ClassDef):
@@ -409,7 +543,9 @@ def _python_argparse_dataclass(tree: _ast.AST, path: Path, out: list[CodeSymbol]
                 if isinstance(func, _ast.Name)
                 else None
             )
-            if func_name != "add_argument":
+            if func_name != "add_argument" and not (
+                func_name is not None and func_name.startswith("DEFINE_")
+            ):
                 continue
             if not node.args:
                 continue
@@ -425,13 +561,13 @@ def _python_argparse_dataclass(tree: _ast.AST, path: Path, out: list[CodeSymbol]
                         end_line=getattr(node, "end_lineno", first.lineno) or first.lineno,
                         end_col=(getattr(node, "end_col_offset", 0) or 0),
                         name=first.value,
-                        signature=_format_call_sig(node),
+                        signature=_format_call_sig(node, func_name),
                     )
                 )
 
 
-def _format_call_sig(node: _ast.Call) -> str:
-    """Best-effort textual signature for an ``add_argument`` call."""
+def _format_call_sig(node: _ast.Call, func_name: str = "add_argument") -> str:
+    """Best-effort textual signature for an ``add_argument`` / ``DEFINE_*`` call."""
     parts: list[str] = []
     for a in node.args:
         try:
@@ -443,7 +579,7 @@ def _format_call_sig(node: _ast.Call) -> str:
             parts.append(f"{kw.arg}={_ast.unparse(kw.value)}")
         except Exception:  # noqa: BLE001
             parts.append(f"{kw.arg}=<expr>")
-    return f"add_argument({', '.join(parts)})"
+    return f"{func_name}({', '.join(parts)})"
 
 
 # ============================================================

@@ -17,6 +17,15 @@ The 4-status rule (per ``docs/architecture/phase-6-design.md`` §2.5):
   | CONTRADICTED       | yes                 | >=1 HIGH OR LLM=CONTRADICTED |
   | UNVERIFIED         | NO (structural)     | n/a                      |
 
+A setting mismatch (``HYPERPARAMETER_MISMATCH`` or
+``CONFIGURATION_MISMATCH``: a default, schedule value or
+initialisation that differs from the paper) shows that the code is
+configured differently, not that it implements something else. Rules
+8 and 9 of the verify prompt make such differences MEDIUM; this module
+enforces that whatever severity they arrive with: they never make a
+verdict CONTRADICTED, and an LLM CONTRADICTED backed only by them is
+PARTIALLY_VERIFIED.
+
 The structural guard (``no code_evidence -> UNVERIFIED``)
 trumps everything else — even if the LLM says VERIFIED, an
 empty ``code_evidence`` list coerces to UNVERIFIED. This makes
@@ -33,8 +42,15 @@ from __future__ import annotations
 from claim2code_api.verification.schemas import (
     Discrepancy,
     DiscrepancySeverity,
+    DiscrepancyType,
     VerificationStatus,
 )
+
+# Discrepancies about configured values rather than what the code computes.
+SETTING_TYPES = frozenset({
+    DiscrepancyType.HYPERPARAMETER_MISMATCH,
+    DiscrepancyType.CONFIGURATION_MISMATCH,
+})
 
 
 def merge_discrepancies(
@@ -80,9 +96,11 @@ def determine_status(
         return VerificationStatus.UNVERIFIED
 
     has_high = any(
-        d.severity == DiscrepancySeverity.HIGH for d in discrepancies
+        d.severity == DiscrepancySeverity.HIGH and d.type not in SETTING_TYPES
+        for d in discrepancies
     )
-    llm_contradicted = llm_status == VerificationStatus.CONTRADICTED
+    settings_only = bool(discrepancies) and all(d.type in SETTING_TYPES for d in discrepancies)
+    llm_contradicted = llm_status == VerificationStatus.CONTRADICTED and not settings_only
 
     if has_high or llm_contradicted:
         return VerificationStatus.CONTRADICTED
@@ -91,16 +109,16 @@ def determine_status(
     if discrepancies:
         return VerificationStatus.PARTIALLY_VERIFIED
 
-    # No discrepancies and we have code evidence. Trust the LLM
-    # when present; default VERIFIED when the deterministic
-    # checkers didn't run (rare — e.g. the LLM verdict was None
-    # because of a HIGH deterministic mismatch, but we already
-    # returned CONTRADICTED above for that case).
+    # No discrepancies and we have code evidence. PARTIALLY_VERIFIED
+    # needs >=1 LOW/MEDIUM discrepancy (phase-6-design.md §2.5), so an
+    # LLM "partial" with nothing left to show for it — the code is
+    # merely silent on part of the claim, or its discrepancies were
+    # dropped as unquoted — is VERIFIED.
     if llm_status in (
         VerificationStatus.VERIFIED,
         VerificationStatus.PARTIALLY_VERIFIED,
     ):
-        return llm_status
+        return VerificationStatus.VERIFIED
 
     # Default: LLM said UNVERIFIED, or no LLM and no discrepancies.
     return VerificationStatus.UNVERIFIED

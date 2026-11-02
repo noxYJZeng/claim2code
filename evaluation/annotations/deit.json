@@ -1,0 +1,153 @@
+{
+  "pair_id": "deit",
+  "paper": {
+    "title": "Training data-efficient image transformers & distillation through attention",
+    "authors": [
+      "Touvron",
+      "Cord",
+      "Douze",
+      "Massa",
+      "Sablayrolles",
+      "Jégou"
+    ],
+    "year": 2021,
+    "venue": "ICML",
+    "arxiv_id": "2012.12877",
+    "pdf_url": "https://proceedings.mlr.press/v139/touvron21a/touvron21a.pdf",
+    "sha256": null
+  },
+  "repo": {
+    "url": "https://github.com/facebookresearch/deit",
+    "commit": "7e160fe43f0252d17191b71cbb5826254114ea5b",
+    "description": "Official PyTorch DEIT implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "models.py",
+        "start_line": 3,
+        "end_line": 3,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "created_at": "2026-10-29",
+    "paper_evidence_verified": false,
+    "paper_download_status": "HTTP 403 from official publisher/CVF and arxiv.org PDF endpoints in the cloud environment; no PDF hash or page span is asserted.",
+    "label_method": "Read-only review of pinned repository source and parser-resolved relevant symbols; no model output was consulted.",
+    "scope": "Curated implementation claims associated with the named paper; not PDF extraction or paper-citation validation.",
+    "label_distribution_note": "All five claims in this pair are positive implementation claims. Four-way verification quality must be measured on separately annotated negative and insufficient-evidence cases."
+  },
+  "claims": [
+    {
+      "claim_id": "deit_c1",
+      "text": "DeiT adds a learned distillation token alongside the class token and patch tokens, and processes them together through the transformer blocks.",
+      "relevant_symbols": [
+        {
+          "file_path": "models.py",
+          "name": "forward_features",
+          "kind": "method",
+          "parent_name": "DistilledVisionTransformer"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "models.py",
+          "start_line": 38,
+          "end_line": 40,
+          "quote": "        cls_tokens = self.cls_token.expand(B, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks\n        dist_token = self.dist_token.expand(B, -1, -1)\n        x = torch.cat((cls_tokens, dist_token, x), dim=1)"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "deit_c2",
+      "text": "Hard distillation supervises the distillation head with the teacher model's top-1 predicted class using cross-entropy.",
+      "relevant_symbols": [
+        {
+          "file_path": "losses.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "DistillationLoss"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "losses.py",
+          "start_line": 66,
+          "end_line": 67,
+          "quote": "        elif self.distillation_type == 'hard':\n            distillation_loss = F.cross_entropy(outputs_kd, teacher_outputs.argmax(dim=1))"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "deit_c3",
+      "text": "The teacher supplies distillation targets without receiving gradients during the student training step.",
+      "relevant_symbols": [
+        {
+          "file_path": "losses.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "DistillationLoss"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "losses.py",
+          "start_line": 47,
+          "end_line": 48,
+          "quote": "        with torch.no_grad():\n            teacher_outputs = self.teacher_model(inputs)"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "deit_c4",
+      "text": "At inference, the distilled DeiT model averages predictions from the class head and the distillation head.",
+      "relevant_symbols": [
+        {
+          "file_path": "models.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "DistilledVisionTransformer"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "models.py",
+          "start_line": 58,
+          "end_line": 59,
+          "quote": "            # during inference, return the average of both classifier predictions\n            return (x + x_dist) / 2"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "deit_c5",
+      "text": "DeiT-base uses 16-by-16 image patches, an embedding dimension of 768, 12 transformer blocks, and 12 attention heads.",
+      "relevant_symbols": [
+        {
+          "file_path": "models.py",
+          "name": "deit_base_patch16_224",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "models.py",
+          "start_line": 93,
+          "end_line": 95,
+          "quote": "def deit_base_patch16_224(pretrained=False, **kwargs):\n    model = VisionTransformer(\n        patch_size=16, embed_dim=768, depth=12, num_heads=12, mlp_ratio=4, qkv_bias=True,"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    }
+  ]
+}

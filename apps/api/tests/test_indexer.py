@@ -317,6 +317,21 @@ def test_embed_records_model_name_on_repository(tmp_clone: Path) -> None:
 # ============================================================
 
 
+def test_source_reads_cannot_escape_the_clone(tmp_path: Path) -> None:
+    from claim2code_api.indexing.indexer import _read_source_range
+
+    clone = tmp_path / "clone"
+    clone.mkdir()
+    outside = tmp_path / "outside.py"
+    outside.write_text("PRIVATE_HOST_CONTENT\n")
+    (clone / "linked.py").symlink_to(outside)
+    (clone / "linked-dir").symlink_to(tmp_path, target_is_directory=True)
+    for path in ["../outside.py", str(outside), "linked.py", "linked-dir/outside.py"]:
+        assert _read_source_range(
+            clone_path=clone, rel_path=path, start_line=1, end_line=1,
+        ) == ""
+
+
 def test_embed_reads_source_body_between_lines(tmp_clone: Path) -> None:
     """The Source: block in the embedding text reflects the line range."""
     repo_id = uuid4()

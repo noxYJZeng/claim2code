@@ -95,6 +95,9 @@ def seeded_analysis(db_session: Any) -> dict[str, Any]:
         n_symbols=5,
         index_status="done",
     ))
+    # No ORM relationship links these models, so flush the parents
+    # before their CodeSymbol children reference them.
+    db_session.flush()
     # Five CodeSymbol rows with deliberately varied signatures
     # so deterministic checkers find / miss matches.
     sym_ids = [uuid4() for _ in range(5)]

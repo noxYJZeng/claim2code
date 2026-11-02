@@ -1,0 +1,115 @@
+{
+  "pair_id": "whisper",
+  "paper": {
+    "title": "Robust Speech Recognition via Large-Scale Weak Supervision",
+    "authors": [
+      "Radford",
+      "Kim",
+      "Xu",
+      "Brockman",
+      "McLeavey",
+      "Sutskever"
+    ],
+    "year": 2023,
+    "venue": "ICML",
+    "arxiv_id": "2212.04356",
+    "url": "https://arxiv.org/abs/2212.04356",
+    "pdf_url": "https://cdn.openai.com/papers/whisper.pdf"
+  },
+  "repo": {
+    "url": "https://github.com/openai/whisper",
+    "commit": "86098128c0b4f24f0e2aa2994de830614b474227",
+    "description": "Official PyTorch Whisper speech-recognition implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "start_line": 8,
+        "end_line": 8,
+        "quote": "import torch",
+        "file_path": "whisper/model.py"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "development",
+    "review_scope": "Claims written 2026-10-29 for tuning verdict calibration; labels checked against the pinned repository source. Not part of the regression or coverage sets.",
+    "paper_evidence_verified": false
+  },
+  "claims": [
+    {
+      "claim_id": "whisper_dev1",
+      "text": "Whisper falls back to higher sampling temperatures in steps of 0.2 up to 1.0 when the compression ratio exceeds 2.4 or the average log probability is below -1.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 159
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "whisper/transcribe.py",
+          "name": "transcribe",
+          "kind": "function"
+        },
+        {
+          "file_path": "whisper/transcribe.py",
+          "name": "decode_with_fallback",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "temperature=(0.0,...,1.0), compression_ratio_threshold=2.4, logprob_threshold=-1.0."
+    },
+    {
+      "claim_id": "whisper_dev2",
+      "text": "Whisper's English-only models use the GPT-2 byte-level BPE tokenizer.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 69
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "whisper/tokenizer.py",
+          "name": "get_tokenizer",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "Non-multilingual models use encoding_name 'gpt2'."
+    },
+    {
+      "claim_id": "whisper_dev3",
+      "text": "Whisper models are trained with AdamW and gradient norm clipping, with a linear learning-rate decay after 2048 warmup updates.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 126
+      },
+      "relevant_symbols": [],
+      "expected_verification": "UNVERIFIED",
+      "notes": "No training code in the repository."
+    },
+    {
+      "claim_id": "whisper_dev4",
+      "text": "Whisper suppresses the blank and end-of-text tokens at every decoding step.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 75
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "whisper/decoding.py",
+          "name": "SuppressBlank",
+          "kind": "class"
+        }
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "SuppressBlank masks blank and EOT only at the first sampled position (tokens.shape[1] == sample_begin), not every step."
+    }
+  ]
+}

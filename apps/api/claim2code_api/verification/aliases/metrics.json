@@ -1,5 +1,5 @@
 {
-  "_doc": "Metric name aliases. Used by MetricNameComparator for METRIC_MISMATCH (LOW severity).",
+  "_doc": "Metric name aliases. Used by MetricNameComparator for METRIC_MISMATCH (LOW severity). Evaluation metrics only: a training loss is not a metric to compare against a reported one (code computing 'loss' never contradicts a paper reporting 'accuracy'). Abbreviations that collide with model names (MAE = Masked Autoencoder) are left out.",
 
   "f1":                     ["F1", "f1", "F1 score", "f1-score", "F1-score"],
   "f1-micro":               ["F1-micro", "micro-F1", "f1_micro"],
@@ -13,7 +13,6 @@
   "meteor":                 ["METEOR", "meteor"],
   "exact-match":            ["Exact Match", "EM", "exact_match", "exact match"],
   "auc":                    ["AUC", "auc", "AUC-ROC", "ROC AUC"],
-  "loss":                   ["loss", "cross-entropy", "cross_entropy", "CrossEntropyLoss"],
   "mse":                    ["MSE", "mse", "Mean Squared Error"],
-  "mae":                    ["MAE", "mae", "Mean Absolute Error"]
+  "mean-absolute-error":    ["Mean Absolute Error", "mean_absolute_error"]
 }

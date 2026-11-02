@@ -17,6 +17,7 @@ under a synthetic ``""`` title.
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 
 import pymupdf  # type: ignore[import-untyped]  # pymupdf ships no type stubs
@@ -30,10 +31,13 @@ from claim2code_api.papers.schemas import Equation, Paper, PaperSection, Table
 # floor.
 _MIN_TOTAL_CHARS = 200
 
-# A paragraph whose font is this much larger than the median body font
-# is treated as a heading. 1.5x is the empirically-tuned sweet spot
-# for arXiv-style typography where body ≈ 10pt and headings are 12-16pt.
-_HEADING_FONT_RATIO = 1.5
+# A line whose font is this much larger than the body font is treated
+# as a heading. arXiv / ICLR / CVPR / NeurIPS section headings are 12pt
+# over a 10pt body (1.2x), so the threshold sits just below that.
+_HEADING_FONT_RATIO = 1.15
+
+# A "heading" line longer than this is almost always body text.
+_HEADING_MAX_CHARS = 200
 
 
 def parse_pdf(path: Path, *, filename: str | None = None) -> Paper:
@@ -49,6 +53,7 @@ def parse_pdf(path: Path, *, filename: str | None = None) -> Paper:
     doc = pymupdf.open(path)
     try:
         sections, equations, tables, total_chars = _parse_pages(doc)
+        n_pages = doc.page_count
     finally:
         doc.close()
 
@@ -61,7 +66,7 @@ def parse_pdf(path: Path, *, filename: str | None = None) -> Paper:
     return Paper(
         filename=filename or path.name,
         sha256=_sha256_file(path),
-        n_pages=len(sections) and max(s.page for s in sections) or 1,
+        n_pages=n_pages or 1,
         n_chars=total_chars,
         sections=sections,
         equations=equations,
@@ -90,41 +95,35 @@ def _parse_pages(
     Each span carries ``font`` (font name), ``size`` (pt), ``flags``,
     and the literal text. We:
 
-      * establish the "body" font size as the **minimum** span size in
-        the document — headings are by definition larger than body
-        text, so the smallest span is body (possibly captions /
-        footnotes / subscripts — all smaller than headings). ``min``
-        is more robust than median against synthetic PDFs or
-        heading-heavy pages where the median is pulled into
-        heading size;
-      * start a new :class:`PaperSection` when we see a span whose
-        font size exceeds ``body × _HEADING_FONT_RATIO`` AND its text
-        is short (< 200 chars) — a long "heading" is almost always
-        body text;
-      * accumulate contiguous spans into the current section's
-        ``text`` buffer, tracking the running char offset;
+      * establish the "body" font size as the size that carries the
+        most characters in the document;
+      * start a new :class:`PaperSection` at a line that opens in a
+        font of at least ``body × _HEADING_FONT_RATIO`` AND is short
+        (< ``_HEADING_MAX_CHARS``) — see :func:`_is_heading_line`.
+        Consecutive heading lines merge into one title;
+      * accumulate body lines into the current section's ``text``
+        buffer, tracking the running char offset;
       * record every page break so we can answer
         "what page is char offset N on?" without re-scanning.
     """
-    body_sizes: list[float] = []
+    # Body size = the font size carrying the most characters. ``min``
+    # breaks on real papers: a 5pt subscript or footnote mark puts the
+    # threshold below the 10pt body, turning every line into a heading.
+    # Weighting by characters (not spans) keeps short heading spans from
+    # outvoting the body even on heading-heavy pages.
+    chars_by_size: Counter[float] = Counter()
     for page in doc:  # type: ignore[attr-defined]
         for block in page.get_text("dict")["blocks"]:
             if block["type"] != 0:  # 0=text, 1=image
                 continue
             for line in block["lines"]:
                 for span in line["spans"]:
-                    body_sizes.append(span["size"])
+                    chars_by_size[round(span["size"], 1)] += len(span["text"].strip())
 
-    if not body_sizes:
+    if not chars_by_size:
         return [], [], [], 0
 
-    # Use the smallest font size as the body baseline. Headings are by
-    # definition larger than body text, so the smallest span is body
-    # (possibly captions / footnotes / subscripts — all smaller than
-    # headings). Using ``min`` instead of median sidesteps the
-    # synthetic-PDF edge case where the number of heading spans equals
-    # or exceeds body spans and pulls the median into heading size.
-    body_size = min(body_sizes)
+    body_size = chars_by_size.most_common(1)[0][0]
     heading_threshold = body_size * _HEADING_FONT_RATIO
 
     sections: list[PaperSection] = []
@@ -157,30 +156,31 @@ def _parse_pages(
                 # Image block — Phase 2 ignores.
                 continue
             for line in block["lines"]:
-                for span in line["spans"]:
-                    text = span["text"]
-                    if not text.strip():
-                        continue
-                    size = span["size"]
-                    is_heading = size >= heading_threshold and len(text) < 200
-                    if is_heading:
+                spans = [span for span in line["spans"] if span["text"].strip()]
+                if not spans:
+                    continue
+                line_text = "".join(span["text"] for span in line["spans"])
+                if _is_heading_line(line, spans, line_text, heading_threshold):
+                    if current_text_parts:
                         # Close the previous section, open a new one.
                         flush_section(running_offset)
-                        current_title = text.strip()
+                        current_title = line_text.strip()
                         current_page = page.number + 1
                         current_start = running_offset
                         current_text_parts = []
-                        # Don't include the heading text itself in the
-                        # section body — Phase 6 verdicts cite the
-                        # *body*, not the heading.
-                        running_offset += len(text) + 1  # +1 for the joiner
-                        continue
-                    current_text_parts.append(text)
-                    running_offset += len(text)
-                    total_chars += len(text)
-                current_text_parts.append("\n")
-                running_offset += 1
-                total_chars += 1
+                    else:
+                        # Nothing since the last heading line: this one
+                        # continues it ("1" then "Introduction", or a
+                        # title wrapped over two lines).
+                        current_title = f"{current_title} {line_text.strip()}".strip()
+                    # Don't include the heading text itself in the
+                    # section body — Phase 6 verdicts cite the
+                    # *body*, not the heading.
+                    running_offset += len(line_text) + 1  # +1 for the joiner
+                    continue
+                current_text_parts.append(line_text + "\n")
+                running_offset += len(line_text) + 1
+                total_chars += len(line_text) + 1
             # Detect equations (display-math block heuristically —
             # centre-aligned, single line, no periods).
             _maybe_record_equation(line, page.number + 1, equations)
@@ -190,6 +190,18 @@ def _parse_pages(
 
     flush_section(running_offset)
     return sections, equations, tables, total_chars
+
+
+def _is_heading_line(line: dict, spans: list[dict], text: str, heading_threshold: float) -> bool:
+    """A short horizontal line whose first span is set in heading size.
+
+    Judged per line, not per span: small-caps headings ("3 V" at 12pt +
+    "ARIATIONAL" at 9.6pt) start large and continue small. Rotated text
+    (the arXiv side stamp) is never a heading.
+    """
+    if tuple(round(c) for c in line.get("dir", (1, 0))) != (1, 0):
+        return False
+    return spans[0]["size"] >= heading_threshold and len(text) < _HEADING_MAX_CHARS
 
 
 def _maybe_record_equation(line: dict, page: int, out: list[Equation]) -> None:

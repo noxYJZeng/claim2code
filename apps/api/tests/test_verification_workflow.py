@@ -13,7 +13,7 @@ Coverage:
   - Empty / missing claims → empty verifications list (not error).
   - No repository bound → candidates is empty, LLM is still invoked
     for each claim, structural guard coerces to UNVERIFIED.
-  - HIGH deterministic mismatch → workflow skips the LLM call.
+  - HIGH deterministic mismatch still obtains source-backed citations.
   - Per-claim isolation: one LLM failure doesn't abort the run.
   - Persistence: ``AnalysisState.verifications`` is written.
   - Acceptance criterion: every returned verification satisfies
@@ -192,13 +192,12 @@ def test_workflow_no_repository_returns_unverified() -> None:
 
 
 # ============================================================
-# HIGH deterministic → workflow skips LLM
+# HIGH deterministic still needs source citations
 # ============================================================
 
 
-def test_workflow_skips_llm_on_high_severity() -> None:
-    """When the deterministic checker emits HIGH, the workflow must
-    NOT call the LLM (cost-saving)."""
+def test_workflow_requests_citations_on_high_severity() -> None:
+    """A numeric mismatch alone cannot satisfy the source-evidence guard."""
     sym_id = uuid4()
     state = _StubAnalysisState(
         analysis_id=uuid4(),
@@ -230,14 +229,19 @@ def test_workflow_skips_llm_on_high_severity() -> None:
         struct_boost=1.0,
     )
     fake_llm = MagicMock()
+    from claim2code_api.verification.schemas import Verification
+    fake_llm.verdict_for_claim.return_value = Verification(
+        claim_id="c1", status=VerificationStatus.UNVERIFIED,
+        confidence=0.0, explanation="No readable source.",
+        paper_evidence=_paper_evidence("lr=5e-5"),
+    )
     with patch.object(
         workflow_mod, "hybrid_ranker", return_value=[hybrid_match],
     ), patch.object(workflow_mod, "get_embedding_client", return_value=MagicMock()), \
          patch.object(workflow_mod, "get_llm_client", return_value=fake_llm):
         result = run_verification_workflow(db=db, analysis_id=state.analysis_id)
 
-    # LLM should NOT have been called (HIGH mismatch → skip).
-    fake_llm.verdict_for_claim.assert_not_called()
+    fake_llm.verdict_for_claim.assert_called_once()
     # Status: HIGH + no code_evidence → UNVERIFIED (structural guard).
     assert result.verifications[0].status == VerificationStatus.UNVERIFIED
     # The HIGH discrepancy is recorded.
@@ -405,3 +409,22 @@ def test_workflow_only_verifies_requested_claims() -> None:
 
     assert len(result.verifications) == 1
     assert result.verifications[0].claim_id == "c2"
+
+
+def test_workflow_subset_run_keeps_other_claims_verdicts() -> None:
+    state = _StubAnalysisState(
+        analysis_id=uuid4(),
+        claims=[_claim_dict("c1"), _claim_dict("c2")],
+        verifications=[
+            {"claim_id": "c1", "status": "VERIFIED"},
+            {"claim_id": "c2", "status": "VERIFIED"},
+        ],
+    )
+    db = _make_db(state=state, repo=None)
+
+    with patch.object(workflow_mod, "get_llm_client", return_value=MagicMock()):
+        run_verification_workflow(db=db, analysis_id=state.analysis_id, claim_ids=["c2"])
+
+    assert [e["claim_id"] for e in state.verifications] == ["c1", "c2"]
+    assert state.verifications[0] == {"claim_id": "c1", "status": "VERIFIED"}
+    assert state.verifications[1]["status"] == "UNVERIFIED"  # no repo → re-run verdict

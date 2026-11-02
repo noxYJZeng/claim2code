@@ -35,7 +35,7 @@ from openai import (
 
 from claim2code_api.llm.client import LLMClient
 from claim2code_api.papers.schemas import Claim, ClaimType, PaperEvidence
-from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch
+from claim2code_api.repos.schemas import CodeLanguage, CodeSymbolKind, RetrieveMatch, SourceSpan
 from claim2code_api.verification.exceptions import VerificationLLMError
 from claim2code_api.verification.schemas import (
     CodeEvidence,
@@ -95,6 +95,10 @@ def _sym_id():
     return uuid4()
 
 
+def _grounded_candidate(signature: str = "def train(learning_rate=5e-5): ...") -> RetrieveMatch:
+    return _candidate(signature).model_copy(update={"source": signature, "end_line": 1})
+
+
 def _llm_verdict(
     *,
     status: VerificationStatus = VerificationStatus.VERIFIED,
@@ -119,19 +123,177 @@ def _llm_verdict(
 
 
 def test_compose_verified_when_llm_verified_and_code_evidence() -> None:
-    sym_id = _sym_id()
+    cand = _grounded_candidate()
     ce = [CodeEvidence(
-        symbol_id=sym_id, file_path="m.py", start_line=1, end_line=10,
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
         quote="def train(learning_rate=5e-5): ...",
     )]
     out = compose_verification(
         claim=_claim(),
-        candidates=[_candidate()],
+        candidates=[cand],
         deterministic_discrepancies=[],
         llm_verdict=_llm_verdict(code_evidence=ce),
     )
     assert out.status == VerificationStatus.VERIFIED
     assert out.confidence == 0.85
+
+
+def test_compose_takes_the_file_path_from_the_cited_candidate() -> None:
+    cand = _grounded_candidate()
+    ce = [CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="m.py:1", start_line=1, end_line=1,
+        quote="def train(learning_rate=5e-5): ...",
+    )]
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=ce),
+    )
+    assert out.code_evidence[0].file_path == "m.py"
+
+
+@pytest.mark.parametrize("invalid", [
+    "invented_quote", "missing_source", "truncated_source", "context_only",
+    "blank_quote", "ambiguous",
+])
+def test_compose_rejects_citations_not_grounded_in_located_source(invalid: str) -> None:
+    cand = _candidate().model_copy(update={
+        "start_line": 10, "end_line": 12,
+        "source": "def train():\n    lr = 5e-5\n    return lr",
+    })
+    citation = CodeEvidence(
+        symbol_id=cand.symbol_id, file_path=cand.file_path,
+        start_line=11, end_line=11, quote="lr = 5e-5",
+    )
+    if invalid == "invented_quote":
+        citation.quote = "optimizer = ImaginaryOptimizer()"
+    elif invalid == "missing_source":
+        cand.source = None
+    elif invalid == "truncated_source":
+        cand.source = "def train():"
+    elif invalid == "context_only":
+        cand.class_context = "lr = 5e-5"
+        cand.source = "def train():\n    pass\n    return None"
+    elif invalid == "blank_quote":
+        citation.quote = "   "
+    elif invalid == "ambiguous":
+        # Two equally near occurrences, neither at the stated line.
+        cand.end_line = 14
+        cand.source = "def train():\n    lr = 5e-5\n    pass\n    lr = 5e-5\n    return lr"
+        citation.start_line = citation.end_line = 12
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[citation]),
+    )
+    assert out.status == VerificationStatus.UNVERIFIED
+    assert out.code_evidence == []
+    assert out.confidence == 0.0
+
+
+@pytest.mark.parametrize("misplaced", ["unknown_symbol", "wrong_lines", "reversed_lines", "outside_symbol"])
+def test_compose_reanchors_real_code_cited_at_the_wrong_place(misplaced: str) -> None:
+    cand = _candidate().model_copy(update={
+        "start_line": 10, "end_line": 12,
+        "source": "def train():\n    lr = 5e-5\n    return lr",
+    })
+    citation = CodeEvidence(
+        symbol_id=cand.symbol_id, file_path=cand.file_path,
+        start_line=11, end_line=11, quote="lr = 5e-5",
+    )
+    if misplaced == "unknown_symbol":
+        citation.symbol_id = _sym_id()
+    elif misplaced == "wrong_lines":
+        citation.start_line = citation.end_line = 10
+    elif misplaced == "reversed_lines":
+        citation.start_line, citation.end_line = 12, 11
+    elif misplaced == "outside_symbol":
+        citation.start_line, citation.end_line = 1, 999
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[citation]),
+    )
+    assert out.status == VerificationStatus.VERIFIED
+    [kept] = out.code_evidence
+    assert (kept.symbol_id, kept.file_path, kept.start_line, kept.end_line) == (
+        cand.symbol_id, "m.py", 11, 11,
+    )
+
+
+def _span(name: str, file_path: str, start: int, source: str) -> SourceSpan:
+    return SourceSpan(
+        symbol_id=_sym_id(), file_path=file_path, start_line=start,
+        end_line=start + source.count("\n"), name=name, source=source,
+    )
+
+
+def test_compose_keeps_context_code_at_its_real_location() -> None:
+    """Code from a candidate's setup/callee context, cited under the
+    candidate's symbol_id, is kept with the context symbol's location."""
+    init = _span("__init__", "m.py", 589, "def __init__(self, h):\n    self.h = h\n    self.linears = clones(4)")
+    cand = _candidate().model_copy(update={
+        "start_line": 600, "end_line": 601, "source": "def forward(self, x):\n    return x",
+        "context_spans": [init],
+    })
+    at_lines = CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=591, end_line=591,
+        quote="self.linears = clones(4)",
+    )
+    elsewhere = at_lines.model_copy(update={"start_line": 700, "end_line": 702, "quote": "self.h = h"})
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[at_lines, elsewhere]),
+    )
+    assert [(e.symbol_id, e.start_line, e.end_line) for e in out.code_evidence] == [
+        (init.symbol_id, 591, 591), (init.symbol_id, 590, 590),
+    ]
+
+
+def test_compose_reanchors_to_the_nearest_occurrence_in_the_cited_file() -> None:
+    body = "def step():\n    loss.backward()\n    opt.step()"
+    near = _span("step", "a.py", 40, body)
+    far = _span("step", "a.py", 400, body)
+    other_file = _span("step", "b.py", 84, body)
+    cand = _candidate().model_copy(update={
+        "file_path": "a.py", "source": None, "context_spans": [far, near, other_file],
+    })
+    citation = CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="a.py:82-83", start_line=82, end_line=83,
+        quote="loss.backward()\n    opt.step()",
+    )
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[citation]),
+    )
+    [kept] = out.code_evidence
+    assert (kept.file_path, kept.start_line, kept.end_line) == ("a.py", 41, 42)
+
+
+def test_compose_rejects_invented_citation_when_no_candidates_exist() -> None:
+    citation = CodeEvidence(
+        symbol_id=_sym_id(), file_path="does-not-exist.py",
+        start_line=999, end_line=1000, quote="invented code",
+    )
+    out = compose_verification(
+        claim=_claim(), candidates=[], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[citation]),
+    )
+    assert out.status == VerificationStatus.UNVERIFIED
+    assert not out.code_evidence
+
+
+def test_compose_retains_only_valid_unique_citations() -> None:
+    cand = _grounded_candidate()
+    valid = CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="copied-wrong.py",
+        start_line=1, end_line=1, quote="  def train(learning_rate=5e-5):   ... ",
+    )
+    unknown = valid.model_copy(update={"symbol_id": _sym_id()})
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[],
+        llm_verdict=_llm_verdict(code_evidence=[unknown, valid, valid]),
+    )
+    assert out.status == VerificationStatus.VERIFIED
+    assert len(out.code_evidence) == 1
+    assert out.code_evidence[0].file_path == cand.file_path
 
 
 def test_compose_unverified_when_llm_verified_but_no_code_evidence() -> None:
@@ -146,18 +308,19 @@ def test_compose_unverified_when_llm_verified_but_no_code_evidence() -> None:
 
 
 def test_compose_contradicted_when_high_severity_and_code_evidence() -> None:
-    sym_id = _sym_id()
+    cand = _grounded_candidate()
     ce = [CodeEvidence(
-        symbol_id=sym_id, file_path="m.py", start_line=1, end_line=10, quote="x",
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
     )]
     high = Discrepancy(
-        type=DiscrepancyType.HYPERPARAMETER_MISMATCH,
+        type=DiscrepancyType.OBJECTIVE_MISMATCH,
         severity=DiscrepancySeverity.HIGH,
-        detail="lr mismatch",
+        detail="different loss",
     )
     out = compose_verification(
         claim=_claim(),
-        candidates=[_candidate()],
+        candidates=[cand],
         deterministic_discrepancies=[high],
         llm_verdict=_llm_verdict(status=VerificationStatus.VERIFIED, code_evidence=ce),
     )
@@ -166,9 +329,10 @@ def test_compose_contradicted_when_high_severity_and_code_evidence() -> None:
 
 
 def test_compose_partial_when_medium_severity_and_code_evidence() -> None:
-    sym_id = _sym_id()
+    cand = _grounded_candidate()
     ce = [CodeEvidence(
-        symbol_id=sym_id, file_path="m.py", start_line=1, end_line=10, quote="x",
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
     )]
     medium = Discrepancy(
         type=DiscrepancyType.DATASET_MISMATCH,
@@ -177,11 +341,116 @@ def test_compose_partial_when_medium_severity_and_code_evidence() -> None:
     )
     out = compose_verification(
         claim=_claim(),
-        candidates=[_candidate()],
+        candidates=[cand],
         deterministic_discrepancies=[medium],
         llm_verdict=_llm_verdict(code_evidence=ce),
     )
     assert out.status == VerificationStatus.PARTIALLY_VERIFIED
+
+
+def test_compose_drops_llm_discrepancies_without_a_candidate_quote() -> None:
+    """An LLM discrepancy must quote conflicting candidate code to count."""
+    cand = _grounded_candidate()
+    ce = [CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
+    )]
+    quoted = Discrepancy(
+        type=DiscrepancyType.HYPERPARAMETER_MISMATCH,
+        severity=DiscrepancySeverity.MEDIUM,
+        detail="paper says lr 1e-4, code defaults to 5e-5",
+        code_quote="def train(learning_rate=5e-5):",
+    )
+    silent = Discrepancy(
+        type=DiscrepancyType.CONFIGURATION_MISMATCH,
+        severity=DiscrepancySeverity.MEDIUM,
+        detail="the loss definition is not visible in the candidates",
+        code_quote="",
+    )
+    invented = Discrepancy(
+        type=DiscrepancyType.CONFIGURATION_MISMATCH,
+        severity=DiscrepancySeverity.HIGH,
+        detail="optimizer differs",
+        code_quote="optimizer = SGD(lr=0.1)",
+    )
+    verdict = _llm_verdict(
+        status=VerificationStatus.PARTIALLY_VERIFIED, code_evidence=ce,
+    ).model_copy(update={"discrepancies": [quoted, silent, invented]})
+    out = compose_verification(
+        claim=_claim(),
+        candidates=[cand],
+        deterministic_discrepancies=[],
+        llm_verdict=verdict,
+    )
+    assert out.discrepancies == [quoted]
+    assert out.status == VerificationStatus.PARTIALLY_VERIFIED
+
+
+def test_compose_verified_once_unquoted_discrepancies_drop() -> None:
+    """PARTIALLY_VERIFIED needs a surviving discrepancy (phase-6-design §2.5)."""
+    cand = _grounded_candidate()
+    ce = [CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
+    )]
+    silent = Discrepancy(
+        type=DiscrepancyType.CONFIGURATION_MISMATCH,
+        severity=DiscrepancySeverity.MEDIUM,
+        detail="no dataset count in the code",
+    )
+    verdict = _llm_verdict(
+        status=VerificationStatus.PARTIALLY_VERIFIED, code_evidence=ce,
+    ).model_copy(update={"discrepancies": [silent]})
+    out = compose_verification(
+        claim=_claim(),
+        candidates=[cand],
+        deterministic_discrepancies=[],
+        llm_verdict=verdict,
+    )
+    assert out.discrepancies == []
+    assert out.status == VerificationStatus.VERIFIED
+
+
+@pytest.mark.parametrize("detail", [
+    "The position embedding addition is not explicitly visible in the provided source.",
+    "The source for embedding_postprocessor is truncated before the addition.",
+    "The full training script gpt2_ft.py is not provided to confirm the dataset.",
+])
+def test_compose_drops_discrepancies_about_unseen_code(detail: str) -> None:
+    """A quoted discrepancy that only says the code is not shown is silence (rule 7)."""
+    cand = _grounded_candidate()
+    ce = [CodeEvidence(
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
+    )]
+    unseen = Discrepancy(
+        type=DiscrepancyType.CONFIGURATION_MISMATCH,
+        severity=DiscrepancySeverity.LOW,
+        detail=detail,
+        code_quote=cand.signature,
+    )
+    verdict = _llm_verdict(
+        status=VerificationStatus.PARTIALLY_VERIFIED, code_evidence=ce,
+    ).model_copy(update={"discrepancies": [unseen]})
+    out = compose_verification(
+        claim=_claim(), candidates=[cand], deterministic_discrepancies=[], llm_verdict=verdict,
+    )
+    assert out.discrepancies == []
+    assert out.status == VerificationStatus.VERIFIED
+
+
+def test_verdict_schema_requires_code_quote_on_discrepancies() -> None:
+    fake = _fake_openai(_make_valid_verification_json())
+    _build_client(fake).verdict_for_claim(
+        claim=_claim(),
+        paper_evidence=_paper_evidence(),
+        candidates=[_candidate()],
+        deterministic_discrepancies=[],
+    )
+    schema = fake.chat.completions.create.call_args.kwargs["response_format"]["json_schema"]["schema"]
+    assert "code_quote" in schema["$defs"]["Discrepancy"]["required"]
+    # The shared model's own schema stays unchanged.
+    assert "code_quote" not in Discrepancy.model_json_schema()["required"]
 
 
 def test_compose_unverified_when_no_llm_and_no_code_evidence() -> None:
@@ -213,20 +482,21 @@ def test_compose_synthesises_explanation_when_llm_skipped() -> None:
 
 
 def test_extract_verdict_runs_deterministic_checkers() -> None:
-    """A high-severity hp mismatch in the deterministic checkers
-    turns a VERIFIED LLM verdict into CONTRADICTED."""
-    sym_id = _sym_id()
+    """A deterministic hp mismatch demotes a VERIFIED LLM verdict;
+    a differing setting is PARTIALLY_VERIFIED, not CONTRADICTED."""
+    cand = _grounded_candidate(signature="def train(learning_rate=1e-3): ...")
     ce = [CodeEvidence(
-        symbol_id=sym_id, file_path="m.py", start_line=1, end_line=10, quote="x",
+        symbol_id=cand.symbol_id, file_path="m.py", start_line=1, end_line=1,
+        quote=cand.signature,
     )]
     out = extract_verdict(
         claim=_claim(),
         # 1e-3 vs 5e-5 → 20× ratio, multiplicative regime fails.
-        candidates=[_candidate(signature="def train(learning_rate=1e-3): ...")],
+        candidates=[cand],
         llm_verdict=_llm_verdict(code_evidence=ce),
     )
     assert any(d.severity == DiscrepancySeverity.HIGH for d in out.discrepancies)
-    assert out.status == VerificationStatus.CONTRADICTED
+    assert out.status == VerificationStatus.PARTIALLY_VERIFIED
 
 
 # ============================================================
@@ -274,6 +544,7 @@ def _build_client(fake_openai: MagicMock) -> LLMClient:
     import claim2code_api.app.config as cfg
     client._settings = cfg.get_settings()
     client._client = fake_openai
+    client._model = client._settings.openai_model_chat
     # Phase 8: stub safety gate + callback.
     from claim2code_api.safety import SafetyGate
     client._gate = SafetyGate()
@@ -442,3 +713,92 @@ def test_verdict_for_claim_empty_choices_raises() -> None:
             claim=_claim(), paper_evidence=_paper_evidence(),
             candidates=[], deterministic_discrepancies=[],
         )
+
+# ============================================================
+# Verify payload: candidate source bodies
+# ============================================================
+
+
+def test_verify_payload_includes_candidate_source() -> None:
+    """The verifier sees the code body, not just signature + docstring."""
+    from claim2code_api.llm.client import _build_verify_payload
+
+    cand = _candidate().model_copy(update={"source": "def train():\n    lr = 5e-5"})
+    payload = _build_verify_payload(
+        claim=_claim(), paper_evidence=_paper_evidence(),
+        candidates=[cand], deterministic_discrepancies=[],
+    )
+    assert "source:\n```\ndef train():\n    lr = 5e-5\n```" in payload
+
+
+def test_verify_payload_truncates_long_source() -> None:
+    from claim2code_api.llm import client as llm_client_mod
+
+    cap = llm_client_mod._VERIFY_SOURCE_CHAR_CAP
+    cand = _candidate().model_copy(update={"source": "x" * (cap + 500)})
+    payload = llm_client_mod._build_verify_payload(
+        claim=_claim(), paper_evidence=_paper_evidence(),
+        candidates=[cand], deterministic_discrepancies=[],
+    )
+    assert "x" * cap + "\n[... truncated ...]" in payload
+    assert "x" * (cap + 1) not in payload
+
+
+def test_verify_payload_omits_source_when_absent() -> None:
+    from claim2code_api.llm.client import _build_verify_payload
+
+    payload = _build_verify_payload(
+        claim=_claim(), paper_evidence=_paper_evidence(),
+        candidates=[_candidate()], deterministic_discrepancies=[],
+    )
+    assert "source:" not in payload
+
+
+def test_compose_drops_llm_discrepancies_without_code_evidence() -> None:
+    """"No code found" restated as a HIGH discrepancy is noise."""
+    det = Discrepancy(
+        type=DiscrepancyType.DATASET_MISMATCH,
+        severity=DiscrepancySeverity.MEDIUM,
+        detail="deterministic",
+    )
+    llm = _llm_verdict(status=VerificationStatus.UNVERIFIED).model_copy(
+        update={"discrepancies": [Discrepancy(
+            type=DiscrepancyType.METRIC_MISMATCH,
+            severity=DiscrepancySeverity.HIGH,
+            detail="No candidate implements the benchmark.",
+        )]},
+    )
+    out = compose_verification(
+        claim=_claim(),
+        candidates=[_candidate()],
+        deterministic_discrepancies=[det],
+        llm_verdict=llm,
+    )
+    assert out.status == VerificationStatus.UNVERIFIED
+    assert out.discrepancies == [det]
+
+
+def test_verify_payload_includes_class_context() -> None:
+    from claim2code_api.llm.client import _build_verify_payload
+
+    cand = _candidate().model_copy(
+        update={"class_context": "# reset_parameters (lines 5-6)\ninit_zeros(self.B)"},
+    )
+    payload = _build_verify_payload(
+        claim=_claim(), paper_evidence=_paper_evidence(),
+        candidates=[cand], deterministic_discrepancies=[],
+    )
+    assert "class_context (setup methods of its class):\n```\n# reset_parameters" in payload
+
+
+def test_verify_payload_includes_callee_context() -> None:
+    from claim2code_api.llm.client import _build_verify_payload
+
+    cand = _candidate().model_copy(
+        update={"callee_context": "# check_is_exhausted (env_history.py:23-24)\nreturn self._is_exhausted"},
+    )
+    payload = _build_verify_payload(
+        claim=_claim(), paper_evidence=_paper_evidence(),
+        candidates=[cand], deterministic_discrepancies=[],
+    )
+    assert "callee_context (repo functions it calls):\n```\n# check_is_exhausted" in payload

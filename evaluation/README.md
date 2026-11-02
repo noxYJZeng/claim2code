@@ -7,29 +7,190 @@ visible from the project layout and runnable via `make eval-*`.
 
 ```
 evaluation/
-├── datasets/             # paper + repo pairs, raw + curated
-├── annotations/          # hand-annotated claim-to-code mappings
-│                         #   paper.json
-│                         #   repo.json
-│                         #   claims.json         ← list of Claim objects
-│                         #   mappings.json       ← relevant_symbols + expected_verification
+├── annotations/              # one JSON per (paper, repo) pair: claims with
+│                             #   relevant_symbols + expected_verification (+ notes)
+├── datasets/
+│   └── safety_corpus.json    # fabricated secrets, injections and clean text
 ├── baselines/
 │   ├── embedding_only.py     # Baseline A: cosine similarity only
-│   ├── lexical_only.py       # Baseline B: BM25 / token overlap only
-│   └── hybrid_claim2code.py  # Our system: S = 0.55·sem + 0.25·lex + 0.20·struct
+│   ├── lexical_only.py       # Baseline B: Postgres full-text rank only
+│   └── hybrid_claim2code.py  # Our system: RRF(semantic, lexical) × structural boost
 ├── evaluate_retrieval.py     # Recall@1, Recall@5, MRR vs annotations
-├── evaluate_verification.py  # Verification accuracy, discrepancy precision, grounding rate
-├── evaluate_safety.py        # Prompt-injection / secret-leak tests
-├── evaluate_all.py           # Runs all evaluators + renders results.json + report.md
-└── README.md
+├── evaluate_verification.py  # status accuracy, discrepancy P/R, grounding, line accuracy
+├── evaluate_safety.py        # secret protection, injection detection, false positives
+├── report.py                 # results/*.json → results.json + report.md
+├── evaluate_all.py           # runs every evaluator, then report.py
+├── results/                  # per-evaluator output (retrieval/verification/safety.json)
+├── results.json              # combined, with commit + model names
+└── report.md                 # the rendered report
 ```
+
+Annotation pairs are matched to indexed repositories by `repo.url`
+(`CLAIM2CODE_EVAL_REPO_IDS='{"pair_id": "<uuid>"}'` overrides). A pair
+whose repository is not indexed is skipped and listed in the report.
+
+## Measurement scope and reproducibility
+
+### Run the resume-target benchmark on a local model
+
+The working targets are 12 PyTorch repositories, standard Recall@5 of at
+least 91%, status accuracy of at least 87%, and citation grounding of at
+least 97%. Commit `1f8fce3` meets all four (run of 2026-11-01): Hit@5
+97.2% (the definition of the earlier 74%; per-symbol Recall@5 85.8%),
+status accuracy 91.1% (72/79), grounding 100% of 239 citations. See the
+main README for the full table, run-to-run variation and caveats.
+
+`suites/resume-targets.json` selects 15 paper/repository pairs, including
+12 source-reviewed PyTorch repositories. Seven new pairs add 35 positive
+implementation claims. The target checker keeps the original 79 claims
+separate: adding these positive cases cannot raise the original accuracy.
+It freezes their texts, labels, and relevant symbols from `77e2e97`.
+
+With the existing PostgreSQL/pgvector database and LM Studio settings in
+`.env`, run from the repository root using your backend virtual environment:
+
+```bash
+python evaluation/run_local.py --prepare
+```
+
+Both the chat and embedding models must be available in LM Studio. Existing
+`OPENAI_BASE_URL`, `OPENAI_MODEL_CHAT`, `OPENAI_MODEL_EMBED`, and
+`OPENAI_EMBED_DIM` settings are used; no public model endpoint is needed.
+Apply database migrations before the first run, as in the main setup guide.
+
+Preparation clones immutable source revisions, indexes symbols, validates
+framework and annotated-symbol evidence, and builds missing embeddings.
+It reads downloaded code without importing or executing it. Existing
+repositories are reused only when their clean source revision and embedding
+index are compatible. A conflicting or partial index produces an error;
+use a separate benchmark database rather than resetting your workbench.
+
+The remaining stages run in this order: **retrieval → verification → safety
+→ report → target check**. Each run writes to a new ignored directory under
+`evaluation/runs/`, preserving the checked-in results. The output includes
+`report.md`, `targets.md`, `coverage.json`, and per-claim records. Exit status
+1 means measurements completed but one or more numerical targets remain
+unmet; status 2 indicates invalid inputs or setup. To resume interrupted
+verification with the same source, models, and annotations:
+
+```bash
+python evaluation/run_local.py --prepare --resume --output-dir evaluation/runs/<previous-run>
+```
+
+Use `--dry-run` to inspect the stage commands without network, database, or
+model calls. Source-only preparation is also available for parser coverage:
+
+```bash
+python evaluation/prepare_benchmark.py --parse-only --output /tmp/claim2code-coverage.json
+```
+
+Source-only coverage does not measure embedding or verification quality.
+The new annotations record actual source quotes and full repository SHAs;
+official PDF downloads were blocked in the cloud environment, so missing PDF
+hashes and unverified paper quotations remain explicit. Frozen-PDF checks
+can be enabled with `run_local.py --require-reproducible` after those inputs
+have been verified.
+
+New retrieval output distinguishes standard relevant-symbol Recall@5 from
+Hit@5 (any relevant target in the first five results). The historical
+reported 74% was Hit@5. A claim of **74% → 91% Recall@5** requires a paired
+measurement with the same metric definition; the target report records
+that comparison separately. Exact citation-line accuracy is now also
+reported separately from the earlier evaluator's ±2-line tolerance.
+
+The checked-in `results/` are **development-set measurements** of commit
+`93cd752` (2026-10-28), with provenance in each results file; benchmark runs
+write to `evaluation/runs/` instead. The 79 regression claims have 70 VERIFIED
+and 9 PARTIALLY_VERIFIED gold labels, with no CONTRADICTED or UNVERIFIED gold
+examples, so status accuracy should be compared with the 88.6%
+always-VERIFIED majority baseline. Reports now include that baseline,
+label counts, per-class metrics and macro F1 over gold-present classes;
+metrics for absent gold classes remain undefined.
+
+`dev_annotations/` holds 35 development claims on the seven newer pairs
+(24 VERIFIED, 8 PARTIALLY_VERIFIED, 3 UNVERIFIED). Every verdict-rule and
+context change is checked on them before the regression set is measured.
+Two changes after `d38c62d` were designed from regression-set failures
+(see the main README); the development claims still served as their
+regression check. They are not part of any reported benchmark number.
+Run them with:
+
+```bash
+python evaluation/evaluate_verification.py --annotations-dir evaluation/dev_annotations --output-dir <dir>
+```
+
+Verification starts from curated claims, not PDF upload. The annotation
+text is also used as its paper quote, so these numbers do **not** measure
+claim extraction accuracy or the correctness of paper evidence against
+the original PDF. Code grounding checks textual existence; it does not
+measure whether a conclusion follows from that text.
+
+New evaluator runs record their own `provenance` when executing: run ID,
+start/end timestamps, full code SHA and source digest, non-secret model
+IDs/settings, annotation hashes, and the actual indexed clone revisions.
+Model revision and quantization are explicitly unknown when the runtime
+does not expose them. API keys and full environment dumps are never
+captured. The report propagates the saved metadata; it does not read the
+current model configuration to relabel old results. Legacy files remain
+marked as provenance-unknown. Their original combined-report header is
+preserved only as an unverified historical declaration.
+
+Several legacy annotations still contain `commit: "main"` and placeholder
+PDF hashes. New development runs warn about these inputs. For a frozen
+benchmark, supply real full repository SHAs and PDF hashes, then run:
+
+```bash
+python evaluation/evaluate_retrieval.py --require-reproducible
+python evaluation/evaluate_verification.py --require-reproducible
+python evaluation/report.py --require-provenance
+```
+
+A pinned annotation whose SHA differs from the indexed clone is rejected
+even in development mode; repository-ID overrides cannot silently point
+at a different project. `--require-reproducible` also refuses unknown or
+dirty clone states. This input gate does not promise deterministic model
+outputs or validate PDF bytes that the curated-claim evaluator never reads.
+`--require-provenance` refuses missing, mixed or unfrozen result provenance
+instead of producing a falsely unified comparison.
+
+`--resume` requires the same code, model, settings, annotations and clone
+revisions as the run's `verification_run.json` sidecar; legacy JSONL files
+without that identity cannot be resumed. `--regrade` retains the original
+inference identity and label, records a separate grading identity, and
+leaves unknown historical inference metadata unknown. Regrading old
+predictions never means that the current model or verifier has been rerun.
+
+### What the verification metrics mean
+
+- **Status accuracy** — exact match with `expected_verification` on the
+  labels present in the selected data, accompanied by majority baseline.
+- **Support rate** — the proportion predicted VERIFIED or
+  PARTIALLY_VERIFIED; a descriptive rate, not accuracy.
+- **Discrepancy precision / recall** — claim level: annotated positive when
+  `expected_verification` is PARTIALLY_VERIFIED or CONTRADICTED (the
+  mismatch is recorded in `notes`), predicted positive when the verdict is
+  PARTIALLY_VERIFIED or CONTRADICTED.
+- **Grounding rate** — the cited code exists in the cited file. A quote is
+  split at line breaks and `...` elisions and every fragment must occur
+  verbatim (whitespace and `\` line continuations ignored), so skipped or
+  elided lines pass while edited code does not.
+- **Line accuracy** — the cited code also sits at the cited lines (±2).
+- **Evidence hit rate** — supported verdicts citing an annotated symbol.
+
+### Safety corpus subsets
+
+`covered` cases use the forms the Phase 8 patterns target, so they act as a
+regression check. `held_out` cases are common real-world forms written
+without looking at the patterns, so their rates measure coverage gaps. A
+secret counts as leaked when any 12-character window of it survives the
+gate, which catches partial redactions.
 
 ## Status
 
 Phase 0: empty layout.
 Phase 1+: wire annotation schema.
-Phase 5: ✅ retrieval evaluator — 3 hand-labelled (paper, repo) pairs
-  in `annotations/` + `baselines/{embedding_only,lexical_only,
+Phase 5: ✅ retrieval evaluator — 8 hand-labelled (paper, repo) pairs
+  in `annotations/` (attention, BERT, LoRA, MAE, DDIM, DDPM, Reflexion, DPO) + `baselines/{embedding_only,lexical_only,
   hybrid_claim2code}.py` + `evaluate_retrieval.py`. Run via
   `make eval-retrieval` (requires live Postgres + OpenAI).
 Phase 6: ✅ verifier implemented — 4-status output
@@ -39,8 +200,8 @@ Phase 6: ✅ verifier implemented — 4-status output
   metrics) + LLMClient.verdict_for_claim residual. Acceptance
   rule (`paper_evidence AND code_evidence OR UNVERIFIED`) is
   enforced as the structural guard in `compose_verification`.
-  106 unit tests + 1 opt-in integration test cover the
-  pipeline. Wiring `evaluate_verification.py` is Phase 10's job.
+  Unit and opt-in integration tests cover the pipeline;
+  `evaluate_verification.py` supplies the curated-claim evaluation.
 Phase 7: ✅ related-work pipeline — SemanticScholarClient primary +
   OpenAlexClient fallback, 4-leg linear-combination ranker
   (semantic / recency / citation / method_overlap),
@@ -61,8 +222,9 @@ Phase 8: ✅ responsible-AI safety gate — `SafetyGate` wraps every
   `AnalysisState.errors` with `{stage, kind, pattern, span_count,
   ts}` — no content persisted. 57 adversarial tests
   (`pytest -m safety`); new CI job `backend-safety` gates
-  Phase 8. Wiring `evaluate_safety.py` (secret-leak + injection-
-  block rate vs target 100%) is Phase 10's job.
+  Phase 8. `evaluate_safety.py` measures secret protection and
+  injection detection, including held-out failures; detection does
+  not establish that a malicious instruction was blocked.
 Phase 9: ✅ OpenTelemetry spans + per-step metrics. Every workflow
   call opens a root span (`paper_workflow.run`,
   `verification_workflow.run`, `related_work_workflow.run`); child
@@ -81,4 +243,7 @@ Phase 9: ✅ OpenTelemetry spans + per-step metrics. Every workflow
   observability`); new CI job `backend-observability` gates
   Phase 9. Wiring `evaluate_observability.py` (per-leg latency
   distribution + token cost + violation rate) is Phase 10's job.
-Phase 10: full eval suite + measured numbers back into README.
+Phase 10: ✅ evaluators shipped — `evaluate_verification.py`,
+  `evaluate_safety.py`, `report.py`, `evaluate_all.py`; measured on 8
+  pairs (Attention, BERT, DDIM, DDPM, DPO, LoRA, MAE, Reflexion; 79 claims),
+  numbers in `report.md` and the top-level README.

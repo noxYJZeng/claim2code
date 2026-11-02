@@ -1,0 +1,184 @@
+{
+  "pair_id": "moco",
+  "paper": {
+    "title": "Momentum Contrast for Unsupervised Visual Representation Learning",
+    "authors": [
+      "He",
+      "Fan",
+      "Wu",
+      "Xie",
+      "Girshick"
+    ],
+    "year": 2020,
+    "venue": "CVPR",
+    "arxiv_id": "1911.05722",
+    "pdf_url": "https://openaccess.thecvf.com/content_CVPR_2020/papers/He_Momentum_Contrast_for_Unsupervised_Visual_Representation_Learning_CVPR_2020_paper.pdf",
+    "sha256": null
+  },
+  "repo": {
+    "url": "https://github.com/facebookresearch/moco",
+    "commit": "132aea9da9bb995a411c915c0420be3db62052f3",
+    "description": "Official PyTorch MOCO implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "moco/builder.py",
+        "start_line": 8,
+        "end_line": 8,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "development",
+    "review_scope": "Claims written 2026-10-29 for tuning verdict calibration; labels checked against the pinned repository source. Not part of the regression or coverage sets.",
+    "paper_evidence_verified": false
+  },
+  "claims": [
+    {
+      "claim_id": "moco_dev1",
+      "text": "MoCo uses a queue of 65536 negative keys, a key-encoder momentum of 0.999, and a softmax temperature of 0.07.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 109
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_moco.py",
+          "name": "--moco-k",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_moco.py",
+          "name": "--moco-m",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_moco.py",
+          "name": "--moco-t",
+          "kind": "config_schema"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "All three defaults match."
+    },
+    {
+      "claim_id": "moco_dev2",
+      "text": "MoCo pre-training uses SGD with learning rate 0.03, weight decay 1e-4 and batch size 256 for 200 epochs, multiplying the learning rate by 0.1 at epochs 120 and 160.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 164
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_moco.py",
+          "name": "--lr",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_moco.py",
+          "name": "--schedule",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_moco.py",
+          "name": "adjust_learning_rate",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "Defaults lr 0.03, wd 1e-4, batch 256, epochs 200, schedule [120,160] with x0.1 steps."
+    },
+    {
+      "claim_id": "moco_dev3",
+      "text": "MoCo v2 replaces the fc head with a two-layer MLP head, uses temperature 0.2, and uses a cosine learning-rate schedule.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 119
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "moco/builder.py",
+          "name": "__init__",
+          "kind": "function"
+        },
+        {
+          "file_path": "main_moco.py",
+          "name": "--mlp",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_moco.py",
+          "name": "--cos",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_moco.py",
+          "name": "adjust_learning_rate",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "MLP head and cosine schedule exist behind --mlp/--cos (off by default) and moco-t defaults to 0.07, not 0.2."
+    },
+    {
+      "claim_id": "moco_dev4",
+      "text": "MoCo linear classification trains for 100 epochs with learning rate 30 and no weight decay, dividing the learning rate by 10 at epochs 60 and 80.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 145
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_lincls.py",
+          "name": "--lr",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_lincls.py",
+          "name": "--schedule",
+          "kind": "config_schema"
+        },
+        {
+          "file_path": "main_lincls.py",
+          "name": "adjust_learning_rate",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "main_lincls defaults lr 30, wd 0, epochs 100, schedule [60,80]."
+    },
+    {
+      "claim_id": "moco_dev5",
+      "text": "MoCo sets the learning rate from its schedule at the start of every training epoch.",
+      "evidence_span": {
+        "section": "dev",
+        "page": 1,
+        "char_start": 0,
+        "char_end": 83
+      },
+      "relevant_symbols": [
+        {
+          "file_path": "main_moco.py",
+          "name": "main_worker",
+          "kind": "function"
+        },
+        {
+          "file_path": "main_moco.py",
+          "name": "adjust_learning_rate",
+          "kind": "function"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "notes": "adjust_learning_rate(optimizer, epoch, args) at the top of the epoch loop."
+    }
+  ]
+}

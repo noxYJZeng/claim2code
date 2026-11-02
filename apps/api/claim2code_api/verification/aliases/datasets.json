@@ -1,5 +1,6 @@
 {
-  "_doc": "Dataset name aliases. Same shape as models.json: key is the canonical lowercase form; values are alias variants. Used by DatasetNormalizer for the DATASET_MISMATCH discrepancy.",
+  "_doc": "Dataset name aliases. Same shape as models.json: key is the canonical lowercase form; values are alias variants. Used by DatasetNormalizer for the DATASET_MISMATCH discrepancy. The optional _members key maps a benchmark to its tasks: code naming a task (mnli) covers a paper naming the benchmark (glue).",
+  "_members": {"glue": ["mnli", "sst-2", "mrpc", "cola", "qnli", "qqp", "rte", "sts-b"]},
 
   "glue":                   ["GLUE", "glue", "GLUE benchmark", "the GLUE benchmark"],
   "squad":                  ["SQuAD", "squad", "Stanford Question Answering Dataset"],
@@ -17,5 +18,7 @@
   "coco":                   ["COCO", "coco", "Common Objects in Context"],
   "cifar-10":               ["CIFAR-10", "cifar-10", "CIFAR10"],
   "cifar-100":              ["CIFAR-100", "cifar-100", "CIFAR100"],
-  "wmt14":                  ["WMT14", "wmt14", "WMT 2014"]
+  "wmt14":                  ["WMT14", "wmt14", "WMT 2014"],
+  "mrpc":                   ["MRPC", "mrpc", "Microsoft Research Paraphrase Corpus"],
+  "sts-b":                  ["STS-B", "stsb", "sts-b", "Semantic Textual Similarity Benchmark"]
 }

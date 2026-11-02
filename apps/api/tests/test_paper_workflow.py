@@ -84,6 +84,12 @@ def _sample_claim() -> Claim:
     )
 
 
+@pytest.fixture(autouse=True)
+def no_existing_paper(monkeypatch: pytest.MonkeyPatch) -> None:
+    """By default no paper row holds the upload's sha256 yet."""
+    monkeypatch.setattr(workflow, "_find_paper", lambda db, sha: None)
+
+
 @pytest.fixture
 def tiny_pdf(tmp_path: Path) -> Path:
     return _make_pdf(tmp_path)
@@ -252,27 +258,57 @@ def test_workflow_records_error_on_extraction_failure(
 
 
 # ============================================================
-# run_paper_workflow — duplicate upload
+# run_paper_workflow — duplicate upload (sha256 dedup)
 # ============================================================
 
 
-def test_workflow_maps_duplicate_sha256_to_pdf_invalid(
+def test_workflow_returns_existing_analysis_for_parsed_duplicate(
     upload_dir: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A second upload with the same sha256 raises PdfInvalidError."""
+    """Re-uploading an already-parsed PDF returns its analysis, with
+    no new analysis row and no LLM call."""
     monkeypatch.setattr(workflow.storage, "upload_dir", lambda: upload_dir)
-    # We can't predict the sha256 of arbitrary bytes here without
-    # recomputing; instead we patch write_pdf itself.
-    monkeypatch.setattr(
-        workflow.storage, "write_pdf", MagicMock(side_effect=FileExistsError("dup"))
-    )
+    existing = MagicMock(parse_status="done", analysis_id="a-old", paper_id="p-old")
+    monkeypatch.setattr(workflow, "_find_paper", lambda db, sha: existing)
     db = MagicMock()
+    db.get.return_value = MagicMock(claims=[{"claim_id": "C1"}, {"claim_id": "C2"}])
 
-    with pytest.raises(PdfInvalidError, match="already uploaded"):
-        run_paper_workflow(
+    with patch.object(workflow, "extract_claims_from_paper") as fake_extract:
+        result = run_paper_workflow(
             db=db,
             llm=MagicMock(),
             upload_bytes=b"%PDF-1.4\n",
             filename="x.pdf",
             max_size_bytes=1024,
         )
+
+    assert (result.analysis_id, result.paper_id, result.n_claims) == ("a-old", "p-old", 2)
+    fake_extract.assert_not_called()
+    db.add.assert_not_called()
+
+
+def test_workflow_retries_duplicate_whose_parse_failed(
+    upload_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stale row from a failed parse is dropped and the PDF re-parsed,
+    reusing the file already on disk."""
+    monkeypatch.setattr(workflow.storage, "upload_dir", lambda: upload_dir)
+    pdf_bytes = _make_pdf(upload_dir.parent).read_bytes()
+    workflow.storage.write_pdf(workflow.storage.sha256_bytes(pdf_bytes), pdf_bytes)
+    stale = MagicMock(parse_status="error")
+    monkeypatch.setattr(workflow, "_find_paper", lambda db, sha: stale)
+    db = MagicMock()
+
+    with patch.object(workflow, "extract_claims_from_paper") as fake_extract:
+        fake_extract.return_value = [_sample_claim()]
+        result = run_paper_workflow(
+            db=db,
+            llm=MagicMock(),
+            upload_bytes=pdf_bytes,
+            filename="tiny.pdf",
+            max_size_bytes=10 * 1024 * 1024,
+        )
+
+    db.delete.assert_called_once_with(stale)
+    assert result.parse_status == "done"
+    assert result.n_claims == 1

@@ -26,9 +26,10 @@ The migration does two things:
 Schema notes
 ------------
 
-  - ``embedding VECTOR(1536)`` — hard-coded to match
-    ``Settings.openai_embed_dim`` (Phase 1 polish). If the user
-    changes dimensionality the migration must be revisited.
+  - ``embedding VECTOR(openai_embed_dim)`` — read from
+    ``Settings.openai_embed_dim`` at migration time (1536 for
+    ``text-embedding-3-small``, 768 for local nomic-embed). Changing
+    dimensionality on an existing DB still needs a re-migration.
   - Denormalised ``repository_id`` + ``analysis_id`` so the
     retriever's cosine query is a one-table SELECT (no join
     through ``code_symbols``).
@@ -55,6 +56,8 @@ import sqlalchemy as sa
 from alembic import op
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects import postgresql
+
+from claim2code_api.app.config import get_settings
 
 revision: str = "0004_code_embeddings"
 down_revision: str | None = "0003_repositories"
@@ -104,7 +107,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "embedding",
-            Vector(dim=1536),
+            Vector(dim=get_settings().openai_embed_dim),
             nullable=False,
         ),
         sa.Column(

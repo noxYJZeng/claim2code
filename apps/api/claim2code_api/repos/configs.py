@@ -19,12 +19,19 @@ from __future__ import annotations
 
 import configparser
 import json
+import re
 import tomllib
 from pathlib import Path
 
 import yaml
 
-from claim2code_api.repos.schemas import ConfigFormat, RepositoryConfig
+from claim2code_api.repos.schemas import (
+    CodeLanguage,
+    CodeSymbol,
+    CodeSymbolKind,
+    ConfigFormat,
+    RepositoryConfig,
+)
 
 _YAML_EXTS = {".yaml", ".yml"}
 _JSON_EXTS = {".json"}
@@ -135,3 +142,51 @@ def parse_config_file(path: Path, file_path: str) -> RepositoryConfig:
         size_bytes=size,
         content_json=content,
     )
+
+
+# Config files above this size are data (tokenizer vocabularies, HF
+# ``config.json`` dumps of every layer), not experiment settings, and
+# would swamp retrieval; they stay browsable as RepositoryConfig rows.
+_CONFIG_SYMBOL_MAX_BYTES = 16 * 1024
+_CONFIG_SIGNATURE_CAP = 2000
+
+
+def config_symbol(cfg: RepositoryConfig, text: str) -> CodeSymbol | None:
+    """Return one ``CONFIG_SCHEMA`` symbol spanning a parsed config file.
+
+    Experiment settings often live only in config files (e.g. Hydra's
+    ``config/loss/dpo.yaml``), so retrieval must see them like code.
+    The symbol covers the whole file, so the verifier reads it verbatim
+    (comments included); the signature flattens the leaves to
+    ``a.b: value`` pairs for the lexical index, and the docstring spells
+    the path out as words (``config loss dpo yaml``).
+
+    Returns ``None`` for unparsed, empty, or oversized files.
+    """
+    if cfg.error or not cfg.content_json or cfg.size_bytes > _CONFIG_SYMBOL_MAX_BYTES:
+        return None
+    pairs = [f"{key}: {value}" for key, value in _flatten(cfg.content_json)]
+    signature = "; ".join(pairs)[:_CONFIG_SIGNATURE_CAP]
+    words = " ".join(w for w in re.split(r"[^A-Za-z0-9]+", cfg.file_path) if w)
+    return CodeSymbol(
+        kind=CodeSymbolKind.CONFIG_SCHEMA,
+        language=CodeLanguage.CONFIG,
+        file_path=cfg.file_path,
+        start_line=1,
+        start_col=0,
+        end_line=max(1, len(text.splitlines())),
+        end_col=0,
+        name=cfg.file_path,
+        signature=signature,
+        docstring=f"Config file {words}",
+    )
+
+
+def _flatten(node: object, prefix: str = "") -> list[tuple[str, str]]:
+    """Flatten nested dicts to ``(dotted.key, value)`` leaf pairs."""
+    if isinstance(node, dict):
+        out: list[tuple[str, str]] = []
+        for key, value in node.items():
+            out.extend(_flatten(value, f"{prefix}.{key}" if prefix else str(key)))
+        return out
+    return [(prefix or "_root", str(node))]

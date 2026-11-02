@@ -11,14 +11,17 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from claim2code_api import __version__
 from claim2code_api.app.config import get_settings
 from claim2code_api.db.session import check_db_ready
 from claim2code_api.literature.router import router as related_work_router
+from claim2code_api.llm.router import router as llm_router
 from claim2code_api.papers.router import router as papers_router
 from claim2code_api.repos.router import router as repos_router
 from claim2code_api.verification.router import router as verification_router
@@ -83,6 +86,14 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.middleware("http")
+    async def enforce_read_only(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        # A public demo can expose saved results without permitting
+        # uploads, clones, inference, provider changes or DB writes.
+        if settings.api_read_only and request.method not in {"GET", "HEAD", "OPTIONS"}:
+            return JSONResponse({"detail": "This API is read-only"}, status_code=403)
+        return await call_next(request)
+
     @app.get("/health", tags=["health"])
     def health() -> dict[str, str]:
         return {"status": "ok", "version": __version__}
@@ -101,6 +112,7 @@ def create_app() -> FastAPI:
     app.include_router(repos_router)
     app.include_router(verification_router)
     app.include_router(related_work_router)
+    app.include_router(llm_router)
     return app
 
 

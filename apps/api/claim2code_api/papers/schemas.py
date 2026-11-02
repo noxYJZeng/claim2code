@@ -76,9 +76,9 @@ class PaperEvidence(BaseModel):
 class Claim(BaseModel):
     """One structured technical claim extracted from the paper.
 
-    ``claim_id`` is generated client-side (UUID4 string) so the
-    server can idempotently merge LLM re-runs into the existing
-    claims list without re-numbering.
+    ``claim_id`` is assigned after extraction (``C1``..``Cn`` in
+    paper order) by :meth:`LLMClient.extract_claims`; whatever id
+    the model emitted is discarded.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -210,3 +210,22 @@ class ErrorResponse(BaseModel):
 
     error: str
     detail: str | None = None
+
+
+class PaperExcerptResponse(BaseModel):
+    """Response body for ``GET /analyses/{id}/paper/excerpt``.
+
+    ``image`` is a ``data:image/png;base64,...`` URL of the cited region
+    (or the whole page) with the quote highlighted. ``page`` is where
+    the quote was found, which can differ from the cited page when the
+    extractor's page number was off; ``found=false`` means the quote was
+    not located and ``image`` shows the cited page unmarked.
+    """
+
+    page: int = Field(ge=1)
+    n_pages: int = Field(ge=1)
+    found: bool
+    image: str
+    width: int
+    height: int
+

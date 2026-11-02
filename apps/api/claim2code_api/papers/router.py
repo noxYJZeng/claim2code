@@ -21,24 +21,30 @@ response body matches the per-endpoint contract):
 """
 from __future__ import annotations
 
+import base64
+from pathlib import Path
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile  # noqa: B008
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile  # noqa: B008
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from claim2code_api.app.config import Settings, get_settings
 from claim2code_api.app.deps import get_db
 from claim2code_api.db.models import AnalysisState, Paper
 from claim2code_api.llm.client import LLMClient, get_llm_client
+from claim2code_api.papers import storage
 from claim2code_api.papers.exceptions import (
     ClaimExtractionError,
     PdfInvalidError,
     PdfNoTextLayerError,
     PdfTooLargeError,
 )
+from claim2code_api.papers.excerpt import render_excerpt
 from claim2code_api.papers.schemas import (
     ClaimsResponse,
     ErrorResponse,
+    PaperExcerptResponse,
     PaperMetadataResponse,
     PaperUploadResponse,
 )
@@ -179,4 +185,63 @@ def get_claims(
     )
 
 
-__all__ = ["router", "upload_paper", "get_paper", "get_claims"]
+# ----------------------------------------------------------------------
+# GET /analyses/{analysis_id}/paper/pdf  and  /paper/excerpt
+# ----------------------------------------------------------------------
+
+
+def _paper_pdf(db: Session, analysis_id: UUID) -> tuple[Paper, Path]:
+    row = db.query(Paper).filter(Paper.analysis_id == analysis_id).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"no paper for analysis {analysis_id}")
+    path = storage.path_for(row.sha256)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="the uploaded PDF is no longer stored")
+    return row, path
+
+
+@router.get(
+    "/analyses/{analysis_id}/paper/pdf",
+    response_class=FileResponse,
+    responses={404: {"model": ErrorResponse, "description": "Paper not found"}},
+)
+def get_paper_pdf(
+    analysis_id: UUID,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> FileResponse:
+    """The uploaded PDF, served inline (append ``#page=N`` to jump)."""
+    row, path = _paper_pdf(db, analysis_id)
+    return FileResponse(
+        path, media_type="application/pdf", filename=row.filename,
+        content_disposition_type="inline",
+    )
+
+
+@router.get(
+    "/analyses/{analysis_id}/paper/excerpt",
+    response_model=PaperExcerptResponse,
+    responses={404: {"model": ErrorResponse, "description": "Paper not found"}},
+)
+def get_paper_excerpt(
+    analysis_id: UUID,
+    page: int = Query(ge=1),
+    quote: str = Query(min_length=1, max_length=4000),
+    full: bool = False,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> PaperExcerptResponse:
+    """The part of the paper a claim cites, rendered with the quote highlighted."""
+    _row, path = _paper_pdf(db, analysis_id)
+    excerpt = render_excerpt(path, page=page, quote=quote, full_page=full)
+    return PaperExcerptResponse(
+        page=excerpt.page,
+        n_pages=excerpt.n_pages,
+        found=excerpt.found,
+        image="data:image/png;base64," + base64.b64encode(excerpt.png).decode("ascii"),
+        width=excerpt.width,
+        height=excerpt.height,
+    )
+
+
+__all__ = [
+    "router", "upload_paper", "get_paper", "get_claims", "get_paper_pdf", "get_paper_excerpt",
+]

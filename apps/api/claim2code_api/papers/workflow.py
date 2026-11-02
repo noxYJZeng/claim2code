@@ -4,7 +4,8 @@ Implements the steps from ``docs/architecture/phase-2-design.md``
 §2.5. The whole workflow runs inside one request:
 
   1. Validate upload (size, magic bytes)
-  2. Compute sha256, write to disk
+  2. Compute sha256; return the existing analysis if this PDF was
+     already parsed, else write it to disk
   3. INSERT Paper row (parse_status='parsing')
   4. UPDATE AnalysisState.paper_status='parsing'
   5. PyMuPDF → Paper
@@ -116,20 +117,30 @@ def run_paper_workflow(
         _validate_upload(upload_bytes, max_size_bytes)
         root_span.set_attribute("paper.upload_validated", True)
 
+        sha = storage.sha256_bytes(upload_bytes)
+        existing = _find_paper(db, sha)
+        if existing is not None and existing.parse_status == "done":
+            # sha256 is the dedup key (phase-2-design.md §2.4): the same
+            # PDF returns the analysis that already holds its claims.
+            root_span.set_attribute("paper.dedup_hit", True)
+            return _existing_result(db, existing)
+        if existing is not None:
+            # An earlier parse failed; drop its row so this upload retries.
+            db.delete(existing)
+            db.flush()
+
         analysis_id = _create_analysis(db)
         root_span.set_attribute("paper.analysis_id", str(analysis_id))
         paper_id: UUID | None = None
         try:
-            sha = storage.sha256_bytes(upload_bytes)
-            # ``write_pdf`` is atomic (exclusive create). A duplicate
-            # upload is detected here and surfaces as FileExistsError,
-            # which we map to PdfInvalidError.
+            # ``write_pdf`` is atomic (exclusive create). The file is
+            # content-addressed, so one that already exists (left by an
+            # upload whose extraction failed and rolled back, or by a
+            # deleted analysis) holds these exact bytes: reuse it.
             try:
                 storage.write_pdf(sha, upload_bytes)
-            except FileExistsError as exc:
-                raise PdfInvalidError(
-                    "A paper with this sha256 was already uploaded; dedup not yet wired"
-                ) from exc
+            except FileExistsError:
+                pass
 
             paper_id = _insert_paper_row(
                 db,
@@ -202,6 +213,22 @@ def run_paper_workflow(
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
+
+
+def _find_paper(db: Session, sha256: str) -> Paper | None:
+    """Return the paper row already stored under ``sha256``, if any."""
+    return db.query(Paper).filter(Paper.sha256 == sha256).one_or_none()
+
+
+def _existing_result(db: Session, paper: Paper) -> WorkflowResult:
+    """Summarise an already-parsed paper as this upload's result."""
+    state = db.get(AnalysisState, paper.analysis_id)
+    return WorkflowResult(
+        analysis_id=paper.analysis_id,
+        paper_id=paper.paper_id,
+        parse_status=paper.parse_status,
+        n_claims=len(state.claims or []) if state is not None else 0,
+    )
 
 
 def _create_analysis(db: Session) -> UUID:

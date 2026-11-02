@@ -33,6 +33,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy import func
@@ -47,8 +48,9 @@ from claim2code_api.db.models import (
 )
 from claim2code_api.indexing.indexer import embed_and_persist_symbols
 from claim2code_api.repos import cloner
-from claim2code_api.repos.configs import parse_config_file
+from claim2code_api.repos.configs import config_symbol, parse_config_file
 from claim2code_api.repos.exceptions import (  # noqa: F401  — referenced in docstrings
+    RepoAlreadyExistsError,
     RepoCloneError,
     RepoInvalidUrlError,
     RepoTooLargeError,
@@ -89,19 +91,25 @@ def run_repo_workflow(
     db: Session,
     analysis_id: UUID,
     url: str,
+    exclude_paths: list[str] | None = None,
 ) -> RepoWorkflowResult:
     """Execute the clone + walk + parse + persist pipeline for one repo.
 
     :param db: a SQLAlchemy session (caller owns the lifecycle).
     :param analysis_id: the analysis this repo is bound to.
     :param url: a GitHub URL (``https://github.com/<owner>/<repo>``).
+    :param exclude_paths: repo-relative paths / globs to skip while
+        walking (see :func:`storage.walk_repo_files`).
 
     :raises RepoInvalidUrlError: URL is malformed or non-GitHub.
+    :raises RepoAlreadyExistsError: a non-``error`` row for the same
+        ``owner/name`` exists.
     :raises RepoTooLargeError: GitHub-reported size exceeds the cap.
     :raises RepoCloneError: ``git clone`` failed.
     """
     # Validate URL — this raises RepoInvalidUrlError (mapped to 422).
     parsed = cloner.parse_github_url(url)
+    _clear_failed_repository(db, parsed.owner, parsed.name)
 
     # Insert a placeholder Repository row so we have an id to thread
     # through status updates. Use ``init`` to get the PK without a
@@ -138,6 +146,7 @@ def run_repo_workflow(
             db=db,
             repository_id=repository_id,
             clone_path=clone_result.clone_path,
+            exclude_paths=exclude_paths,
         )
 
         # 10-11. Mark done.
@@ -180,6 +189,37 @@ def run_repo_workflow(
         raise
 
 
+def _clear_failed_repository(db: Session, owner: str, name: str) -> None:
+    """Make room for a fresh ingest of ``owner/name``.
+
+    ``(owner, name)`` is UNIQUE, and a failed ingest leaves its row in
+    ``index_status='error'`` (plus a partial clone on disk), so every
+    retry used to die on the INSERT with a UniqueViolation. Such a row
+    is dead — delete it (FKs cascade its symbols / configs) and its
+    clone. Any other status is a live or in-progress ingest: refuse.
+    """
+    existing = (
+        db.query(Repository)
+        .filter(Repository.owner == owner, Repository.name == name)
+        .one_or_none()
+    )
+    if existing is None:
+        return
+    if existing.index_status != "error":
+        raise RepoAlreadyExistsError(existing.repository_id, existing.index_status)
+    logger.info(
+        "replacing failed repository %s/%s (%s): %s",
+        owner,
+        name,
+        existing.repository_id,
+        existing.error,
+    )
+    clone_path = Path(existing.clone_path)
+    db.delete(existing)
+    db.commit()
+    cloner.remove_clone(clone_path)
+
+
 # ----------------------------------------------------------------------
 # Walk + parse
 # ----------------------------------------------------------------------
@@ -190,6 +230,7 @@ def _walk_and_persist(
     db: Session,
     repository_id: UUID,
     clone_path,
+    exclude_paths: list[str] | None = None,
 ) -> tuple[int, int, int, int]:
     """Walk the clone, dispatch to extractors, return counts.
 
@@ -203,7 +244,7 @@ def _walk_and_persist(
     """
     from pathlib import Path  # local import to avoid circular import at module load
 
-    files = walk_repo_files(Path(clone_path))
+    files = walk_repo_files(Path(clone_path), exclude_paths=exclude_paths)
     n_files = len(files)
     n_symbols = 0
     n_configs = 0
@@ -217,7 +258,9 @@ def _walk_and_persist(
         if cls.mode == "source":
             n_symbols += _extract_symbols(db, repository_id, wf, name_to_symbol_id)
         elif cls.mode == "config":
-            n_configs += _extract_config(db, repository_id, wf)
+            configs, symbols = _extract_config(db, repository_id, wf)
+            n_configs += configs
+            n_symbols += symbols
         elif cls.mode == "lockfile":
             n_deps += _extract_lockfile(db, repository_id, wf)
 
@@ -251,7 +294,8 @@ def _extract_symbols(
         sym.file_path = wf.relative_path
 
     inserted = 0
-    file_methods: list[tuple[str, UUID, UUID | None]] = []
+    class_rows: list[CodeSymbol] = []
+    method_rows: list[CodeSymbol] = []
     for sym in symbols:
         row = CodeSymbol(
             repository_id=repository_id,
@@ -272,11 +316,23 @@ def _extract_symbols(
         # Track class rows so methods can pick up parent_symbol_id later.
         if sym.kind.value == "class":
             name_to_symbol_id[(sym.file_path, sym.name)] = row.symbol_id
+            class_rows.append(row)
         elif sym.kind.value == "method":
-            # Best-effort: methods always have a class parent in Python
-            # (the walker guarantees this). We record the relationship
-            # after the loop when classes are also persisted.
-            file_methods.append((sym.name, row.symbol_id, None))
+            method_rows.append(row)
+
+    # Link each method to the innermost class in this file whose line
+    # range encloses it. Line containment works for every parsed
+    # language and handles nested / same-named classes, which a
+    # name lookup cannot.
+    for method in method_rows:
+        enclosing = [
+            c
+            for c in class_rows
+            if c.start_line <= method.start_line and method.end_line <= c.end_line
+        ]
+        if enclosing:
+            parent = max(enclosing, key=lambda c: c.start_line)
+            method.parent_symbol_id = parent.symbol_id
     return inserted
 
 
@@ -284,13 +340,18 @@ def _extract_config(
     db: Session,
     repository_id: UUID,
     wf: WalkedFile,
-) -> int:
-    """Parse one config file and persist a RepositoryConfig row."""
+) -> tuple[int, int]:
+    """Parse one config file and persist a RepositoryConfig row.
+
+    Small parsed configs also get one CodeSymbol (see
+    :func:`config_symbol`) so retrieval can surface them. Returns
+    ``(n_configs, n_symbols)`` persisted.
+    """
     try:
         cfg = parse_config_file(wf.absolute_path, wf.relative_path)
     except Exception as exc:  # noqa: BLE001
         logger.warning("config parse failed for %s: %s", wf.relative_path, exc)
-        return 0
+        return 0, 0
     row = RepositoryConfig(
         repository_id=repository_id,
         file_path=cfg.file_path,
@@ -301,7 +362,28 @@ def _extract_config(
     )
     db.add(row)
     db.flush()
-    return 1
+
+    text = wf.absolute_path.read_text(encoding="utf-8", errors="replace")
+    sym = config_symbol(cfg, text)
+    if sym is None:
+        return 1, 0
+    db.add(
+        CodeSymbol(
+            repository_id=repository_id,
+            kind=sym.kind.value,
+            language=sym.language.value,
+            file_path=sym.file_path,
+            start_line=sym.start_line,
+            start_col=sym.start_col,
+            end_line=sym.end_line,
+            end_col=sym.end_col,
+            name=sym.name,
+            signature=sym.signature,
+            docstring=sym.docstring,
+        )
+    )
+    db.flush()
+    return 1, 1
 
 
 def _extract_lockfile(

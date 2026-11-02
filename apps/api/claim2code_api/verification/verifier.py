@@ -14,8 +14,10 @@ in.
 """
 from __future__ import annotations
 
+import re
+
 from claim2code_api.papers.schemas import Claim
-from claim2code_api.repos.schemas import RetrieveMatch
+from claim2code_api.repos.schemas import RetrieveMatch, SourceSpan
 from claim2code_api.verification.discrepancies import (
     determine_status,
     merge_discrepancies,
@@ -29,6 +31,7 @@ from claim2code_api.verification.normalizers import (
     ModelNameNormalizer,
 )
 from claim2code_api.verification.schemas import (
+    CodeEvidence,
     Discrepancy,
     Verification,
 )
@@ -70,6 +73,106 @@ def extract_verdict(
     )
 
 
+def _validated_code_evidence(
+    evidence: list[CodeEvidence], candidates: list[RetrieveMatch],
+) -> list[CodeEvidence]:
+    """Keep citations whose quotes occur in source the verifier was shown.
+
+    The located sources are each candidate's body and the setup/callee
+    methods attached to it as context (``context_spans``), all read
+    from the clone with their real file and line range. A citation is
+    kept at its stated lines when the quote is there. Otherwise the
+    quote is looked up across all located sources: a model often copies
+    the right code under the wrong candidate's ``symbol_id`` or a few
+    lines off. If it occurs, the citation is moved to the occurrence
+    nearest its stated lines (same file first); a tie is ambiguous and
+    dropped. A quote that occurs nowhere is dropped, so invented code
+    never survives. Free-form text without a location (signature,
+    docstring) cannot establish one, and missing source fails closed.
+    """
+    spans = _located_spans(candidates)
+    valid: list[CodeEvidence] = []
+    seen = set()
+    for citation in evidence:
+        quote = _squash(citation.quote)
+        if not quote:
+            continue
+        located = _locate(citation, quote, spans)
+        if located is None:
+            continue
+        span, start, end = located
+        identity = (span.file_path, start, end, quote)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        valid.append(citation.model_copy(update={
+            "symbol_id": span.symbol_id, "file_path": span.file_path,
+            "start_line": start, "end_line": end,
+        }))
+    return valid
+
+
+def _located_spans(candidates: list[RetrieveMatch]) -> list[SourceSpan]:
+    spans: list[SourceSpan] = []
+    for c in candidates:
+        if c.source:
+            spans.append(SourceSpan(
+                symbol_id=c.symbol_id, file_path=c.file_path,
+                start_line=c.start_line, end_line=c.end_line, name=c.name, source=c.source,
+            ))
+        spans.extend(c.context_spans)
+    return spans
+
+
+def _locate(
+    citation: CodeEvidence, quote: str, spans: list[SourceSpan],
+) -> tuple[SourceSpan, int, int] | None:
+    """Where ``quote`` sits: the stated lines if it is there, else the nearest occurrence."""
+    # A model sometimes appends the line range to the path ("m.py:10-12").
+    cited_file = citation.file_path.split(":", 1)[0]
+    for span in spans:
+        if span.file_path != cited_file or not (
+            span.start_line <= citation.start_line <= citation.end_line <= span.end_line
+        ):
+            continue
+        lines = span.source.splitlines()
+        first = citation.start_line - span.start_line
+        last = citation.end_line - span.start_line + 1
+        if 0 <= first < last <= len(lines) and quote in _squash("\n".join(lines[first:last])):
+            return span, citation.start_line, citation.end_line
+    found: dict[tuple[str, int, int], SourceSpan] = {}
+    for span in spans:
+        for start, end in _occurrences(quote, span):
+            found.setdefault((span.file_path, start, end), span)
+    if not found:
+        return None
+    same_file = [k for k in found if k[0] == cited_file]
+    keys = same_file or list(found)
+    distance = {k: abs(k[1] - citation.start_line) for k in keys}
+    best = min(distance.values())
+    nearest = [k for k in keys if distance[k] == best]
+    if len(nearest) != 1:
+        return None
+    _, start, end = nearest[0]
+    return found[nearest[0]], start, end
+
+
+def _occurrences(quote: str, span: SourceSpan) -> list[tuple[int, int]]:
+    """Smallest line ranges of ``span`` whose text contains ``quote``."""
+    lines = span.source.splitlines()
+    out: list[tuple[int, int]] = []
+    for i in range(len(lines)):
+        if quote not in _squash("\n".join(lines[i:])):
+            break  # no later start can match either
+        for j in range(i + 1, len(lines) + 1):
+            if quote in _squash("\n".join(lines[i:j])):
+                # Minimal: dropping the first line loses the match.
+                if not (j - i > 1 and quote in _squash("\n".join(lines[i + 1:j]))):
+                    out.append((span.start_line + i, span.start_line + j - 1))
+                break
+    return out
+
+
 def compose_verification(
     *,
     claim: Claim,
@@ -97,12 +200,23 @@ def compose_verification(
     synthesise one from the discrepancies ("Claim X; Y
     discrepancies found; no LLM verdict").
     """
+    submitted_evidence = llm_verdict.code_evidence if llm_verdict else []
+    code_evidence = _validated_code_evidence(submitted_evidence, candidates)
     llm_emitted = llm_verdict.discrepancies if llm_verdict else []
+    if not code_evidence:
+        # Without code evidence the verdict is UNVERIFIED by the
+        # structural guard; LLM "discrepancies" there are just "no
+        # code found" restated (often as HIGH), which reads as a real
+        # mismatch in the report. Keep only the deterministic ones.
+        llm_emitted = []
+    llm_emitted = [
+        d for d in llm_emitted
+        if _quote_in_candidates(d.code_quote, candidates) and not _UNSEEN_RE.search(d.detail)
+    ]
     all_discrepancies = merge_discrepancies(
         deterministic=deterministic_discrepancies,
         llm_emitted=llm_emitted,
     )
-    code_evidence = llm_verdict.code_evidence if llm_verdict else []
     hyperparameters = llm_verdict.hyperparameters if llm_verdict else []
     explanation = (
         llm_verdict.explanation
@@ -112,6 +226,9 @@ def compose_verification(
         )
     )
     confidence = llm_verdict.confidence if llm_verdict else 0.0
+    if submitted_evidence and not code_evidence:
+        explanation = "No source-validated code citation was retained; evidence is insufficient."
+        confidence = 0.0
 
     status = determine_status(
         has_code_evidence=bool(code_evidence),
@@ -163,6 +280,35 @@ def run_deterministic_checkers(
         claim_text=claim.text, candidates=candidates,
     )
     return [*hp, *model, *dataset, *metric]
+
+
+# A discrepancy whose detail says the code is not visible, provided or is
+# truncated reports what the prompt did not show, not a mismatch: rule 7 of
+# the verify prompt calls that silence. The model still emits these with a
+# neighbouring quote, so they are dropped like unquoted ones.
+_UNSEEN_RE = re.compile(
+    r"\b(?:not\s+(?:explicitly\s+|fully\s+|directly\s+)?"
+    r"(?:visible|shown|provided|included|present\s+in\s+the\s+provided)"
+    r"|truncated|cut\s+off)\b",
+    re.IGNORECASE,
+)
+
+
+def _quote_in_candidates(quote: str | None, candidates: list[RetrieveMatch]) -> bool:
+    """True when ``quote`` occurs (whitespace-insensitively) in a candidate.
+
+    An LLM discrepancy must point at code that conflicts with the
+    claim; one without such a quote only says the code is silent,
+    which rule 7 of the verify prompt says is not a discrepancy.
+    """
+    needle = _squash(quote or "")
+    if not needle:
+        return False
+    return any(needle in _squash(span.source) for span in _located_spans(candidates))
+
+
+def _squash(text: str) -> str:
+    return " ".join(text.split())
 
 
 def _synthesise_explanation(

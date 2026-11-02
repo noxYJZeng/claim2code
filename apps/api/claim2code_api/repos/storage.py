@@ -20,6 +20,7 @@ inspects disk.
 
 from __future__ import annotations
 
+import fnmatch
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,8 +28,9 @@ from claim2code_api.app.config import get_settings
 from claim2code_api.repos.cloner import data_repos_root
 
 # File extensions that should be parsed for code symbols. Matches the
-# v1 grammar list (Python, JS, TS, Java, Go, Rust) — C / C++ / PHP /
-# Ruby / Kotlin / Swift / Scala are deferred (see phase-3-design.md §3).
+# v1 grammar list (Python, JS, TS, Java, Go, Rust) plus shell launch
+# scripts — C / C++ / PHP / Ruby / Kotlin / Swift / Scala are deferred
+# (see phase-3-design.md §3).
 SOURCE_EXTENSIONS: set[str] = {
     ".py",
     ".js",
@@ -40,6 +42,8 @@ SOURCE_EXTENSIONS: set[str] = {
     ".java",
     ".go",
     ".rs",
+    ".sh",
+    ".bash",
 }
 
 # Config file extensions. Each maps to a single format.
@@ -129,10 +133,37 @@ class WalkedFile:
     size_bytes: int
 
 
+def resolve_repo_file(clone_path: Path, relative_path: str) -> Path | None:
+    """Find a regular clone file without following repository symlinks.
+
+    Repository paths are untrusted even when they came from indexed
+    symbols. Apply this boundary again at later source-reading sites.
+    """
+    try:
+        if clone_path.is_symlink():
+            return None
+        root = clone_path.resolve(strict=True)
+        relative = Path(relative_path)
+        if not root.is_dir() or relative.is_absolute() or ".." in relative.parts:
+            return None
+        target = root
+        for part in relative.parts:
+            target = target / part
+            if target.is_symlink():
+                return None
+        target = target.resolve(strict=True)
+        if not target.is_relative_to(root) or not target.is_file():
+            return None
+        return target
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
 def walk_repo_files(
     clone_path: Path,
     *,
     ignore_dirs: list[str] | None = None,
+    exclude_paths: list[str] | None = None,
     max_file_kb: int | None = None,
     max_files: int | None = None,
 ) -> list[WalkedFile]:
@@ -144,6 +175,10 @@ def walk_repo_files(
         ignore_dirs: Directory basenames to skip (default:
             :attr:`Settings.repo_parse_ignore_dirs`). A leading
             ``.git`` is always skipped.
+        exclude_paths: Repo-relative paths or ``fnmatch`` globs to skip
+            (e.g. ``examples/NLU/src/transformers`` for a vendored
+            copy of a library). A pattern naming a directory also
+            excludes everything under it.
         max_file_kb: Per-file size cap in KiB (default:
             :attr:`Settings.max_file_kb`).
         max_files: Cap on the total number of files returned (default:
@@ -162,30 +197,42 @@ def walk_repo_files(
     cap_kb = max_file_kb if max_file_kb is not None else settings.max_file_kb
     cap_files = max_files if max_files is not None else settings.max_repo_files
     cap_bytes = cap_kb * 1024
+    exclude = [p.strip("/") for p in (exclude_paths or []) if p.strip("/")]
 
     if not clone_path.exists():
         return []
 
     out: list[WalkedFile] = []
     for path in clone_path.rglob("*"):
-        if not path.is_file():
-            continue
         # Skip if any parent directory is in the ignore list. The
         # parent check matters because ``node_modules`` appears deep
         # in many repos.
         if any(part in ignore for part in path.parts):
             continue
+        rel = path.relative_to(clone_path).as_posix()
+        if exclude and _is_excluded(rel, exclude):
+            continue
+        safe_path = resolve_repo_file(clone_path, rel)
+        if safe_path is None:
+            continue
         try:
-            size = path.stat().st_size
+            size = safe_path.stat().st_size
         except OSError:
             continue
         if size > cap_bytes:
             continue
-        rel = path.relative_to(clone_path).as_posix()
-        out.append(WalkedFile(absolute_path=path, relative_path=rel, size_bytes=size))
+        out.append(WalkedFile(absolute_path=safe_path, relative_path=rel, size_bytes=size))
         if len(out) >= cap_files:
             break
     return out
+
+
+def _is_excluded(rel_path: str, patterns: list[str]) -> bool:
+    """True if ``rel_path`` matches a pattern or lies under one."""
+    for pat in patterns:
+        if fnmatch.fnmatch(rel_path, pat) or fnmatch.fnmatch(rel_path, pat + "/*"):
+            return True
+    return False
 
 
 __all__ = [
@@ -197,5 +244,6 @@ __all__ = [
     "WalkedFile",
     "classify_file",
     "data_repos_root",
+    "resolve_repo_file",
     "walk_repo_files",
 ]

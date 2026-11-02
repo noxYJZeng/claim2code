@@ -88,16 +88,18 @@ class CodeEvidence(BaseModel):
     ``docs/specs/spec-summary.md:148-150``) means each
     ``CodeEvidence`` entry must:
 
-      - reference a ``symbol_id`` that appears in the candidate
-        list provided to the LLM;
-      - carry a ``quote`` that is a verbatim substring of that
-        candidate's ``signature`` or ``docstring``;
-      - cite a ``file_path`` / line range that matches the
-        candidate.
+      - carry a ``quote`` found (ignoring whitespace formatting) in
+        source the LLM was shown: a candidate's body or the setup /
+        callee methods attached to it, read from the clone;
+      - point at the lines where that quote actually is.
 
-    Empty ``code_evidence`` is permitted at the schema level;
-    the structural guard in :func:`compose_verification` coerces
-    such verifications to ``UNVERIFIED``.
+    The composition layer moves a real quote cited under the wrong
+    symbol or lines to its actual location, taking ``symbol_id``,
+    file path and line range from the source it was found in, and
+    removes unverifiable citations, including those whose source
+    cannot be read. Empty ``code_evidence`` is
+    permitted at the schema level; after validation the structural
+    guard coerces evidence-free verifications to ``UNVERIFIED``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -117,6 +119,12 @@ class Discrepancy(BaseModel):
     lr=1e-3"``). Discrepancies are emitted by both the
     deterministic checkers (with a fixed ``type`` /
     ``severity`` pair) and the LLM (with the LLM's own choice).
+
+    ``code_quote`` is the verbatim candidate code that conflicts
+    with the claim. The LLM must supply it; an LLM discrepancy
+    whose quote is not found in any candidate is dropped at
+    composition time (it is "the code doesn't show X" restated).
+    Deterministic checkers leave it ``None``.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -124,6 +132,7 @@ class Discrepancy(BaseModel):
     type: DiscrepancyType
     severity: DiscrepancySeverity
     detail: str = Field(min_length=1)
+    code_quote: str | None = None
 
 
 class HyperparameterEvidence(BaseModel):
@@ -183,13 +192,15 @@ class VerificationRunRequest(BaseModel):
     """Optional request body for ``POST /analyses/{id}/verifications``.
 
     Empty body / no body → verify all extracted claims with
-    ``top_k=5`` (matches Phase 5's ``RetrieveRequest`` defaults).
+    ``top_k=8``: paper prose ranks the implementing symbol 6th-8th
+    often enough (e.g. a sampler named ``generalized_steps`` for a
+    claim about σ_t = 0) that 5 candidates miss it.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     claim_ids: list[str] | None = None
-    top_k: int = Field(default=5, ge=1, le=20)
+    top_k: int = Field(default=8, ge=1, le=20)
 
 
 class VerificationRunResponse(BaseModel):
@@ -219,3 +230,27 @@ class VerificationListResponse(BaseModel):
 
     analysis_id: UUID
     verifications: list[Verification]
+
+
+class CodeLine(BaseModel):
+    number: int = Field(ge=1)
+    text: str
+
+
+class CodeExcerpt(BaseModel):
+    """Response body for ``GET /analyses/{id}/code``.
+
+    The lines a citation points at, read from the cloned repository,
+    plus ``context`` lines either side. ``start_line`` / ``end_line``
+    are the cited range (clamped to the file); ``lines`` covers the
+    wider window. ``url`` links the cited range on the forge, pinned
+    to the cloned commit when it is known.
+    """
+
+    file_path: str
+    start_line: int = Field(ge=1)
+    end_line: int = Field(ge=1)
+    total_lines: int = Field(ge=0)
+    lines: list[CodeLine]
+    url: str | None = None
+

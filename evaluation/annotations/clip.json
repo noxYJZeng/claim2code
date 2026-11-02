@@ -1,0 +1,190 @@
+{
+  "pair_id": "clip",
+  "paper": {
+    "title": "Learning Transferable Visual Models From Natural Language Supervision",
+    "authors": [
+      "Radford",
+      "Kim",
+      "Hallacy",
+      "Ramesh",
+      "Goh",
+      "Agarwal",
+      "Sastry",
+      "Askell",
+      "Mishkin",
+      "Clark",
+      "Krueger",
+      "Sutskever"
+    ],
+    "year": 2021,
+    "venue": "ICML",
+    "arxiv_id": "2103.00020",
+    "pdf_url": "https://proceedings.mlr.press/v139/radford21a/radford21a.pdf",
+    "sha256": null
+  },
+  "repo": {
+    "url": "https://github.com/openai/CLIP",
+    "commit": "d05afc436d78f1c48dc0dbf8e5980a9d471f35f6",
+    "description": "Official PyTorch CLIP implementation.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "clip/model.py",
+        "start_line": 5,
+        "end_line": 5,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "created_at": "2026-10-29",
+    "paper_evidence_verified": false,
+    "paper_download_status": "HTTP 403 from official publisher/CVF and arxiv.org PDF endpoints in the cloud environment; no PDF hash or page span is asserted.",
+    "label_method": "Read-only review of pinned repository source and parser-resolved relevant symbols; no model output was consulted.",
+    "scope": "Curated implementation claims associated with the named paper; not PDF extraction or paper-citation validation.",
+    "label_distribution_note": "All five claims in this pair are positive implementation claims. Four-way verification quality must be measured on separately annotated negative and insufficient-evidence cases."
+  },
+  "claims": [
+    {
+      "claim_id": "clip_c1",
+      "text": "CLIP L2-normalizes image and text features before computing pairwise image-text cosine similarities.",
+      "relevant_symbols": [
+        {
+          "file_path": "clip/model.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "CLIP"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "clip/model.py",
+          "start_line": 363,
+          "end_line": 364,
+          "quote": "        image_features = image_features / image_features.norm(dim=1, keepdim=True)\n        text_features = text_features / text_features.norm(dim=1, keepdim=True)"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "clip_c2",
+      "text": "CLIP uses a learned logit scale, exponentiates it, and multiplies the image-text similarity matrix by that scale.",
+      "relevant_symbols": [
+        {
+          "file_path": "clip/model.py",
+          "name": "__init__",
+          "kind": "method",
+          "parent_name": "CLIP"
+        },
+        {
+          "file_path": "clip/model.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "CLIP"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "clip/model.py",
+          "start_line": 295,
+          "end_line": 295,
+          "quote": "        self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))"
+        },
+        {
+          "file_path": "clip/model.py",
+          "start_line": 367,
+          "end_line": 368,
+          "quote": "        logit_scale = self.logit_scale.exp()\n        logits_per_image = logit_scale * image_features @ text_features.t()"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "clip_c3",
+      "text": "CLIP constructs the text representation from the end-of-text token output and linearly projects it into the shared image-text embedding space.",
+      "relevant_symbols": [
+        {
+          "file_path": "clip/model.py",
+          "name": "encode_text",
+          "kind": "method",
+          "parent_name": "CLIP"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "clip/model.py",
+          "start_line": 354,
+          "end_line": 354,
+          "quote": "        x = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "clip_c4",
+      "text": "The CLIP text transformer uses causal self-attention implemented by an upper-triangular additive mask with negative-infinity entries.",
+      "relevant_symbols": [
+        {
+          "file_path": "clip/model.py",
+          "name": "build_attention_mask",
+          "kind": "method",
+          "parent_name": "CLIP"
+        },
+        {
+          "file_path": "clip/model.py",
+          "name": "__init__",
+          "kind": "method",
+          "parent_name": "CLIP"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "clip/model.py",
+          "start_line": 331,
+          "end_line": 334,
+          "quote": "        mask = torch.empty(self.context_length, self.context_length)\n        mask.fill_(float(\"-inf\"))\n        mask.triu_(1)  # zero out the lower diagonal\n        return mask"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    },
+    {
+      "claim_id": "clip_c5",
+      "text": "CLIP replaces the final global average pooling in its modified ResNet image encoder with attention pooling.",
+      "relevant_symbols": [
+        {
+          "file_path": "clip/model.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "ModifiedResNet"
+        },
+        {
+          "file_path": "clip/model.py",
+          "name": "forward",
+          "kind": "method",
+          "parent_name": "AttentionPool2d"
+        }
+      ],
+      "expected_verification": "VERIFIED",
+      "source_evidence": [
+        {
+          "file_path": "clip/model.py",
+          "start_line": 152,
+          "end_line": 152,
+          "quote": "        x = self.attnpool(x)"
+        },
+        {
+          "file_path": "clip/model.py",
+          "start_line": 73,
+          "end_line": 73,
+          "quote": "            query=x[:1], key=x, value=x,"
+        }
+      ],
+      "notes": "Implementation claim reviewed against the pinned official source. This is curated development data, not a verbatim PDF quotation or an independent held-out label."
+    }
+  ]
+}

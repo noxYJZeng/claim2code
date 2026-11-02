@@ -5,6 +5,7 @@ import App from "./App";
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  window.history.replaceState(null, "", "/"); // App mirrors the analysis in the URL
 });
 
 describe("App", () => {
@@ -525,5 +526,73 @@ describe("App", () => {
     fireEvent.submit(screen.getByTestId("repository-section"));
 
     expect(await screen.findByTestId("symbols-empty")).toBeInTheDocument();
+  });
+
+  it("reopens an earlier analysis by id and shows its verification panel", async () => {
+    const analysisId = "33333333-3333-3333-3333-333333333333";
+    const respond = (body: unknown, status = 200) =>
+      Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url.endsWith("/health")) return respond({ status: "ok" });
+        if (url.includes("/llm/")) return respond({}, 404);
+        if (url.includes("/analyses/missing/")) return respond({ detail: "nope" }, 404);
+        if (url.endsWith("/claims")) {
+          return respond({ analysis_id: analysisId, paper_status: "done", claims: [] });
+        }
+        return respond({ analysis_id: analysisId, verifications: [] });
+      }),
+    );
+    render(<App />);
+
+    fireEvent.change(screen.getByTestId("open-analysis-input"), {
+      target: { value: "missing" },
+    });
+    fireEvent.click(screen.getByTestId("open-analysis-button"));
+    expect(await screen.findByTestId("open-analysis-error")).toHaveTextContent(
+      "No analysis with that id.",
+    );
+
+    fireEvent.change(screen.getByTestId("open-analysis-input"), {
+      target: { value: analysisId },
+    });
+    fireEvent.click(screen.getByTestId("open-analysis-button"));
+    expect(await screen.findByTestId("upload-summary")).toHaveTextContent("0 claims");
+    expect(await screen.findByTestId("verification-panel")).toBeInTheDocument();
+  });
+
+  it("opens the analysis named in the URL", async () => {
+    const analysisId = "44444444-4444-4444-4444-444444444444";
+    window.history.replaceState(null, "", `/?analysis=${analysisId}`);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/llm/")) {
+          return Promise.resolve(new Response("{}", { status: 404 }));
+        }
+        const body = url.endsWith("/health")
+          ? { status: "ok" }
+          : url.endsWith("/claims")
+            ? { analysis_id: analysisId, paper_status: "done", claims: [] }
+            : { analysis_id: analysisId, verifications: [] };
+        return Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      }),
+    );
+    render(<App />);
+
+    expect(await screen.findByTestId("verification-panel")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /upload another/i }));
+    expect(window.location.search).toBe("");
   });
 });

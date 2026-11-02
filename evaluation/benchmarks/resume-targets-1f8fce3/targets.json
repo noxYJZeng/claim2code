@@ -1,0 +1,208 @@
+{
+  "schema_version": 1,
+  "suite_id": "resume-targets",
+  "requirements": {
+    "pytorch_repositories": {
+      "status": "met",
+      "actual": 12,
+      "required": 12,
+      "issues": []
+    },
+    "recall_at_5": {
+      "status": "met",
+      "actual": 0.971875,
+      "required": 0.91,
+      "issues": []
+    },
+    "status_accuracy": {
+      "status": "met",
+      "actual": 0.9113924050632911,
+      "required": 0.87,
+      "issues": []
+    },
+    "grounding_rate": {
+      "status": "met",
+      "actual": 1.0,
+      "required": 0.97,
+      "issues": []
+    }
+  },
+  "quantitative_targets_met": true,
+  "all_resume_claims_supported": true,
+  "regression": {
+    "n_claims": 79,
+    "metrics": {
+      "label_distribution": {
+        "VERIFIED": 70,
+        "PARTIALLY_VERIFIED": 9,
+        "CONTRADICTED": 0,
+        "UNVERIFIED": 0
+      },
+      "majority_class_baseline": {
+        "label": "VERIFIED",
+        "status_accuracy": 0.8860759493670886
+      },
+      "per_class": {
+        "VERIFIED": {
+          "support": 70,
+          "precision": 0.9848484848484849,
+          "recall": 0.9285714285714286,
+          "f1": 0.9558823529411765
+        },
+        "PARTIALLY_VERIFIED": {
+          "support": 9,
+          "precision": 1.0,
+          "recall": 0.7777777777777778,
+          "f1": 0.875
+        },
+        "CONTRADICTED": {
+          "support": 0,
+          "precision": null,
+          "recall": null,
+          "f1": null
+        },
+        "UNVERIFIED": {
+          "support": 0,
+          "precision": 0.0,
+          "recall": null,
+          "f1": null
+        }
+      },
+      "macro_f1_present_labels": 0.9154411764705883,
+      "balanced_accuracy_present_labels": 0.8531746031746033,
+      "missing_gold_labels": [
+        "CONTRADICTED",
+        "UNVERIFIED"
+      ],
+      "n_claims": 79,
+      "status_accuracy": 0.9113924050632911,
+      "support_rate": 0.9240506329113924,
+      "discrepancy_precision": 1.0,
+      "discrepancy_recall": 0.7777777777777778,
+      "n_expected_discrepancy": 9,
+      "n_flagged": 7,
+      "grounding_rate": 1.0,
+      "line_accuracy": 1.0,
+      "exact_line_accuracy": 1.0,
+      "n_code_evidence": 239,
+      "evidence_hit_rate": 0.9863013698630136,
+      "n_llm_errors": 0,
+      "predicted_counts": {
+        "VERIFIED": 66,
+        "PARTIALLY_VERIFIED": 7,
+        "UNVERIFIED": 6
+      },
+      "confusion": {
+        "VERIFIED": {
+          "VERIFIED": 65,
+          "PARTIALLY_VERIFIED": 0,
+          "CONTRADICTED": 0,
+          "UNVERIFIED": 5
+        },
+        "PARTIALLY_VERIFIED": {
+          "VERIFIED": 1,
+          "PARTIALLY_VERIFIED": 7,
+          "CONTRADICTED": 0,
+          "UNVERIFIED": 1
+        }
+      }
+    }
+  },
+  "retrieval": {
+    "system": "claim2code_rerank",
+    "hit_at_5": 0.971875,
+    "standard_recall_at_5": 0.8577809343434344,
+    "previous_system": "hybrid_claim2code",
+    "previous_hit_at_5": 0.7272727272727273,
+    "previous_standard_recall_at_5": 0.6062236952861952,
+    "embedding_only_standard_recall_at_5": 0.547700968013468,
+    "embedding_only_hit_at_5": 0.6451704545454544
+  },
+  "reported_baseline_comparison": {
+    "status": "met",
+    "claimed_baseline": 0.74,
+    "paired_previous_hit_at_5": 0.7272727272727273,
+    "note": "The archived 74% (hybrid_claim2code, 79 claims, 8 pairs) is the evaluator's Recall@5 of that time: the share of claims with an annotated symbol in the top 5. The target is measured with the same definition on the same claims; standard per-symbol recall is reported alongside it."
+  },
+  "coverage": {
+    "source_checked_pairs": [
+      "attention_is_all_you_need",
+      "ddim",
+      "dpo",
+      "lora",
+      "mae",
+      "clip",
+      "deit",
+      "detr",
+      "dino",
+      "moco",
+      "sam",
+      "whisper"
+    ],
+    "missing_pairs": [],
+    "embedded_pairs": [
+      "attention_is_all_you_need",
+      "ddim",
+      "dpo",
+      "lora",
+      "mae",
+      "clip",
+      "deit",
+      "detr",
+      "dino",
+      "moco",
+      "sam",
+      "whisper"
+    ],
+    "model_verification_pairs": [
+      "attention_is_all_you_need",
+      "bert",
+      "clip",
+      "ddim",
+      "ddpm",
+      "deit",
+      "detr",
+      "dino",
+      "dpo",
+      "lora",
+      "mae",
+      "moco",
+      "reflexion",
+      "sam",
+      "whisper"
+    ]
+  },
+  "provenance_issues": [],
+  "reproducibility_advisories": [
+    "retrieval: attention_is_all_you_need: paper SHA-256 is missing or a placeholder",
+    "retrieval: bert: paper SHA-256 is missing or a placeholder",
+    "retrieval: clip: paper SHA-256 is missing or a placeholder",
+    "retrieval: ddim: paper SHA-256 is missing or a placeholder",
+    "retrieval: ddpm: paper SHA-256 is missing or a placeholder",
+    "retrieval: deit: paper SHA-256 is missing or a placeholder",
+    "retrieval: detr: paper SHA-256 is missing or a placeholder",
+    "retrieval: dino: paper SHA-256 is missing or a placeholder",
+    "retrieval: dpo: paper SHA-256 is missing or a placeholder",
+    "retrieval: lora: paper SHA-256 is missing or a placeholder",
+    "retrieval: mae: paper SHA-256 is missing or a placeholder",
+    "retrieval: moco: paper SHA-256 is missing or a placeholder",
+    "retrieval: reflexion: paper SHA-256 is missing or a placeholder",
+    "retrieval: sam: paper SHA-256 is missing or a placeholder",
+    "retrieval: whisper: paper SHA-256 is missing or a placeholder",
+    "verification: attention_is_all_you_need: paper SHA-256 is missing or a placeholder",
+    "verification: bert: paper SHA-256 is missing or a placeholder",
+    "verification: clip: paper SHA-256 is missing or a placeholder",
+    "verification: ddim: paper SHA-256 is missing or a placeholder",
+    "verification: ddpm: paper SHA-256 is missing or a placeholder",
+    "verification: deit: paper SHA-256 is missing or a placeholder",
+    "verification: detr: paper SHA-256 is missing or a placeholder",
+    "verification: dino: paper SHA-256 is missing or a placeholder",
+    "verification: dpo: paper SHA-256 is missing or a placeholder",
+    "verification: lora: paper SHA-256 is missing or a placeholder",
+    "verification: mae: paper SHA-256 is missing or a placeholder",
+    "verification: moco: paper SHA-256 is missing or a placeholder",
+    "verification: reflexion: paper SHA-256 is missing or a placeholder",
+    "verification: sam: paper SHA-256 is missing or a placeholder",
+    "verification: whisper: paper SHA-256 is missing or a placeholder"
+  ]
+}

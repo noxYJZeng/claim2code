@@ -12,9 +12,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from sqlalchemy.orm import Session
+
 from claim2code_api.indexing.embedding_client import get_embedding_client
 from claim2code_api.indexing.retriever import retrieve_semantic
-from sqlalchemy.orm import Session
 
 NAME = "embedding_only"
 

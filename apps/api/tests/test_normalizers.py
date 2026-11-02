@@ -14,6 +14,7 @@ Coverage:
   - Severity defaults (LOW for models, MEDIUM for datasets, LOW for metrics).
   - The error path: a missing alias JSON raises ``VerificationConfigError``.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -151,6 +152,39 @@ def test_dataset_normalizer_compare_no_match_when_agreeing() -> None:
     assert out == []
 
 
+def test_dataset_normalizer_benchmark_covered_by_member_task() -> None:
+    n = DatasetNormalizer()
+    out = n.compare(
+        claim_text="LoRA hyperparameters for RoBERTa base on GLUE.",
+        candidates=[
+            _make_candidate(signature="--task_name mnli"),
+            _make_candidate(signature="--task_name rte"),
+        ],
+    )
+    assert out == []
+
+
+def test_dataset_normalizer_member_does_not_cover_other_benchmark() -> None:
+    n = DatasetNormalizer()
+    out = n.compare(
+        claim_text="We evaluate on SQuAD.",
+        candidates=[_make_candidate(signature="--task_name mnli")],
+    )
+    assert [d.detail for d in out] == ["paper mentions 'squad', code references only 'mnli'"]
+
+
+def test_model_normalizer_no_mismatch_when_any_candidate_agrees() -> None:
+    n = ModelNameNormalizer()
+    out = n.compare(
+        claim_text="For RoBERTa base LoRA on GLUE, r = 8.",
+        candidates=[
+            _make_candidate(signature="--model_name_or_path roberta-base"),
+            _make_candidate(signature="--model_name_or_path roberta-large"),
+        ],
+    )
+    assert out == []
+
+
 # ============================================================
 # MetricNameComparator
 # ============================================================
@@ -172,6 +206,22 @@ def test_metric_comparator_compare_emits_low_severity() -> None:
     assert len(out) == 1
     assert out[0].type == DiscrepancyType.METRIC_MISMATCH
     assert out[0].severity == DiscrepancySeverity.LOW
+
+
+def test_metric_comparator_ignores_training_loss() -> None:
+    """Code computing a loss does not contradict a reported accuracy."""
+    out = MetricNameComparator().compare(
+        claim_text="Fine-tuning reaches 85.4% accuracy.",
+        candidates=[_make_candidate(signature="loss = forward_loss(imgs, pred, mask)")],
+    )
+    assert out == []
+
+
+def test_metric_comparator_does_not_read_mae_model_name_as_metric() -> None:
+    """MAE (Masked Autoencoder) is a model name, not mean absolute error."""
+    n = MetricNameComparator()
+    assert n.extract_names("MAE pre-training with mae_vit_large_patch16") == set()
+    assert n.extract_names("we report mean absolute error") == {"mean-absolute-error"}
 
 
 # ============================================================
@@ -203,7 +253,9 @@ def test_normalizer_raises_on_missing_alias_file(tmp_path: Path) -> None:
             pass  # The above patch is a no-op; the next test covers the real path.
 
 
-def test_normalizer_raises_config_error_on_missing_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_normalizer_raises_config_error_on_missing_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Concrete test: rewrite __file__ via the module's __post_init__ path
     so ``aliases/models.json`` doesn't exist.
 
@@ -227,7 +279,9 @@ def test_normalizer_raises_config_error_on_missing_file(tmp_path: Path, monkeypa
         ModelNameNormalizer()
 
 
-def test_normalizer_raises_config_error_on_malformed_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_normalizer_raises_config_error_on_malformed_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Malformed JSON in models.json → ``VerificationConfigError``."""
     original_path_cls = Path
 
@@ -241,7 +295,9 @@ def test_normalizer_raises_config_error_on_malformed_json(tmp_path: Path, monkey
         ModelNameNormalizer()
 
 
-def test_normalizer_raises_config_error_on_empty_alias_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_normalizer_raises_config_error_on_empty_alias_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Empty dict in models.json → ``VerificationConfigError``."""
     original_path_cls = Path
 

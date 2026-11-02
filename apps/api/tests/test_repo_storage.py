@@ -6,6 +6,7 @@ from pathlib import Path
 
 from claim2code_api.repos.storage import (
     classify_file,
+    resolve_repo_file,
     walk_repo_files,
 )
 
@@ -103,6 +104,25 @@ def test_walk_skips_ignored_dirs(tmp_path: Path) -> None:
     assert rels == {"src/main.py"}
 
 
+def test_walk_skips_exclude_paths(tmp_path: Path) -> None:
+    """A directory path excludes its subtree; globs match too."""
+    clone = _make_clone(
+        tmp_path,
+        {
+            "loralib/layers.py": "x",
+            "examples/NLU/src/transformers/models/bert.py": "y",
+            "examples/NLU/run_glue.py": "z",
+            "examples/NLG/src/gpt2_beam.py": "w",
+        },
+    )
+    files = walk_repo_files(
+        clone,
+        exclude_paths=["examples/NLU/src/transformers/", "examples/*/src/gpt2_*.py"],
+    )
+    rels = {f.relative_path for f in files}
+    assert rels == {"loralib/layers.py", "examples/NLU/run_glue.py"}
+
+
 def test_walk_skips_git_even_if_not_in_ignore(tmp_path: Path) -> None:
     """``.git`` is hard-coded to skip regardless of ignore_dirs."""
     clone = _make_clone(
@@ -144,3 +164,24 @@ def test_walk_size_bytes_recorded(tmp_path: Path) -> None:
     clone = _make_clone(tmp_path, {"a.py": "hello"})
     files = walk_repo_files(clone)
     assert files[0].size_bytes == len("hello")
+
+
+def test_walk_ignores_symlinked_files_and_directories(tmp_path: Path) -> None:
+    clone = _make_clone(tmp_path, {"safe.py": "safe"})
+    outside = tmp_path / "outside.py"
+    outside.write_text("private host data")
+    (clone / "leak.py").symlink_to(outside)
+    (clone / "alias.py").symlink_to(clone / "safe.py")
+    (clone / "escape").symlink_to(tmp_path, target_is_directory=True)
+    assert [f.relative_path for f in walk_repo_files(clone)] == ["safe.py"]
+
+
+def test_resolve_repo_file_rejects_untrusted_paths(tmp_path: Path) -> None:
+    clone = _make_clone(tmp_path, {"src/safe.py": "safe"})
+    outside = tmp_path / "private.py"
+    outside.write_text("private host data")
+    (clone / "linked.py").symlink_to(outside)
+    (clone / "linked-dir").symlink_to(outside.parent, target_is_directory=True)
+    for path in ["../private.py", str(outside), "linked.py", "linked-dir/private.py", "missing.py"]:
+        assert resolve_repo_file(clone, path) is None
+    assert resolve_repo_file(clone, "src/safe.py") == clone / "src/safe.py"

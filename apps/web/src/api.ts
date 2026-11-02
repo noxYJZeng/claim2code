@@ -69,7 +69,7 @@ export type CodeSymbolKind =
   "function" | "method" | "class" | "import" | "constant" | "config_schema";
 
 export type CodeLanguage =
-  "python" | "javascript" | "typescript" | "java" | "go" | "rust";
+  "python" | "javascript" | "typescript" | "java" | "go" | "rust" | "shell" | "config";
 
 export type CodeSymbol = {
   kind: CodeSymbolKind;
@@ -151,6 +151,104 @@ export type RetrieveResponse = {
 
 export type RetrieveResult =
   { ok: true; response: RetrieveResponse } | { ok: false; error: string };
+
+export type VerificationStatus =
+  "VERIFIED" | "PARTIALLY_VERIFIED" | "CONTRADICTED" | "UNVERIFIED";
+
+export type CodeEvidence = {
+  symbol_id: string;
+  file_path: string;
+  start_line: number;
+  end_line: number;
+  quote: string;
+};
+
+export type Discrepancy = {
+  type: string;
+  severity: "LOW" | "MEDIUM" | "HIGH";
+  detail: string;
+  code_quote: string | null;
+};
+
+export type Verification = {
+  claim_id: string;
+  status: VerificationStatus;
+  confidence: number;
+  explanation: string;
+  paper_evidence: PaperEvidence;
+  code_evidence: CodeEvidence[];
+  discrepancies: Discrepancy[];
+};
+
+export type VerificationsResult =
+  { ok: true; verifications: Verification[] } | { ok: false; error: string };
+
+export type ProviderPreset = {
+  id: string;
+  label: string;
+  kind: "openai_compat" | "anthropic";
+  base_url: string | null;
+  default_model: string;
+  models: string[];
+  needs_key: boolean;
+  key_env: string | null;
+  key_configured: boolean;
+  json_mode: "schema" | "object";
+  local: boolean;
+  note: string;
+};
+
+export type ProvidersView = {
+  active: { provider_id: string; label: string; model: string; base_url: string };
+  presets: ProviderPreset[];
+  embedding: { model: string; base_url: string; dim: number };
+  management?: { enabled: boolean; auth_required: boolean };
+};
+
+export type ProviderSelection = {
+  provider_id: string;
+  model: string;
+  base_url: string;
+  api_key: string;
+};
+
+export type ProviderTest = {
+  ok: boolean;
+  error: string | null;
+  latency_ms: number | null;
+  model: string;
+  base_url: string;
+};
+
+export type ProvidersResult =
+  { ok: true; view: ProvidersView } | { ok: false; error: string };
+
+export type ProviderTestResult =
+  { ok: true; test: ProviderTest } | { ok: false; error: string };
+
+export type CodeExcerpt = {
+  file_path: string;
+  start_line: number;
+  end_line: number;
+  total_lines: number;
+  lines: { number: number; text: string }[];
+  url: string | null;
+};
+
+export type CodeExcerptResult =
+  { ok: true; excerpt: CodeExcerpt } | { ok: false; error: string };
+
+export type PaperExcerpt = {
+  page: number;
+  n_pages: number;
+  found: boolean;
+  image: string;
+  width: number;
+  height: number;
+};
+
+export type PaperExcerptResult =
+  { ok: true; excerpt: PaperExcerpt } | { ok: false; error: string };
 
 export async function getHealth(signal?: AbortSignal): Promise<HealthResult> {
   try {
@@ -341,6 +439,248 @@ export async function retrieveSymbols(
     }
     return { ok: false, error: "unknown error" };
   }
+}
+
+/** Fetch the stored verdicts for one analysis.
+ *  GET /analyses/{analysis_id}/verifications — empty list until a run. */
+export async function getVerifications(
+  analysisId: string,
+  signal?: AbortSignal,
+): Promise<VerificationsResult> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/verifications`,
+      { signal },
+    );
+    if (!response.ok) {
+      return { ok: false, error: `HTTP ${response.status}` };
+    }
+    const json = (await response.json()) as { verifications: Verification[] };
+    return { ok: true, verifications: json.verifications };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** Verify the given claims against the analysis's bound repository.
+ *
+ *  POST /analyses/{analysis_id}/verifications with body {claim_ids}.
+ *  Synchronous: one LLM call per claim, so the UI sends one claim per
+ *  request and renders each verdict as it lands. The server keeps the
+ *  stored verdicts of claims outside the request. */
+export async function runVerification(
+  analysisId: string,
+  claimIds: string[],
+  signal?: AbortSignal,
+): Promise<VerificationsResult> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/verifications`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ claim_ids: claimIds }),
+        signal,
+      },
+    );
+    if (!response.ok) {
+      const detail = await response.text();
+      return {
+        ok: false,
+        error: `HTTP ${response.status}: ${detail.slice(0, 200)}`,
+      };
+    }
+    const json = (await response.json()) as { verifications: Verification[] };
+    return { ok: true, verifications: json.verifications };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** Chat-model providers, which have a key, and the active choice.
+ *  GET /llm/providers — keys are never returned. */
+export async function getProviders(signal?: AbortSignal): Promise<ProvidersResult> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/llm/providers`, { signal });
+    if (!response.ok) {
+      return { ok: false, error: `HTTP ${response.status}` };
+    }
+    const view: unknown = await response.json();
+    if (!isObject(view) || !isObject(view.active) || !Array.isArray(view.presets)
+      || !isObject(view.embedding) || typeof view.active.model !== "string"
+      || typeof view.active.label !== "string") {
+      return { ok: false, error: "Invalid model settings response" };
+    }
+    return { ok: true, view: view as ProvidersView };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+async function postJson(path: string, body: unknown, managementToken?: string): Promise<Response> {
+  return fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(managementToken ? { Authorization: `Bearer ${managementToken}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+async function errorDetail(response: Response): Promise<string> {
+  try {
+    const json = (await response.json()) as { detail?: unknown };
+    if (typeof json.detail === "string") return json.detail;
+  } catch {
+    // fall through to the status line
+  }
+  return `HTTP ${response.status}`;
+}
+
+/** Switch the chat model. POST /llm/provider — the next LLM call uses it. */
+export async function setProvider(
+  selection: ProviderSelection, managementToken?: string,
+): Promise<ProvidersResult> {
+  try {
+    const response = await postJson("/llm/provider", selection, managementToken);
+    if (!response.ok) {
+      return { ok: false, error: await errorDetail(response) };
+    }
+    return { ok: true, view: (await response.json()) as ProvidersView };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** Check a selection reaches its server, without switching to it.
+ *  POST /llm/provider/test */
+export async function testProvider(
+  selection: ProviderSelection, managementToken?: string,
+): Promise<ProviderTestResult> {
+  try {
+    const response = await postJson("/llm/provider/test", selection, managementToken);
+    if (!response.ok) {
+      return { ok: false, error: await errorDetail(response) };
+    }
+    return { ok: true, test: (await response.json()) as ProviderTest };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** The code a citation points at, read from the cloned repository.
+ *  GET /analyses/{analysis_id}/code?file_path&start_line&end_line&context */
+export async function getCodeExcerpt(
+  analysisId: string,
+  citation: { file_path: string; start_line: number; end_line: number },
+  context: number,
+  signal?: AbortSignal,
+): Promise<CodeExcerptResult> {
+  const query = new URLSearchParams({
+    file_path: citation.file_path,
+    start_line: String(citation.start_line),
+    end_line: String(citation.end_line),
+    context: String(context),
+  });
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/code?${query}`,
+      { signal },
+    );
+    if (!response.ok) {
+      return { ok: false, error: await errorDetail(response) };
+    }
+    const excerpt: unknown = await response.json();
+    if (!isCodeExcerpt(excerpt)) {
+      return { ok: false, error: "Invalid code excerpt response" };
+    }
+    return { ok: true, excerpt };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+/** The uploaded PDF; append `#page=N` to open it at a page. */
+export function paperPdfUrl(analysisId: string, page?: number): string {
+  const url = `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/paper/pdf`;
+  return page ? `${url}#page=${page}` : url;
+}
+
+/** The cited region of the paper, rendered with the quote highlighted.
+ *  GET /analyses/{analysis_id}/paper/excerpt?page&quote&full */
+export async function getPaperExcerpt(
+  analysisId: string,
+  evidence: { page: number; quote: string },
+  full: boolean,
+  signal?: AbortSignal,
+): Promise<PaperExcerptResult> {
+  const query = new URLSearchParams({
+    page: String(evidence.page),
+    quote: evidence.quote,
+    full: String(full),
+  });
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/paper/excerpt?${query}`,
+      { signal },
+    );
+    if (!response.ok) {
+      return { ok: false, error: await errorDetail(response) };
+    }
+    const excerpt: unknown = await response.json();
+    if (!isPaperExcerpt(excerpt)) {
+      return { ok: false, error: "Invalid paper excerpt response" };
+    }
+    return { ok: true, excerpt };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isCodeExcerpt(value: unknown): value is CodeExcerpt {
+  return isObject(value)
+    && typeof value.file_path === "string"
+    && Number.isInteger(value.start_line) && Number.isInteger(value.end_line)
+    && Number.isInteger(value.total_lines)
+    && (value.url === null || typeof value.url === "string")
+    && Array.isArray(value.lines)
+    && value.lines.every((line: unknown) => isObject(line)
+      && Number.isInteger(line.number) && typeof line.text === "string");
+}
+
+function isPaperExcerpt(value: unknown): value is PaperExcerpt {
+  return isObject(value)
+    && Number.isInteger(value.page) && Number.isInteger(value.n_pages)
+    && typeof value.found === "boolean"
+    && typeof value.image === "string" && /^data:image\/(png|jpeg|webp);base64,/.test(value.image)
+    && typeof value.width === "number" && value.width > 0
+    && typeof value.height === "number" && value.height > 0;
 }
 
 export { API_BASE_URL };

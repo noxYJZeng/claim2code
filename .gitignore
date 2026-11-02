@@ -10,6 +10,8 @@ interview-prep/
 .env
 .env.local
 .env.*.local
+# Chat-provider choice saved by the API (llm/providers.py)
+.claim2code/
 *.env
 !**/.env.example
 
@@ -96,3 +98,8 @@ api/generated/
 
 # ---- Local-only scripts that may run with secrets ----
 scripts/_local/
+# Per-claim progress log of evaluate_verification.py (the summary lands in results/verification.json)
+evaluation/results/*.jsonl
+# Independent local benchmark runs and source clones.
+evaluation/runs/
+data/benchmark/

@@ -15,8 +15,9 @@
   "bert-large-uncased":     ["google-bert/bert-large-uncased", "bert-large-uncased", "BERT-Large-Uncased"],
   "bert-base-cased":        ["google-bert/bert-base-cased", "bert-base-cased"],
 
-  "roberta-base":           ["FacebookAI/roberta-base", "roberta-base", "RoBERTa-base"],
-  "roberta-large":          ["FacebookAI/roberta-large", "roberta-large", "RoBERTa-large"],
+  "roberta-base":           ["FacebookAI/roberta-base", "roberta-base", "RoBERTa-base", "RoBERTa base"],
+  "roberta-large":          ["FacebookAI/roberta-large", "roberta-large", "RoBERTa-large", "RoBERTa large"],
+  "deberta-v2-xxlarge":     ["microsoft/deberta-v2-xxlarge", "deberta-v2-xxlarge", "DeBERTa XXL", "DeBERTa-XXL"],
 
   "gpt2":                   ["openai-community/gpt2", "gpt2", "GPT-2", "gpt-2"],
   "gpt2-medium":            ["openai-community/gpt2-medium", "gpt2-medium", "GPT-2-Medium"],
@@ -28,7 +29,5 @@
 
   "llama-2-7b":             ["meta-llama/Llama-2-7b", "llama-2-7b", "Llama-2-7B"],
   "llama-2-13b":            ["meta-llama/Llama-2-13b", "llama-2-13b", "Llama-2-13B"],
-  "llama-3-8b":             ["meta-llama/Meta-Llama-3-8B", "llama-3-8b", "Llama-3-8B"],
-
-  "lora":                   ["microsoft/LoRA", "lora", "LoRA"]
+  "llama-3-8b":             ["meta-llama/Meta-Llama-3-8B", "llama-3-8b", "Llama-3-8B"]
 }

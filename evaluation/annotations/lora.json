@@ -2,16 +2,40 @@
   "pair_id": "lora",
   "paper": {
     "title": "LoRA: Low-Rank Adaptation of Large Language Models",
-    "authors": ["Hu", "Shen", "Wallis", "Allen-Zhu", "Li", "Wang", "Chen"],
+    "authors": [
+      "Hu",
+      "Shen",
+      "Wallis",
+      "Allen-Zhu",
+      "Li",
+      "Wang",
+      "Chen"
+    ],
     "year": 2021,
     "venue": "ICLR",
     "arxiv_id": "2106.09685",
-    "sha256": "Hu2021-placeholder"
+    "pdf_url": "https://arxiv.org/pdf/2106.09685",
+    "pdf_verified": false
   },
   "repo": {
     "url": "https://github.com/microsoft/LoRA",
-    "commit": "main",
-    "description": "Microsoft LoRA — low-rank adaptation of large language models."
+    "commit": "c4593f060e6a368d7bb5af5273b8e42810cdef90",
+    "description": "Microsoft LoRA — low-rank adaptation of large language models.",
+    "framework": "pytorch",
+    "framework_evidence": [
+      {
+        "file_path": "loralib/layers.py",
+        "start_line": 5,
+        "quote": "import torch"
+      }
+    ]
+  },
+  "annotation_metadata": {
+    "kind": "source_reviewed_development",
+    "review_scope": "Repository revision, PyTorch import, and all annotated symbol locations checked against pinned source; existing claim text and labels preserved.",
+    "paper_evidence_verified": false,
+    "paper_evidence_note": "Original PDF bytes have not been verified for this metadata review. Claim text is curated; existing section/page/character spans must not be treated as verified PDF quotations.",
+    "legacy_claims_sha256": "e989e44f02d4ae55f519711988a193749874d223cbaf7f73fdcfc85d9ad8aead"
   },
   "claims": [
     {
@@ -38,9 +62,11 @@
       "text": "Matrix A is initialized with a Gaussian and matrix B is initialized to zero so the initial forward pass equals the pretrained model.",
       "evidence_span": {"section": "4.1", "page": 5, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "loralib/layers.py", "name": "LoRALayer", "kind": "class"}
+        {"file_path": "loralib/layers.py", "name": "Linear", "kind": "class"},
+        {"file_path": "loralib/layers.py", "name": "MergedLinear", "kind": "class"}
       ],
-      "expected_verification": "VERIFIED"
+      "expected_verification": "PARTIALLY_VERIFIED",
+      "notes": "reset_parameters zero-initialises B as stated but initialises A with nn.init.kaiming_uniform_, not a Gaussian. Corrected 2026-10-27: was VERIFIED with LoRALayer (which holds only r/alpha/dropout) as the relevant symbol."
     },
     {
       "claim_id": "lora_c4",
@@ -56,25 +82,29 @@
       "text": "Only the low-rank matrices A and B receive gradient updates during training; the original weight matrix is frozen.",
       "evidence_span": {"section": "1", "page": 2, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "loralib/layers.py", "name": "LoRALayer", "kind": "class"}
+        {"file_path": "loralib/layers.py", "name": "Linear", "kind": "class"},
+        {"file_path": "loralib/utils.py", "name": "mark_only_lora_as_trainable", "kind": "function"}
       ],
-      "expected_verification": "VERIFIED"
+      "expected_verification": "VERIFIED",
+      "notes": "Linear.__init__ sets weight.requires_grad = False; mark_only_lora_as_trainable freezes every non-lora_ parameter. Corrected 2026-10-27: the relevant symbol was LoRALayer, which does neither."
     },
     {
       "claim_id": "lora_c6",
-      "text": "The library exposes a function to mark specific linear layers as LoRA-adapted by replacing their forward method.",
+      "text": "The library exposes a helper that marks only the LoRA parameters of a model as trainable and freezes all others.",
       "evidence_span": {"section": "5", "page": 6, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
         {"file_path": "loralib/utils.py", "name": "mark_only_lora_as_trainable", "kind": "function"}
       ],
-      "expected_verification": "VERIFIED"
+      "expected_verification": "VERIFIED",
+      "notes": "Corrected 2026-10-27: the text said the helper replaces layers' forward methods, which the library does not do (layers are swapped for lora.Linear by hand)."
     },
     {
       "claim_id": "lora_c7",
       "text": "The example training script applies LoRA to GPT-2 attention layers and trains on the E2E dataset.",
       "evidence_span": {"section": "5", "page": 6, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "examples/NLG/src/train_e2e.py", "name": "main", "kind": "function"}
+        {"file_path": "examples/NLG/src/model.py", "name": "Attention", "kind": "class"},
+        {"file_path": "examples/NLG/src/gpt2_ft.py", "name": "train_validate", "kind": "function"}
       ],
       "expected_verification": "VERIFIED"
     },
@@ -83,7 +113,8 @@
       "text": "The GLUE benchmark evaluation fine-tunes RoBERTa with LoRA adapters on each task.",
       "evidence_span": {"section": "5", "page": 7, "char_start": 0, "char_end": 100},
       "relevant_symbols": [
-        {"file_path": "examples/NLU/src/transformers/modeling_roberta.py", "name": "RobertaForSequenceClassification", "kind": "class"}
+        {"file_path": "examples/NLU/src/transformers/models/roberta/modeling_roberta.py", "name": "RobertaSelfAttention", "kind": "class"},
+        {"file_path": "examples/NLU/src/transformers/models/roberta/modeling_roberta.py", "name": "RobertaForSequenceClassification", "kind": "class"}
       ],
       "expected_verification": "VERIFIED"
     },

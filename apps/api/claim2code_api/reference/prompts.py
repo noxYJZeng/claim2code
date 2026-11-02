@@ -86,8 +86,9 @@ In input_notes, describe each argument's type, shape and meaning in
 words. The author of the independent implementation reads these notes
 and your code, never the function body, so do not describe what the
 function does with the arguments. For an instance method, the
-reference also receives a fresh copy of the object as `obj`: name the
-data attributes the result depends on (weights, buffers, configuration
+reference also receives a fresh copy of the object as `obj`: name
+every data attribute the result depends on, including ones the paper's
+notation leaves out, such as a bias (weights, buffers, configuration
 values such as a patch size or a flag) and say what each one is in the
 paper's terms, without saying how the method combines them. Say which
 configuration keys each case's "instance" may set.
@@ -115,6 +116,12 @@ signature you are given. Rules:
     parameters the method sees. Read its data attributes (weights,
     configuration) as the input notes describe. Never call obj's
     methods or obj itself: they are the code under test.
+  - Papers leave out parts every implementation of an operation has:
+    the bias of a linear or convolution layer, an epsilon for numerical
+    stability, a mean or sum reduction. When obj or the inputs carry
+    such data (a bias attribute, an eps value), include it the way a
+    standard implementation would, and say so in assumptions. Leaving
+    it out makes the test report a difference the paper never claimed.
   - Where the paper leaves a choice open (reduction, epsilon, axis,
     ordering), make the most literal reading and record it in
     assumptions, one sentence each.

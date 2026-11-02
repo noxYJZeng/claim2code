@@ -207,6 +207,12 @@ def _check(db: Session, state: AnalysisState, claim: Claim, symbol_id: UUID | No
             else:
                 confirmed = False
                 explanation += f" A second reference could not confirm this: {text2}"
+    if status == ReferenceCheckStatus.MISMATCH:
+        # Both references come from the same model and can share a blind spot.
+        explanation += (
+            " Before treating this as a bug, check the assumptions: a difference can also come "
+            "from a convention the paper leaves out, such as a bias term or an epsilon."
+        )
 
     return result(
         status, explanation,

@@ -9,10 +9,11 @@ afterEach(() => {
 });
 
 describe("App", () => {
-  it("renders the project title", () => {
+  it("names the product and opens on a new analysis", () => {
     render(<App />);
+    expect(screen.getAllByText("Claim2Code").length).toBeGreaterThan(0);
     expect(
-      screen.getByRole("heading", { level: 1, name: /claim2code/i }),
+      screen.getByRole("heading", { level: 1, name: "New analysis" }),
     ).toBeInTheDocument();
   });
 
@@ -138,7 +139,8 @@ describe("App", () => {
       expect(summary).toHaveTextContent(/extracted 2 claims/i),
     );
 
-    // Claims list is fetched and rendered.
+    // Claims list is fetched and rendered under its tab.
+    fireEvent.click(screen.getByRole("button", { name: "Claims" }));
     const list = await screen.findByTestId("claims-list");
     expect(list).toBeInTheDocument();
     const cards = await screen.findAllByTestId("claim-card");
@@ -355,10 +357,11 @@ describe("App", () => {
     // Repo summary banner appears.
     const summary = await screen.findByTestId("repo-summary");
     await waitFor(() =>
-      expect(summary).toHaveTextContent(/indexed demo/i),
+      expect(summary).toHaveTextContent(/acme\/demo/i),
     );
 
     // SymbolsList fetches and renders the symbols grouped by file.
+    fireEvent.click(screen.getByRole("button", { name: "Code symbols" }));
     const list = await screen.findByTestId("symbols-list");
     expect(list).toBeInTheDocument();
     const files = await screen.findAllByTestId("symbols-file");
@@ -525,6 +528,7 @@ describe("App", () => {
     });
     fireEvent.submit(screen.getByTestId("repository-section"));
 
+    fireEvent.click(await screen.findByRole("button", { name: "Code symbols" }));
     expect(await screen.findByTestId("symbols-empty")).toBeInTheDocument();
   });
 
@@ -592,7 +596,48 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByTestId("verification-panel")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /upload another/i }));
+    fireEvent.click(screen.getByRole("button", { name: /new analysis/i }));
     expect(window.location.search).toBe("");
+  });
+  it("restores the repository bound to a reopened analysis", async () => {
+    const analysisId = "55555555-5555-5555-5555-555555555555";
+    window.history.replaceState(null, "", `/?analysis=${analysisId}`);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (url.includes("/llm/")) {
+          return Promise.resolve(new Response("{}", { status: 404 }));
+        }
+        const body = url.endsWith("/health")
+          ? { status: "ok" }
+          : url.endsWith("/claims")
+            ? { analysis_id: analysisId, paper_status: "done", claims: [] }
+            : url.endsWith("/repository")
+              ? {
+                  repository_id: "66666666-6666-6666-6666-666666666666",
+                  analysis_id: analysisId,
+                  url: "https://github.com/acme/demo",
+                  owner: "acme",
+                  name: "demo",
+                  n_files: 3,
+                  n_symbols: 7,
+                  index_status: "done",
+                }
+              : { analysis_id: analysisId, verifications: [] };
+        return Promise.resolve(
+          new Response(JSON.stringify(body), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+        );
+      }),
+    );
+    render(<App />);
+
+    const summary = await screen.findByTestId("repo-summary");
+    expect(summary).toHaveTextContent("acme/demo");
+    expect(summary).toHaveTextContent("3 files, 7 symbols");
+    expect(screen.queryByTestId("repository-section")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Code symbols" })).toBeInTheDocument();
   });
 });

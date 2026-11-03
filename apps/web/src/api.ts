@@ -378,6 +378,30 @@ export async function getRepository(
   }
 }
 
+/** Fetch the repository bound to an analysis.
+ *  GET /analyses/{analysis_id}/repository — 404 if none is bound. */
+export async function getAnalysisRepository(
+  analysisId: string,
+  signal?: AbortSignal,
+): Promise<RepoMetadataResult> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/analyses/${encodeURIComponent(analysisId)}/repository`,
+      { signal },
+    );
+    if (!response.ok) {
+      return { ok: false, error: `HTTP ${response.status}` };
+    }
+    const metadata = (await response.json()) as RepoMetadata;
+    return { ok: true, metadata };
+  } catch (err) {
+    if (err instanceof Error) {
+      return { ok: false, error: err.message };
+    }
+    return { ok: false, error: "unknown error" };
+  }
+}
+
 /** Fetch the extracted code symbols for one repository.
  *  GET /repositories/{repository_id}/symbols */
 export async function getSymbols(

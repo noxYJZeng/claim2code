@@ -9,16 +9,24 @@ import {
 } from "./api";
 import CitedCode from "./CitedCode";
 import CitedPaper from "./CitedPaper";
+import Spinner from "./Spinner";
+import { STATUSES, STATUS_CELL, STATUS_LABEL, STATUS_PILL } from "./verdicts";
 
 type VerificationPanelProps = {
   analysisId: string;
+  // Verification needs the analysis's repository; until one is bound
+  // the stored verdicts are shown but no new run can start.
+  repositoryBound?: boolean;
 };
 
-// VerificationPanel — Phase 6 verdict view.
+// VerificationPanel — the screen that answers "which of the paper's
+// claims does the code back up, and which need a look?".
 //
-// Lists every extracted claim with its stored verdict (GET
-// /analyses/{id}/verifications) and lets the user verify one claim
-// or all of them against the repository bound to the analysis.
+// The claim strip shows every claim in reading order, coloured by its
+// stored verdict (GET /analyses/{id}/verifications); its legend counts
+// each verdict and filters the list. The list and the selected claim's
+// detail sit side by side: the verdict, its explanation and
+// discrepancies, then the paper passage and the code it cites.
 //
 // "Verify all" sends one POST per claim, in order, rather than one
 // POST for the whole list: each claim costs an LLM call (minutes on
@@ -26,34 +34,18 @@ type VerificationPanelProps = {
 // stop between claims. The server keeps the stored verdicts of the
 // claims a request does not name.
 
-const STATUSES: VerificationStatus[] = [
-  "VERIFIED",
-  "PARTIALLY_VERIFIED",
-  "CONTRADICTED",
-  "UNVERIFIED",
-];
-
-const STATUS_LABEL: Record<VerificationStatus, string> = {
-  VERIFIED: "Verified",
-  PARTIALLY_VERIFIED: "Partially verified",
-  CONTRADICTED: "Contradicted",
-  UNVERIFIED: "Unverified",
+const SEVERITY_PILL: Record<string, string> = {
+  HIGH: "bg-negative-bg text-negative-ink",
+  MEDIUM: "bg-warning-bg text-warning-ink",
+  LOW: "bg-neutral-bg text-neutral-ink",
 };
 
-const STATUS_STYLE: Record<VerificationStatus, string> = {
-  VERIFIED: "bg-emerald-100 text-emerald-800",
-  PARTIALLY_VERIFIED: "bg-amber-100 text-amber-800",
-  CONTRADICTED: "bg-rose-100 text-rose-800",
-  UNVERIFIED: "bg-slate-200 text-slate-700",
-};
+type Filter = VerificationStatus | "PENDING" | null;
 
-const SEVERITY_STYLE: Record<string, string> = {
-  HIGH: "bg-rose-600 text-white",
-  MEDIUM: "bg-amber-500 text-white",
-  LOW: "bg-slate-400 text-white",
-};
-
-export default function VerificationPanel({ analysisId }: VerificationPanelProps) {
+export default function VerificationPanel({
+  analysisId,
+  repositoryBound = true,
+}: VerificationPanelProps) {
   const [claims, setClaims] = useState<Claim[] | null>(null);
   const [verdicts, setVerdicts] = useState<Record<string, Verification>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -61,6 +53,11 @@ export default function VerificationPanel({ analysisId }: VerificationPanelProps
   // Claim currently being verified, and the queue still waiting.
   const [running, setRunning] = useState<string | null>(null);
   const [queued, setQueued] = useState<string[]>([]);
+  const [batchSize, setBatchSize] = useState(0);
+  const [filter, setFilter] = useState<Filter>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  // On a narrow screen the list and the detail show one at a time.
+  const [showDetail, setShowDetail] = useState(false);
   const stopRequested = useRef(false);
   const mounted = useRef(true);
 
@@ -93,6 +90,7 @@ export default function VerificationPanel({ analysisId }: VerificationPanelProps
   async function verify(claimIds: string[]) {
     stopRequested.current = false;
     setRunError(null);
+    setBatchSize(claimIds.length);
     for (let i = 0; i < claimIds.length; i++) {
       if (stopRequested.current || !mounted.current) break;
       const claimId = claimIds[i];
@@ -112,116 +110,255 @@ export default function VerificationPanel({ analysisId }: VerificationPanelProps
 
   if (loadError) {
     return (
-      <section
-        className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-800"
-        data-testid="verification-error"
-      >
-        Failed to load verifications: {loadError}
-      </section>
+      <p className="error-block" data-testid="verification-error">
+        Couldn't load the verdicts: {loadError}
+      </p>
     );
   }
 
   if (!claims) {
     return (
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500"
-        data-testid="verification-loading"
-      >
-        Loading verifications…
-      </section>
+      <p className="text-ink-muted" data-testid="verification-loading">
+        Loading verdicts…
+      </p>
     );
   }
 
   const busy = running !== null;
   const pending = claims.filter((c) => !verdicts[c.claim_id]).map((c) => c.claim_id);
+  const shown = claims.filter((c) => {
+    if (!filter) return true;
+    const v = verdicts[c.claim_id];
+    return filter === "PENDING" ? !v : v?.status === filter;
+  });
   const counts = STATUSES.map(
     (s) => [s, Object.values(verdicts).filter((v) => v.status === s).length] as const,
   );
+  const done = batchSize - queued.length - 1;
+  const current =
+    claims.find((c) => c.claim_id === selected) ??
+    shown.find((c) => verdicts[c.claim_id]) ??
+    shown[0];
+
+  function select(claimId: string) {
+    setSelected(claimId);
+    setShowDetail(true);
+  }
 
   return (
-    <section
-      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-      data-testid="verification-panel"
-    >
-      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-3">
-        <h2 className="text-lg font-medium">Verification</h2>
-        <div className="flex gap-2">
-          {busy ? (
-            <button
-              type="button"
-              onClick={() => {
-                stopRequested.current = true;
-              }}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
-              data-testid="verify-stop"
-            >
-              Stop after this claim
-            </button>
-          ) : (
-            <button
-              type="button"
-              disabled={pending.length === 0}
-              onClick={() => verify(pending)}
-              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-              data-testid="verify-all"
-            >
-              Verify {pending.length} unverified claim{pending.length === 1 ? "" : "s"}
-            </button>
-          )}
+    <section data-testid="verification-panel">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-[22px] font-semibold leading-8">Verification</h1>
+          <p className="mt-1 text-ink-muted" data-testid="verification-finding">
+            {finding(claims.length, counts, pending.length)}
+          </p>
         </div>
-      </div>
-      <p className="mb-4 text-xs text-slate-500">
-        Each claim is checked against the repository bound to this analysis, one LLM
-        call per claim (a few minutes each on a local model). Every verdict cites the
-        code it rests on; UNVERIFIED means no supporting code was found, not that the
-        code lacks it.
-      </p>
-
-      <div className="mb-4 flex flex-wrap gap-2 text-xs" data-testid="verification-counts">
-        {counts.map(([status, n]) => (
-          <span
-            key={status}
-            className={`rounded-full px-2.5 py-1 font-medium ${STATUS_STYLE[status]}`}
+        {busy ? (
+          <button
+            type="button"
+            onClick={() => {
+              stopRequested.current = true;
+            }}
+            className="btn-secondary"
+            data-testid="verify-stop"
           >
-            {STATUS_LABEL[status]}: {n}
-          </span>
-        ))}
-        <span className="rounded-full bg-white px-2.5 py-1 font-medium text-slate-500 ring-1 ring-slate-200">
-          Not checked: {pending.length}
-        </span>
+            Stop after this claim
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled={pending.length === 0 || !repositoryBound}
+            onClick={() => verify(pending)}
+            className="btn-primary"
+            data-testid="verify-all"
+          >
+            Verify {pending.length} unverified claim{pending.length === 1 ? "" : "s"}
+          </button>
+        )}
       </div>
 
-      {busy && (
-        <p className="mb-3 text-sm text-slate-600" data-testid="verification-progress">
-          Verifying {running}… {queued.length > 0 && `${queued.length} more queued.`}
+      {!repositoryBound && (
+        <p className="mt-3 text-[13px] text-warning-ink" data-testid="verification-needs-repo">
+          Bind the paper's repository above to verify claims.
         </p>
       )}
+
+      {busy && (
+        <div className="mt-5 max-w-xl" data-testid="verification-progress">
+          <div className="flex justify-between text-[13px]">
+            <span className="inline-flex items-center gap-2">
+              <Spinner /> Verifying <span className="font-mono">{running}</span>
+            </span>
+            <span className="num text-ink-muted">
+              {done} of {batchSize} done
+            </span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-active">
+            <div
+              className="h-full rounded-full bg-accent transition-[width]"
+              style={{ width: `${(done / batchSize) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
       {runError && (
-        <p className="mb-3 text-sm text-rose-700" data-testid="verification-run-error">
+        <p className="mt-3 text-[13px] text-negative" data-testid="verification-run-error">
           Verification failed for {runError}
         </p>
       )}
 
-      <ul className="space-y-3">
-        {claims.map((claim) => (
-          <VerdictCard
-            key={claim.claim_id}
-            analysisId={analysisId}
-            claim={claim}
-            verdict={verdicts[claim.claim_id]}
-            state={
-              running === claim.claim_id
-                ? "running"
-                : queued.includes(claim.claim_id)
-                  ? "queued"
-                  : "idle"
-            }
-            disabled={busy}
-            onVerify={() => verify([claim.claim_id])}
-          />
-        ))}
-      </ul>
+      {claims.length > 0 && (
+        <div className="mt-6">
+          <div className="flex flex-wrap gap-[3px]" aria-label="Claims by verdict">
+            {claims.map((c) => {
+              const v = verdicts[c.claim_id];
+              const state = running === c.claim_id ? "running" : undefined;
+              return (
+                <button
+                  key={c.claim_id}
+                  type="button"
+                  onClick={() => select(c.claim_id)}
+                  title={`${c.claim_id}: ${v ? STATUS_LABEL[v.status] : "not checked"}`}
+                  aria-label={`${c.claim_id}: ${v ? STATUS_LABEL[v.status] : "not checked"}`}
+                  className={`h-5 w-5 rounded-[3px] ${
+                    v ? STATUS_CELL[v.status] : "border border-line-control bg-sheet"
+                  } ${state ? "animate-pulse border-accent" : ""} ${
+                    current?.claim_id === c.claim_id ? "ring-2 ring-accent ring-offset-1" : ""
+                  }`}
+                />
+              );
+            })}
+          </div>
+          <div
+            className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1 text-[13px]"
+            data-testid="verification-counts"
+          >
+            {counts.map(([status, n]) => (
+              <LegendButton
+                key={status}
+                active={filter === status}
+                onClick={() => setFilter((f) => (f === status ? null : status))}
+                swatch={STATUS_CELL[status]}
+                label={STATUS_LABEL[status]}
+                n={n}
+              />
+            ))}
+            <LegendButton
+              active={filter === "PENDING"}
+              onClick={() => setFilter((f) => (f === "PENDING" ? null : "PENDING"))}
+              swatch="border border-line-control bg-sheet"
+              label="Not checked"
+              n={pending.length}
+            />
+            {filter && (
+              <button type="button" onClick={() => setFilter(null)} className="btn-text text-accent">
+                Show all
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+        <ol className={`card overflow-hidden ${showDetail ? "hidden lg:block" : ""}`}>
+          {shown.length === 0 && (
+            <li className="px-4 py-3 text-ink-muted">No claims with this verdict.</li>
+          )}
+          {shown.map((claim) => (
+            <ClaimRow
+              key={claim.claim_id}
+              claim={claim}
+              verdict={verdicts[claim.claim_id]}
+              state={
+                running === claim.claim_id
+                  ? "running"
+                  : queued.includes(claim.claim_id)
+                    ? "queued"
+                    : "idle"
+              }
+              selected={current?.claim_id === claim.claim_id}
+              onSelect={() => select(claim.claim_id)}
+            />
+          ))}
+        </ol>
+
+        {current && (
+          <div className={`lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto ${showDetail ? "" : "hidden lg:block"}`}>
+            <button
+              type="button"
+              onClick={() => setShowDetail(false)}
+              className="btn-text mb-3 lg:hidden"
+            >
+              ← All claims
+            </button>
+            <ClaimDetail
+              key={current.claim_id}
+              analysisId={analysisId}
+              claim={current}
+              verdict={verdicts[current.claim_id]}
+              state={
+                running === current.claim_id
+                  ? "running"
+                  : queued.includes(current.claim_id)
+                    ? "queued"
+                    : "idle"
+              }
+              disabled={busy || !repositoryBound}
+              onVerify={() => verify([current.claim_id])}
+            />
+          </div>
+        )}
+      </div>
     </section>
+  );
+}
+
+function finding(
+  total: number,
+  counts: readonly (readonly [VerificationStatus, number])[],
+  pending: number,
+): string {
+  if (total === 0) return "The paper has no extracted claims.";
+  if (pending === total) {
+    return `None of the ${total} claims has been checked against the code yet.`;
+  }
+  const n = Object.fromEntries(counts) as Record<VerificationStatus, number>;
+  const parts = [
+    n.CONTRADICTED && `${n.CONTRADICTED} contradicted`,
+    n.PARTIALLY_VERIFIED && `${n.PARTIALLY_VERIFIED} partially verified`,
+    n.VERIFIED && `${n.VERIFIED} verified`,
+    n.UNVERIFIED && `${n.UNVERIFIED} without supporting code`,
+    pending && `${pending} not checked`,
+  ].filter(Boolean);
+  return `Of ${total} claims: ${parts.join(", ")}.`;
+}
+
+function LegendButton({
+  active,
+  onClick,
+  swatch,
+  label,
+  n,
+}: {
+  active: boolean;
+  onClick: () => void;
+  swatch: string;
+  label: string;
+  n: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1.5 rounded-control px-1.5 py-0.5 ${
+        active ? "bg-active text-ink" : n === 0 ? "text-ink-faint" : "text-ink-muted hover:text-ink"
+      }`}
+    >
+      <span aria-hidden className={`h-2.5 w-2.5 rounded-[2px] ${swatch}`} />
+      {label} <span className="num text-ink">{n}</span>
+    </button>
   );
 }
 
@@ -229,134 +366,161 @@ function byClaim(list: Verification[]): Record<string, Verification> {
   return Object.fromEntries(list.map((v) => [v.claim_id, v]));
 }
 
-type VerdictCardProps = {
-  analysisId: string;
-  claim: Claim;
-  verdict: Verification | undefined;
-  state: "idle" | "running" | "queued";
-  disabled: boolean;
-  onVerify: () => void;
-};
+type RowState = "idle" | "running" | "queued";
 
-function VerdictCard({
-  analysisId,
+function VerdictMark({
+  verdict,
+  state,
+  testId,
+}: {
+  verdict: Verification | undefined;
+  state: RowState;
+  testId?: string;
+}) {
+  if (state === "running") {
+    return (
+      <span className="pill gap-1.5 bg-accent-wash text-accent">
+        <Spinner /> Verifying
+      </span>
+    );
+  }
+  if (state === "queued") return <span className="pill bg-accent-wash text-accent">Queued</span>;
+  if (!verdict) return <span className="text-[12px] text-ink-muted">Not checked</span>;
+  return (
+    <span data-testid={testId} className={`pill ${STATUS_PILL[verdict.status]}`}>
+      {STATUS_LABEL[verdict.status]}
+    </span>
+  );
+}
+
+function ClaimRow({
   claim,
   verdict,
   state,
-  disabled,
-  onVerify,
-}: VerdictCardProps) {
-  const [open, setOpen] = useState(false);
+  selected,
+  onSelect,
+}: {
+  claim: Claim;
+  verdict: Verification | undefined;
+  state: RowState;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   return (
-    <li
-      data-testid="verdict-card"
-      className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm font-medium text-slate-900">
-          <span className="mr-2 text-xs text-slate-400">{claim.claim_id}</span>
-          {claim.text}
-        </p>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          {state !== "idle" ? (
-            <span className="rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">
-              {state === "running" ? "Verifying…" : "Queued"}
-            </span>
-          ) : verdict ? (
-            <span
-              data-testid="verdict-status"
-              className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[verdict.status]}`}
-            >
-              {STATUS_LABEL[verdict.status]}
-            </span>
-          ) : (
-            <span className="text-xs text-slate-400">Not checked</span>
-          )}
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={onVerify}
-            className="text-xs font-medium text-slate-600 hover:underline disabled:cursor-not-allowed disabled:text-slate-300"
-          >
-            {verdict ? "Re-run" : "Verify"}
-          </button>
-        </div>
-      </div>
-
-      {verdict && state === "idle" && (
-        <div className="mt-3">
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            className="text-xs font-medium uppercase tracking-wide text-slate-500 hover:underline"
-            data-testid="verdict-toggle"
-          >
-            {open ? "Hide details" : "Show details"} · {verdict.code_evidence.length} code
-            citation{verdict.code_evidence.length === 1 ? "" : "s"}
-            {verdict.discrepancies.length > 0 &&
-              ` · ${verdict.discrepancies.length} discrepanc${verdict.discrepancies.length === 1 ? "y" : "ies"}`}
-          </button>
-          {open && <VerdictDetails analysisId={analysisId} verdict={verdict} />}
-        </div>
-      )}
+    <li data-testid="verdict-card" className="border-b border-line-rule last:border-b-0">
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-current={selected ? "true" : undefined}
+        className={`block w-full px-4 py-3 text-left ${selected ? "bg-active" : "hover:bg-raised"}`}
+      >
+        <span className="flex items-center justify-between gap-3">
+          <span className="font-mono text-[12px] text-ink-muted">{claim.claim_id}</span>
+          <VerdictMark verdict={verdict} state={state} testId="verdict-status" />
+        </span>
+        <span className="mt-1 line-clamp-2">{claim.text}</span>
+      </button>
     </li>
   );
 }
 
-type VerdictDetailsProps = { analysisId: string; verdict: Verification };
+type ClaimDetailProps = {
+  analysisId: string;
+  claim: Claim;
+  verdict: Verification | undefined;
+  state: RowState;
+  disabled: boolean;
+  onVerify: () => void;
+};
 
-function VerdictDetails({ analysisId, verdict }: VerdictDetailsProps) {
+function ClaimDetail({ analysisId, claim, verdict, state, disabled, onVerify }: ClaimDetailProps) {
+  const shownVerdict = state === "idle" ? verdict : undefined;
   return (
-    <div className="mt-3 space-y-4 text-xs text-slate-700" data-testid="verdict-details">
-      <p className="whitespace-pre-line">{verdict.explanation}</p>
+    <article className="card p-5 sm:p-6" data-testid="verdict-details">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[13px] text-ink-muted">{claim.claim_id}</span>
+          <VerdictMark verdict={verdict} state={state} />
+        </div>
+        <button type="button" disabled={disabled} onClick={onVerify} className="btn-secondary">
+          {verdict ? "Re-run" : "Verify"}
+        </button>
+      </div>
+      <p className="mt-3 text-[16px] font-medium leading-6">{claim.text}</p>
+      <p className="mt-1 text-[13px] text-ink-muted">
+        {sentence(claim.claim_type)} · {claim.paper_evidence.section_title || "Preamble"}, page{" "}
+        {claim.paper_evidence.page}
+      </p>
 
-      {verdict.discrepancies.length > 0 && (
-        <div>
-          <h3 className="mb-1 font-medium uppercase tracking-wide text-slate-500">
-            Discrepancies
+      {shownVerdict ? (
+        <p className="mt-4 whitespace-pre-line leading-[22px]">{shownVerdict.explanation}</p>
+      ) : (
+        <p className="mt-4 text-ink-muted">
+          {state === "idle"
+            ? "Not checked against the code yet."
+            : "The verdict appears here when the model returns."}
+        </p>
+      )}
+
+      {shownVerdict && shownVerdict.discrepancies.length > 0 && (
+        <section className="mt-6">
+          <h3 className="font-semibold">
+            Discrepancies <span className="num font-normal text-ink-muted">{shownVerdict.discrepancies.length}</span>
           </h3>
-          <ul className="space-y-2">
-            {verdict.discrepancies.map((d, i) => (
-              <li key={i} className="rounded-lg border border-slate-200 bg-white p-2">
-                <div className="mb-1 flex gap-2">
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${SEVERITY_STYLE[d.severity] ?? ""}`}
-                  >
-                    {d.severity}
+          <ul className="mt-2 space-y-3">
+            {shownVerdict.discrepancies.map((d, i) => (
+              <li key={i}>
+                <p className="flex flex-wrap items-center gap-2">
+                  <span className={`pill ${SEVERITY_PILL[d.severity] ?? SEVERITY_PILL.LOW}`}>
+                    {sentence(d.severity)}
                   </span>
-                  <span className="font-mono text-[11px] text-slate-500">{d.type}</span>
-                </div>
-                <p>{d.detail}</p>
+                  <span className="text-[13px] text-ink-muted">{sentence(d.type)}</span>
+                </p>
+                <p className="mt-1">{d.detail}</p>
                 {d.code_quote && (
-                  <pre className="mt-1 overflow-x-auto rounded bg-slate-100 p-2 font-mono text-[11px]">
+                  <pre className="mt-2 overflow-x-auto rounded-control bg-raised px-3 py-2 font-mono text-[12px]">
                     {d.code_quote}
                   </pre>
                 )}
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       )}
 
-      <div>
-        <h3 className="mb-1 font-medium uppercase tracking-wide text-slate-500">Paper</h3>
-        <CitedPaper analysisId={analysisId} evidence={verdict.paper_evidence} />
-      </div>
+      <section className="mt-6">
+        <h3 className="font-semibold">In the paper</h3>
+        <div className="mt-2">
+          <CitedPaper analysisId={analysisId} evidence={shownVerdict?.paper_evidence ?? claim.paper_evidence} />
+        </div>
+      </section>
 
-      <div>
-        <h3 className="mb-1 font-medium uppercase tracking-wide text-slate-500">Code</h3>
-        {verdict.code_evidence.length === 0 ? (
-          <p className="text-slate-500">No code cited.</p>
-        ) : (
-          <ul className="space-y-3">
-            {verdict.code_evidence.map((e, i) => (
-              <li key={i}>
-                <CitedCode analysisId={analysisId} citation={e} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
+      {shownVerdict && (
+        <section className="mt-6">
+          <h3 className="font-semibold">
+            In the code{" "}
+            <span className="num font-normal text-ink-muted">
+              {shownVerdict.code_evidence.length} citation{shownVerdict.code_evidence.length === 1 ? "" : "s"}
+            </span>
+          </h3>
+          {shownVerdict.code_evidence.length === 0 ? (
+            <p className="mt-2 text-ink-muted">No code cited.</p>
+          ) : (
+            <ul className="mt-2 space-y-4">
+              {shownVerdict.code_evidence.map((e, i) => (
+                <li key={i}>
+                  <CitedCode analysisId={analysisId} citation={e} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+    </article>
   );
+}
+
+function sentence(value: string): string {
+  const s = value.replace(/_/g, " ").toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }

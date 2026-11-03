@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { uploadPaper } from "./api";
+import Spinner from "./Spinner";
 
 type UploadSectionProps = {
   onUploaded: (result: {
@@ -11,7 +12,7 @@ type UploadSectionProps = {
 
 // UploadSection — Phase 2 PDF upload form.
 //
-// Native HTML5 file input + Tailwind; no drag-and-drop library in v1.
+// A drop zone wrapping a native file input (no drag-and-drop library).
 // On successful upload the parent's onUploaded callback fires with
 // the (analysis_id, paper_id) pair, which the App uses to fetch the
 // extracted claims.
@@ -19,6 +20,7 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
   const [file, setFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -41,39 +43,68 @@ export default function UploadSection({ onUploaded }: UploadSectionProps) {
     });
   }
 
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-      data-testid="upload-section"
-    >
-      <h2 className="text-lg font-medium">Upload a paper</h2>
-      <p className="mt-1 text-sm text-slate-600">
-        Drop in a PDF — we'll parse it, extract structured claims, and
-        list them below. The whole pipeline runs synchronously (max 50 MB).
-      </p>
+  function pick(next: File | null | undefined) {
+    if (!next) return;
+    if (next.type && next.type !== "application/pdf") {
+      setError("That is not a PDF.");
+      return;
+    }
+    setFile(next);
+    setError(null);
+  }
 
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+  return (
+    <form onSubmit={handleSubmit} className="card p-5" data-testid="upload-section">
+      <label
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragging(false);
+          pick(e.dataTransfer.files?.[0]);
+        }}
+        className={`flex cursor-pointer flex-col items-center justify-center rounded-card border border-dashed px-4 py-8 text-center transition-colors ${
+          dragging ? "border-accent bg-accent-wash" : "border-line-control bg-raised hover:border-ink-faint"
+        }`}
+      >
         <input
           type="file"
           accept="application/pdf"
           required
           data-testid="file-input"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="block w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-slate-900 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-slate-800"
+          onChange={(e) => pick(e.target.files?.[0])}
+          className="sr-only"
         />
-        <button
-          type="submit"
-          disabled={!file || submitting}
-          data-testid="upload-button"
-          className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-        >
-          {submitting ? "Parsing…" : "Parse & extract"}
+        {file ? (
+          <>
+            <span className="font-medium">{file.name}</span>
+            <span className="num mt-1 text-[12px] text-ink-muted">
+              {(file.size / 1024 / 1024).toFixed(1)} MB · choose another
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="font-medium">Drop the paper's PDF here</span>
+            <span className="mt-1 text-[12px] text-ink-muted">or click to choose a file</span>
+          </>
+        )}
+      </label>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        <span className="text-[13px] text-ink-muted">
+          {submitting ? "Reading the paper and extracting claims — a minute or two." : ""}
+        </span>
+        <button type="submit" disabled={!file || submitting} data-testid="upload-button" className="btn-primary">
+          {submitting && <Spinner />}
+          {submitting ? "Extracting claims…" : "Extract claims"}
         </button>
       </div>
 
       {error && (
-        <p className="mt-3 text-sm text-rose-700" data-testid="upload-error">
+        <p className="mt-3 text-[13px] text-negative" data-testid="upload-error">
           {error}
         </p>
       )}

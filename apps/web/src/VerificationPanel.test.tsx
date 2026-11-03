@@ -94,9 +94,32 @@ describe("VerificationPanel", () => {
     await waitFor(() => expect(screen.getByTestId("verification-panel")).toBeInTheDocument());
     expect(screen.getAllByTestId("verdict-card")).toHaveLength(3);
     expect(screen.getByTestId("verdict-status")).toHaveTextContent("Contradicted");
-    expect(screen.getByTestId("verification-counts")).toHaveTextContent("Contradicted: 1");
-    expect(screen.getByTestId("verification-counts")).toHaveTextContent("Not checked: 2");
+    expect(screen.getByTestId("verification-counts")).toHaveTextContent("Contradicted 1");
+    expect(screen.getByTestId("verification-counts")).toHaveTextContent("Not checked 2");
+    expect(screen.getByTestId("verification-finding")).toHaveTextContent(
+      "Of 3 claims: 1 contradicted, 2 not checked.",
+    );
     expect(screen.getByTestId("verify-all")).toHaveTextContent("Verify 2 unverified claims");
+  });
+
+  it("filters the list by status when a count is clicked", async () => {
+    stubApi([verdict("C1", "CONTRADICTED")]);
+    render(<VerificationPanel analysisId={analysisId} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Contradicted 1" }));
+    expect(screen.getAllByTestId("verdict-card")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Not checked 2" }));
+    expect(screen.getAllByTestId("verdict-card")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+    expect(screen.getAllByTestId("verdict-card")).toHaveLength(3);
+  });
+
+  it("does not start a run until a repository is bound", async () => {
+    stubApi([]);
+    render(<VerificationPanel analysisId={analysisId} repositoryBound={false} />);
+
+    expect(await screen.findByTestId("verification-needs-repo")).toBeInTheDocument();
+    expect(screen.getByTestId("verify-all")).toBeDisabled();
   });
 
   it("verifies the unchecked claims one request at a time", async () => {
@@ -107,7 +130,7 @@ describe("VerificationPanel", () => {
 
     await waitFor(() => expect(screen.getAllByTestId("verdict-status")).toHaveLength(3));
     expect(posts).toEqual([["C2"], ["C3"]]);
-    expect(screen.getByTestId("verification-counts")).toHaveTextContent("Verified: 3");
+    expect(screen.getByTestId("verification-counts")).toHaveTextContent("Verified 3");
     expect(screen.getByTestId("verify-all")).toBeDisabled();
   });
 
@@ -147,11 +170,9 @@ describe("VerificationPanel", () => {
     ]);
     render(<VerificationPanel analysisId={analysisId} />);
 
-    const toggle = await screen.findByTestId("verdict-toggle");
-    expect(toggle).toHaveTextContent("1 code citation · 1 discrepancy");
-    fireEvent.click(toggle);
-
-    const details = screen.getByTestId("verdict-details");
+    // The first claim with a verdict is selected; another row opens its own.
+    const details = await screen.findByTestId("verdict-details");
+    expect(details).toHaveTextContent("1 citation");
     expect(details).toHaveTextContent("Explanation for C1.");
     expect(details).toHaveTextContent("Paper says 1e-4, code defaults to 1e-3.");
     expect(screen.getByTestId("code-citation")).toHaveTextContent("diffusion_tf/utils.py:12-14");
@@ -159,6 +180,18 @@ describe("VerificationPanel", () => {
     expect(await screen.findByTestId("paper-excerpt")).toHaveAttribute(
       "src", "data:image/png;base64,AAAA",
     );
+  });
+
+  it("shows the claim chosen in the list or the strip", async () => {
+    stubApi([verdict("C1", "VERIFIED"), verdict("C3", "CONTRADICTED")]);
+    render(<VerificationPanel analysisId={analysisId} />);
+
+    expect(await screen.findByTestId("verdict-details")).toHaveTextContent("Claim C1.");
+    fireEvent.click(screen.getAllByTestId("verdict-card")[1].querySelector("button")!);
+    expect(screen.getByTestId("verdict-details")).toHaveTextContent("Claim C2.");
+    expect(screen.getByTestId("verdict-details")).toHaveTextContent("Not checked against the code yet.");
+    fireEvent.click(screen.getByRole("button", { name: "C3: Contradicted" }));
+    expect(screen.getByTestId("verdict-details")).toHaveTextContent("Explanation for C3.");
   });
 
   it("renders the load error", async () => {

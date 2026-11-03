@@ -54,7 +54,7 @@ export default function ModelProviderPanel() {
 
   if (loadError) {
     return (
-      <p className="mt-4 text-sm text-rose-700" data-testid="provider-error">
+      <p className="mt-4 text-sm text-negative" data-testid="provider-error">
         Could not load chat-model settings: {loadError}
       </p>
     );
@@ -119,18 +119,16 @@ export default function ModelProviderPanel() {
 
   return (
     <section
-      className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 text-sm shadow-sm"
+      className="card p-5"
       data-testid="provider-panel"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-            Chat model
-          </span>
-          <p className="font-medium text-slate-900" data-testid="provider-active">
+          <span className="text-[12px] text-ink-muted">Chat model</span>
+          <p className="mt-1 font-medium" data-testid="provider-active">
             {view.active.label} · <span className="font-mono">{view.active.model}</span>
           </p>
-          <p className="text-xs text-slate-500">
+          <p className="mt-1 text-xs text-ink-muted">
             Embeddings: <span className="font-mono">{view.embedding.model}</span> (fixed in
             .env — changing it means re-indexing repositories)
           </p>
@@ -139,7 +137,7 @@ export default function ModelProviderPanel() {
           <button
             type="button"
             onClick={startEditing}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100"
+            className="btn-secondary"
             data-testid="provider-change"
           >
             Change
@@ -148,35 +146,35 @@ export default function ModelProviderPanel() {
       </div>
 
       {!managementEnabled && (
-        <p className="mt-2 text-xs text-slate-500" data-testid="provider-read-only">
+        <p className="mt-3 text-xs text-ink-muted" data-testid="provider-read-only">
           Model settings are read-only on this server.
         </p>
       )}
 
       {managementEnabled && open && form && preset && (
-        <div className="mt-4 space-y-3 border-t border-slate-100 pt-4" data-testid="provider-form">
+        <div className="mt-4 space-y-4 border-t border-line pt-4" data-testid="provider-form">
           {authRequired && (
             <label className="block">
-              <span className="text-xs font-medium text-slate-600">Management token</span>
+              <span className="text-[12px] text-ink-muted">Management token</span>
               <input
                 type="password"
                 autoComplete="off"
                 value={managementToken}
                 onChange={(e) => setManagementToken(e.target.value)}
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono"
+                className="field mt-1.5 font-mono"
                 data-testid="provider-management-token"
               />
-              <span className="mt-1 block text-xs text-slate-500">
+              <span className="mt-1 block text-xs text-ink-muted">
                 Required by this server for model changes. Kept in memory until this form closes.
               </span>
             </label>
           )}
           <label className="block">
-            <span className="text-xs font-medium text-slate-600">Provider</span>
+            <span className="text-[12px] text-ink-muted">Provider</span>
             <select
               value={form.provider_id}
               onChange={(e) => pickPreset(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2"
+              className="field mt-1.5"
               data-testid="provider-select"
             >
               {view.presets.map((p) => (
@@ -187,17 +185,17 @@ export default function ModelProviderPanel() {
               ))}
             </select>
           </label>
-          {preset.note && <p className="text-xs text-slate-500">{preset.note}</p>}
+          {preset.note && <p className="text-xs text-ink-muted">{preset.note}</p>}
 
           <label className="block">
-            <span className="text-xs font-medium text-slate-600">Model</span>
+            <span className="text-[12px] text-ink-muted">Model</span>
             <input
               type="text"
               list="provider-models"
               value={form.model}
               onChange={(e) => update({ model: e.target.value })}
               placeholder="model name"
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono"
+              className="field mt-1.5 font-mono"
               data-testid="provider-model"
             />
             <datalist id="provider-models">
@@ -208,18 +206,18 @@ export default function ModelProviderPanel() {
           </label>
 
           <label className="block">
-            <span className="text-xs font-medium text-slate-600">Base URL</span>
+            <span className="text-[12px] text-ink-muted">Base URL</span>
             <input
               type="text"
               value={form.base_url}
               readOnly={fixedEndpoint}
               onChange={(e) => update({ base_url: e.target.value })}
               placeholder="https://host/v1"
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono"
+              className="field mt-1.5 font-mono"
               data-testid="provider-base-url"
             />
             {fixedEndpoint && (
-              <span className="mt-1 block text-xs text-slate-500">
+              <span className="mt-1 block text-xs text-ink-muted">
                 This provider uses its configured endpoint.
               </span>
             )}
@@ -227,7 +225,7 @@ export default function ModelProviderPanel() {
 
           {(preset.needs_key || preset.id === "custom") && (
             <label className="block">
-              <span className="text-xs font-medium text-slate-600">API key</span>
+              <span className="text-[12px] text-ink-muted">API key</span>
               <input
                 type="password"
                 autoComplete="off"
@@ -240,10 +238,10 @@ export default function ModelProviderPanel() {
                       ? `or set ${preset.key_env} in .env`
                       : "if the server needs one"
                 }
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 font-mono"
+                className="field mt-1.5 font-mono"
                 data-testid="provider-key"
               />
-              <span className="mt-1 block text-xs text-slate-500">
+              <span className="mt-1 block text-xs text-ink-muted">
                 Sent to the local API and kept in its memory only; it is lost when the API
                 restarts.
               </span>
@@ -251,7 +249,7 @@ export default function ModelProviderPanel() {
           )}
 
           {preset.json_mode === "object" && (
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-warning-ink">
               This provider has no JSON-schema mode; answers are checked against the schema
               afterwards and may fail more often.
             </p>
@@ -262,7 +260,7 @@ export default function ModelProviderPanel() {
               type="button"
               onClick={runTest}
               disabled={test.kind === "running" || (authRequired && !managementToken.trim())}
-              className="rounded-lg border border-slate-300 px-3 py-1.5 font-medium text-slate-700 hover:bg-slate-100 disabled:text-slate-400"
+              className="btn-secondary"
               data-testid="provider-test"
             >
               {test.kind === "running" ? "Testing…" : "Test connection"}
@@ -271,7 +269,7 @@ export default function ModelProviderPanel() {
               type="button"
               onClick={save}
               disabled={saving || (authRequired && !managementToken.trim())}
-              className="rounded-lg bg-slate-900 px-3 py-1.5 font-medium text-white hover:bg-slate-700 disabled:bg-slate-400"
+              className="btn-primary"
               data-testid="provider-save"
             >
               {saving ? "Saving…" : "Use this model"}
@@ -283,24 +281,24 @@ export default function ModelProviderPanel() {
                 setForm(null);
                 setManagementToken("");
               }}
-              className="px-2 py-1.5 text-slate-500 hover:underline"
+              className="px-2 py-1.5 text-ink-muted hover:text-ink"
             >
               Cancel
             </button>
           </div>
 
           {test.kind === "ok" && (
-            <p className="text-xs text-emerald-700" data-testid="provider-test-result">
+            <p className="text-xs text-positive" data-testid="provider-test-result">
               Connected{test.latencyMs !== null ? ` in ${test.latencyMs} ms` : ""}.
             </p>
           )}
           {test.kind === "failed" && (
-            <p className="text-xs text-rose-700" data-testid="provider-test-result">
+            <p className="text-xs text-negative" data-testid="provider-test-result">
               Connection failed: {test.error}
             </p>
           )}
           {saveError && (
-            <p className="text-xs text-rose-700" data-testid="provider-save-error">
+            <p className="text-xs text-negative" data-testid="provider-save-error">
               {saveError}
             </p>
           )}

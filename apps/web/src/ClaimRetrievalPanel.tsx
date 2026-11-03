@@ -112,161 +112,121 @@ export default function ClaimRetrievalPanel({
 
   if (claimsError) {
     return (
-      <section
-        className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-800"
-        data-testid="retrieval-claims-error"
-      >
-        Failed to load claims: {claimsError}
-      </section>
+      <p className="error-block" data-testid="retrieval-claims-error">
+        Couldn't load the claims: {claimsError}
+      </p>
     );
   }
 
   if (!claims) {
     return (
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500"
-        data-testid="retrieval-loading-claims"
-      >
+      <p className="text-ink-muted" data-testid="retrieval-loading-claims">
         Loading claims…
-      </section>
+      </p>
     );
   }
 
   if (claims.length === 0) {
     return (
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600"
-        data-testid="retrieval-empty"
-      >
-        No claims available to retrieve against — upload a paper with extracted
-        claims first.
-      </section>
+      <p className="text-ink-muted" data-testid="retrieval-empty">
+        No claims to retrieve against: the paper has no extracted claims.
+      </p>
     );
   }
 
   const selectedClaim = claims.find((c) => c.claim_id === selectedClaimId);
 
   return (
-    <section
-      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-      data-testid="retrieval-panel"
-    >
-      <div className="mb-4 flex items-baseline justify-between gap-2">
-        <h2 className="text-lg font-medium">Claim ↔ code retrieval</h2>
-        <span className="text-xs text-slate-500">
-          pgvector cosine over embedded symbols
-        </span>
+    <section data-testid="retrieval-panel">
+      <h1 className="text-[22px] font-semibold leading-8">Retrieval</h1>
+      <p className="mt-1 text-ink-muted">
+        The code nearest to a claim in the embedding index. Verification starts from a wider
+        candidate set, reranked by the chat model.
+      </p>
+
+      <div className="mt-6 max-w-3xl">
+        <label htmlFor="claim-picker" className="mb-2 block font-medium">
+          Claim
+        </label>
+        <select
+          id="claim-picker"
+          data-testid="claim-picker"
+          value={selectedClaimId}
+          onChange={(e) => setSelectedClaimId(e.target.value)}
+          className="field"
+        >
+          {claims.map((c) => (
+            <option key={c.claim_id} value={c.claim_id}>
+              {c.claim_id} · {c.text.slice(0, 90)}
+              {c.text.length > 90 ? "…" : ""}
+            </option>
+          ))}
+        </select>
+        {selectedClaim && (
+          <p className="mt-3 leading-[22px]" data-testid="retrieval-claim-quote">
+            {selectedClaim.text}
+          </p>
+        )}
       </div>
 
-      <label
-        htmlFor="claim-picker"
-        className="mb-2 block text-xs font-medium uppercase tracking-wide text-slate-500"
-      >
-        Pick a claim
-      </label>
-      <select
-        id="claim-picker"
-        data-testid="claim-picker"
-        value={selectedClaimId}
-        onChange={(e) => setSelectedClaimId(e.target.value)}
-        className="mb-4 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm focus:border-slate-500 focus:outline-none"
-      >
-        {claims.map((c) => (
-          <option key={c.claim_id} value={c.claim_id}>
-            [{c.claim_type}] {c.text.slice(0, 80)}
-            {c.text.length > 80 ? "…" : ""}
-          </option>
-        ))}
-      </select>
-
-      {selectedClaim && (
-        <blockquote
-          className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm italic text-slate-700"
-          data-testid="retrieval-claim-quote"
-        >
-          {selectedClaim.text}
-        </blockquote>
-      )}
-
-      {error && (
-        <div
-          className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"
-          data-testid="retrieval-error"
-        >
-          Retrieval failed: {error}
-        </div>
-      )}
-
-      {loading && (
-        <div
-          className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500"
-          data-testid="retrieval-loading"
-        >
-          Searching the index…
-        </div>
-      )}
-
-      {!loading && !error && matches && matches.length === 0 && (
-        <div
-          className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600"
-          data-testid="retrieval-empty-results"
-        >
-          No code symbols matched this claim — the repo may not yet be indexed
-          (check the <code>index_status</code> above) or the embedding model
-          returned no close hits.
-        </div>
-      )}
-
-      {!loading && !error && matches && matches.length > 0 && (
-        <ul className="space-y-2" data-testid="retrieval-matches">
-          {matches.map((m, idx) => (
-            <li
-              key={m.symbol_id}
-              data-testid="retrieval-match"
-              className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-            >
-              <div className="flex items-baseline justify-between gap-3">
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="shrink-0 rounded-full bg-slate-900 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-white">
-                    {m.kind}
-                  </span>
-                  <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-700">
-                    {m.language}
-                  </span>
-                  <code
-                    data-testid="retrieval-match-name"
-                    className="font-mono text-sm text-slate-900"
-                  >
-                    {m.name}
-                    {m.signature && (
-                      <span className="text-slate-500">{m.signature}</span>
-                    )}
-                  </code>
-                </div>
-                <span
-                  className="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800"
-                  data-testid="retrieval-match-score"
+      <div className="mt-6 max-w-3xl">
+        {error && (
+          <p className="error-block" data-testid="retrieval-error">
+            Retrieval failed: {error}
+          </p>
+        )}
+        {loading && (
+          <p className="text-ink-muted" data-testid="retrieval-loading">
+            Searching the index…
+          </p>
+        )}
+        {!loading && !error && matches && matches.length === 0 && (
+          <p className="text-ink-muted" data-testid="retrieval-empty-results">
+            No code matched this claim. The repository may not be indexed yet, or nothing in it
+            is close.
+          </p>
+        )}
+        {!loading && !error && matches && matches.length > 0 && (
+          <div className="card">
+            <div className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-line px-4 py-2.5 text-[12px] text-ink-muted">
+              <span>Rank</span>
+              <span>Symbol</span>
+              <span className="text-right">Similarity</span>
+            </div>
+            <ol data-testid="retrieval-matches">
+              {matches.map((m, idx) => (
+                <li
+                  key={m.symbol_id}
+                  data-testid="retrieval-match"
+                  className="grid grid-cols-[2rem_minmax(0,1fr)_4.5rem] gap-3 border-b border-line-rule px-4 py-3 last:border-b-0"
                 >
-                  {(scores?.[idx] ?? m.similarity).toFixed(3)}
-                </span>
-              </div>
-              <div className="mt-1 flex flex-wrap items-baseline gap-3 text-xs text-slate-500">
-                <code data-testid="retrieval-match-path">
-                  {m.file_path}:{m.start_line}:{m.start_col}
-                </code>
-                {m.docstring && (
-                  <span
-                    className="line-clamp-2 italic text-slate-600"
-                    data-testid="retrieval-match-docstring"
-                  >
-                    {m.docstring}
+                  <span className="num text-ink-muted">{idx + 1}.</span>
+                  <div className="min-w-0">
+                    <code data-testid="retrieval-match-name" className="block truncate font-mono text-[13px]">
+                      {m.name}
+                      {m.signature && <span className="text-ink-muted">{m.signature}</span>}
+                    </code>
+                    <p className="mt-0.5 truncate text-[12px] text-ink-muted">
+                      {m.kind} in{" "}
+                      <code data-testid="retrieval-match-path" className="font-mono">
+                        {m.file_path}:{m.start_line}:{m.start_col}
+                      </code>
+                    </p>
+                    {m.docstring && (
+                      <p className="mt-1 line-clamp-2 text-[13px] text-ink-muted" data-testid="retrieval-match-docstring">
+                        {m.docstring}
+                      </p>
+                    )}
+                  </div>
+                  <span className="num text-right" data-testid="retrieval-match-score">
+                    {(scores?.[idx] ?? m.similarity).toFixed(3)}
                   </span>
-                )}
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

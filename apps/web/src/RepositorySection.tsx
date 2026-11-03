@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { cloneRepo, type RepoCreate } from "./api";
+import Spinner from "./Spinner";
 
 type RepositorySectionProps = {
   analysisId: string;
@@ -12,15 +13,7 @@ type RepositorySectionProps = {
 // POST /repositories {url, analysis_id} runs the full clone+walk+parse
 // pipeline synchronously; the response carries
 // {repository_id, n_files, n_symbols, …}. On success, the parent's
-// onCloned callback fires so App can render <SymbolsList/> below.
-//
-// The status badge mirrors the ``index_status`` from the response:
-//   * done    — green "indexed"
-//   * error   — red "failed"  (detail in error message)
-//   * other   — slate "pending"  (transient; the workflow is sync in v1)
-//
-// Phase 5+ replaces this with a router-aware /repo route; for now
-// the section lives inline under the analysis.
+// onCloned callback fires so App can show the repository and its tabs.
 export default function RepositorySection({
   analysisId,
   onCloned,
@@ -48,19 +41,13 @@ export default function RepositorySection({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-      data-testid="repository-section"
-    >
-      <h2 className="text-lg font-medium">Bind a GitHub repo</h2>
-      <p className="mt-1 text-sm text-slate-600">
-        Drop in a public GitHub URL — we'll clone it, walk every file,
-        and extract code symbols + dependencies. The whole pipeline
-        runs synchronously (small repos only; max 100 MB).
+    <form onSubmit={handleSubmit} className="card p-5" data-testid="repository-section">
+      <h2 className="text-[16px] font-medium">Bind the paper's repository</h2>
+      <p className="mt-1 text-ink-muted">
+        Claims are verified against this code. It is cloned and indexed, never run; public
+        GitHub repositories up to 200 MB.
       </p>
-
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mt-4 flex max-w-2xl flex-col gap-2 sm:flex-row">
         <input
           type="url"
           inputMode="url"
@@ -69,20 +56,20 @@ export default function RepositorySection({
           data-testid="repo-url-input"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          className="block w-full rounded-md border border-slate-300 px-3 py-2 text-sm shadow-sm placeholder:text-slate-400 focus:border-slate-900 focus:outline-none focus:ring-1 focus:ring-slate-900"
+          className="field font-mono"
         />
-        <button
-          type="submit"
-          disabled={submitting}
-          data-testid="repo-clone-button"
-          className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-        >
-          {submitting ? "Cloning…" : "Clone & index"}
+        <button type="submit" disabled={submitting} data-testid="repo-clone-button" className="btn-primary h-9">
+          {submitting && <Spinner />}
+          {submitting ? "Indexing…" : "Clone and index"}
         </button>
       </div>
-
+      {submitting && (
+        <p className="mt-2 text-[13px] text-ink-muted">
+          Cloning, parsing and embedding the code — a few minutes for a large repository.
+        </p>
+      )}
       {error && (
-        <p className="mt-3 text-sm text-rose-700" data-testid="repo-error">
+        <p className="mt-2 text-[13px] text-negative" data-testid="repo-error">
           {error}
         </p>
       )}

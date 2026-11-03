@@ -57,84 +57,55 @@ export default function SymbolsList({ repositoryId }: SymbolsListProps) {
 
   if (error) {
     return (
-      <section
-        className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-800"
-        data-testid="symbols-error"
-      >
-        Failed to load symbols: {error}
-      </section>
+      <p className="error-block" data-testid="symbols-error">
+        Couldn't load the symbols: {error}
+      </p>
     );
   }
 
   if (!grouped) {
     return (
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500"
-        data-testid="symbols-loading"
-      >
+      <p className="text-ink-muted" data-testid="symbols-loading">
         Loading symbols…
-      </section>
-    );
-  }
-
-  if (grouped.length === 0) {
-    return (
-      <section
-        className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600"
-        data-testid="symbols-empty"
-      >
-        The repo indexed but no code symbols were extracted (it might
-        only contain data / docs files).
-      </section>
+      </p>
     );
   }
 
   return (
-    <section
-      className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
-      data-testid="symbols-list"
-    >
-      <div className="mb-4 flex items-baseline justify-between">
-        <h2 className="text-lg font-medium">Extracted symbols</h2>
-        <span className="text-sm text-slate-500">
-          {symbols?.length ?? 0} symbol{(symbols?.length ?? 0) === 1 ? "" : "s"}{" "}
-          across {grouped.length} file{grouped.length === 1 ? "" : "s"}
-        </span>
-      </div>
+    <section data-testid={grouped.length ? "symbols-list" : "symbols-empty"}>
+      <h1 className="text-[22px] font-semibold leading-8">Code symbols</h1>
+      <p className="mt-1 text-ink-muted">
+        {grouped.length === 0
+          ? "The repository indexed, but no code symbols were found; it may hold only data or docs."
+          : `${(symbols?.length ?? 0).toLocaleString()} functions, classes and config entries across ${grouped.length} file${grouped.length === 1 ? "" : "s"}, as retrieval sees them.`}
+      </p>
 
-      <ul className="space-y-4">
-        {grouped.map((file) => (
-          <li
-            key={file.path}
-            data-testid="symbols-file"
-            className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-          >
-            <div className="mb-2 flex items-baseline justify-between gap-2">
-              <code
-                data-testid="symbols-file-path"
-                className="text-xs font-medium text-slate-700"
-              >
-                {file.path}
-              </code>
-              <span className="text-xs text-slate-500">
-                {file.items.length + file.hidden} symbol
-                {file.items.length + file.hidden === 1 ? "" : "s"}
-              </span>
-            </div>
-            <ul className="space-y-1">
-              {file.items.map((sym) => (
-                <SymbolRow key={`${sym.file_path}:${sym.start_line}`} sym={sym} />
-              ))}
-            </ul>
-            {file.hidden > 0 && (
-              <p className="mt-2 text-xs text-slate-500">
-                + {file.hidden} more symbol{file.hidden === 1 ? "" : "s"} not
-                shown
-              </p>
-            )}
-          </li>
-        ))}
-      </ul>
+      {grouped.length > 0 && (
+        <div className="card mt-6 divide-y divide-line">
+          {grouped.map((file) => (
+            <section key={file.path} data-testid="symbols-file" className="px-4 py-3">
+              <h2 className="flex items-baseline justify-between gap-3">
+                <code data-testid="symbols-file-path" className="truncate font-mono text-[13px] font-medium">
+                  {file.path}
+                </code>
+                <span className="num flex-none text-[12px] text-ink-muted">
+                  {file.items.length + file.hidden}
+                </span>
+              </h2>
+              <ul className="mt-1.5">
+                {file.items.map((sym) => (
+                  <SymbolRow key={`${sym.file_path}:${sym.start_line}`} sym={sym} />
+                ))}
+              </ul>
+              {file.hidden > 0 && (
+                <p className="mt-1 text-[12px] text-ink-muted">
+                  {file.hidden} more not shown
+                </p>
+              )}
+            </section>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
@@ -143,26 +114,14 @@ function SymbolRow({ sym }: { sym: CodeSymbol }) {
   return (
     <li
       data-testid="symbol-row"
-      className="flex items-baseline gap-3 text-sm"
+      className="grid grid-cols-[minmax(0,1fr)_6rem_4rem] items-baseline gap-3 py-0.5"
     >
-      <span className="shrink-0 rounded-full bg-slate-900 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-white">
-        {sym.kind}
-      </span>
-      <span className="shrink-0 rounded-full bg-slate-200 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-700">
-        {sym.language}
-      </span>
-      <code
-        data-testid="symbol-name"
-        className="font-mono text-sm text-slate-900"
-      >
+      <code data-testid="symbol-name" className="truncate font-mono text-[13px]">
         {sym.name}
-        {sym.signature && (
-          <span className="text-slate-500">{sym.signature}</span>
-        )}
+        {sym.signature && <span className="text-ink-muted">{sym.signature}</span>}
       </code>
-      <span className="shrink-0 text-xs text-slate-400">
-        L{sym.start_line}:{sym.start_col}
-      </span>
+      <span className="text-[12px] text-ink-muted">{sym.kind}</span>
+      <span className="num text-right text-[12px] text-ink-muted">line {sym.start_line}</span>
     </li>
   );
 }

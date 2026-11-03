@@ -127,7 +127,7 @@ class _Client:
             testable=self.testable, reason="It reads a dataset from disk." if not self.testable else "pure",
             inputs_code=self.inputs.pop(0) if self.testable else "", instance_code="",
             input_notes="two float lists",
-            test_kind="property" if self.property_code else "reference",
+            test_kind=TestKind.PROPERTY if self.property_code else TestKind.REFERENCE,
             property_statement="Scaling x, y and beta by 2 doubles the loss" if self.property_code else "",
             property_code=self.property_code, property_target="", rtol=1e-6, atol=1e-9,
         )
@@ -503,7 +503,7 @@ def test_a_truncated_reply_is_reported_as_such() -> None:
     )
     client = object.__new__(LLMClient)
     client._model, client._gate, client._on_violations = "m", SafetyGate(), None
-    client._client = SimpleNamespace(
+    client._client = SimpleNamespace(  # type: ignore[assignment]
         chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_: reply)),
     )
     with pytest.raises(ReferenceCheckLLMError, match="cut off"):

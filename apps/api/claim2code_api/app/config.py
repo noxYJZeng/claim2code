@@ -158,6 +158,16 @@ class Settings(BaseSettings):
     # per claim; off keeps the plain hybrid order.
     retrieval_rerank: bool = True
 
+    # ---- Reference checks (reference/) ----
+    # Runs repository code and model-written code in a child process
+    # (reference/sandbox.py). Off by default: turn it on only for
+    # repositories you are willing to execute on this machine.
+    reference_check_enabled: bool = False
+    # Interpreter for the child; it needs the repository's own
+    # dependencies (numpy, torch, ...). Empty means the API's own.
+    reference_check_python: str = ""
+    reference_check_timeout_seconds: int = 60
+
     # ---- Paper ingestion (Phase 2) ----
     max_pdf_size_mb: int = 50
 

@@ -9,9 +9,9 @@ metrics).
 
 ![Verification of a LoRA claim: partially verified, with the discrepancy explained](docs/screenshots/verification.jpg)
 
-| The code it cited | A reference test of that code |
+| The passage it cited, highlighted in the PDF | The code it cited, and a reference test of it |
 |---|---|
-| ![Cited code: lora_A is initialised with kaiming_uniform_, not a Gaussian as the paper says](docs/screenshots/code-evidence.jpg) | ![Reference test: all 7 inputs gave the same output from Linear.forward and from a reference written from the paper](docs/screenshots/reference-test.jpg) |
+| ![The cited sentence on Gaussian initialisation, highlighted on page 4 of the paper](docs/screenshots/paper-evidence.jpg) | ![Cited code using kaiming_uniform_ for lora_A, and a reference test where all 7 inputs gave the same output](docs/screenshots/code-and-test.jpg) |
 
 Above: [microsoft/LoRA](https://github.com/microsoft/LoRA) checked with a local
 27B model. The forward pass matches the paper, and a reference test confirms

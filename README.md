@@ -7,6 +7,18 @@ that implements it and returns `VERIFIED`, `PARTIALLY_VERIFIED`,
 it relied on, plus any mismatches (hyperparameters, objectives, datasets,
 metrics).
 
+![Verification of a LoRA claim: partially verified, with the discrepancy explained](docs/screenshots/verification.jpg)
+
+| The code it cited | A reference test of that code |
+|---|---|
+| ![Cited code: lora_A is initialised with kaiming_uniform_, not a Gaussian as the paper says](docs/screenshots/code-evidence.jpg) | ![Reference test: all 7 inputs gave the same output from Linear.forward and from a reference written from the paper](docs/screenshots/reference-test.jpg) |
+
+Above: [microsoft/LoRA](https://github.com/microsoft/LoRA) checked with a local
+27B model. The forward pass matches the paper, and a reference test confirms
+it on 7 inputs. The verdict is still partial: the paper initialises A from a
+Gaussian, while the code uses `kaiming_uniform_`, and a comment in the code
+says so.
+
 **No model or API key is included.** Claim2Code calls a chat model and an
 embedding model that you configure: a local OpenAI-compatible server
 (LM Studio, Ollama) or a hosted provider with your own key.
